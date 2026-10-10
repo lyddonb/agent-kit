@@ -10,7 +10,7 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
 - **`eng-metrics-narrative`** — turn DORA or cycle-time numbers into a leadership update.
 - **`pkm-capture`** — file meeting notes and decisions into an Obsidian vault with the right links.
 - **`aec-domain-primer`** — preconstruction and cost-management vocabulary for agents working in
-  construction-tech code (probably belongs in the private Join repo).
+  construction-tech code (probably belongs in a private repo).
 
 ## Packaging ideas
 - **Skill "tiers" via tags** — mark skills `core` vs `experimental` in `metadata` so consumers can

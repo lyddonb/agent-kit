@@ -9,8 +9,8 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H1 | Create and publish the GitHub repo | **Done** |
 | H2 | Confirm the license | **Done** |
 | H3 | Turn on GitHub Actions and branch protection | **Done** |
-| H4 | Verify installs in each tool you use | To do |
-| H5 | Decide public vs. private, and personal vs. Join content | To do |
+| H4 | Verify installs in each tool you use | **Skipped** |
+| H5 | Decide what is public, and keep employer content separate | **Done** |
 | H6 | Review the example skills | To do |
 
 ---
@@ -33,8 +33,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 
 ### H2. Confirm the license — Done
 **Why a human:** A legal choice. The scaffold assumes **MIT** (`LICENSE`, `kit.yaml`,
-every `SKILL.md`). If skills include anything derived from Join material, they may need
-to stay private or use a different license.
+every `SKILL.md`). Confidential or employer-specific material stays out of this repo.
 **Steps:** Keep MIT, or change `LICENSE` + `kit.yaml` `license` fields + skill
 frontmatter, then `make gen`.
 
@@ -43,19 +42,20 @@ frontmatter, then `make gen`.
 **Steps:** Ensure Actions are enabled; add a branch protection rule requiring the
 `validate` check to pass.
 
-### H4. Verify installs in each tool you use
+### H4. Verify installs in each tool you use — Skipped
 **Why a human:** Needs your machines, logged-in apps, and judgment on what "works".
+**Status:** Deferred for now. The steps below are unchanged when you pick this up.
 **Steps:** Follow [docs/INSTALL.md](docs/INSTALL.md) for Codex, Cursor, pi, and any
 others; note anything wrong in an issue. This is ROADMAP R1.
 **Note:** Codex plugin enabling happens in the ChatGPT/Codex app UI; Cursor's flow for
 adding a third-party plugin repo should be checked against its current docs.
 
-### H5. Decide what is public, and keep Join content separate
-**Why a human:** Company confidentiality and IP.
-**Recommendation:** Keep this repo personal and public-safe. Put Join-specific skills
-(internal systems, process docs, customer details) in a separate private repo under the
-company org built from this same template (`kit.yaml` + `tools/`), and confirm with
-Join leadership that publishing generic engineering-leadership skills is fine.
+### H5. Decide what is public, and keep employer content separate — Done
+**Why a human:** Confidentiality and IP.
+**Decision:** This repo stays personal and public, with generic public-safe skills only.
+Employer-specific skills (internal systems, process docs, customer details) belong in a
+separate private repo built from this same template (`kit.yaml` + `tools/`). Leadership
+signed off on publishing standard engineering capabilities.
 
 ### H6. Review the example skills
 **Why a human:** They were written by Claude as useful starting points. Read
