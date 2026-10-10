@@ -6,16 +6,16 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 
 | # | Task | Status |
 |---|---|---|
-| H1 | Create and publish the GitHub repo | 🚧 **BLOCKER** |
-| H2 | Confirm the license | 🚧 **BLOCKER** (before making it public) |
-| H3 | Turn on GitHub Actions and branch protection | To do |
+| H1 | Create and publish the GitHub repo | **Done** |
+| H2 | Confirm the license | **Done** |
+| H3 | Turn on GitHub Actions and branch protection | **Done** |
 | H4 | Verify installs in each tool you use | To do |
 | H5 | Decide public vs. private, and personal vs. Join content | To do |
 | H6 | Review the example skills | To do |
 
 ---
 
-### H1. Create and publish the GitHub repo — 🚧 BLOCKER
+### H1. Create and publish the GitHub repo — Done
 **Why a human:** Needs your GitHub account and a choice of owner/visibility.
 **Steps:**
 1. Create `github.com/lyddonb/agent-kit` (or rename: then update `marketplace.repository`
@@ -31,14 +31,14 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 **Unblocks:** H3, H4, R1 (ROADMAP), and every install command in the docs. agentfiles'
 `mine` source also points at this repo.
 
-### H2. Confirm the license — 🚧 BLOCKER before going public
+### H2. Confirm the license — Done
 **Why a human:** A legal choice. The scaffold assumes **MIT** (`LICENSE`, `kit.yaml`,
 every `SKILL.md`). If skills include anything derived from Join material, they may need
 to stay private or use a different license.
 **Steps:** Keep MIT, or change `LICENSE` + `kit.yaml` `license` fields + skill
 frontmatter, then `make gen`.
 
-### H3. Turn on Actions and protect `main`
+### H3. Turn on Actions and protect `main` — Done
 **Why a human:** Repository settings.
 **Steps:** Ensure Actions are enabled; add a branch protection rule requiring the
 `validate` check to pass.
