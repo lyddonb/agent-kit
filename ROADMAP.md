@@ -20,7 +20,6 @@ Record results in a table in `docs/INSTALL.md`.
 **Why not done:** The scaffold was built and tested in a sandbox with only the Claude
 Code CLI available. Claude Code installs (marketplace, all three plugins, MCP) were
 verified there; the others are written from current vendor docs but not exercised.
-**Blocked by:** H1 (publish the repo) in HUMAN_TASKS.
 **Effort:** ~1 hour.
 
 ## P1
