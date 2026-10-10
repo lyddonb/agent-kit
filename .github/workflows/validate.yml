@@ -1,0 +1,42 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Generated files are up to date
+        run: make check
+
+      - name: Portability lint
+        run: python3 tools/validate.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Claude Code manifest validation
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          make claude-validate
+
+      - name: install.sh smoke test
+        run: |
+          HOME="$(mktemp -d)" bash scripts/install.sh
+          HOME="$(mktemp -d)" bash scripts/install.sh --dry-run --claude

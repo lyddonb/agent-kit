@@ -1,0 +1,46 @@
+# agent-kit source of truth.
+#
+# Everything under plugins/<name>/ that is NOT a skill, hook, agent, or command
+# (plugin.json, mcp.json, .claude-plugin/, .mcp.json, marketplaces, package.json)
+# is GENERATED from this file by `make gen`. Edit this file, not the outputs.
+# CI runs `make check` and fails if generated files are stale.
+
+marketplace:
+  name: agent-kit
+  description: Beau Lyddon's portable skills and plugins for Claude Code, Codex, Cursor, Copilot, pi, OpenCode and other Agent Skills / Agent Plugins clients.
+  owner:
+    name: Beau Lyddon
+    url: https://github.com/lyddonb
+  repository: https://github.com/lyddonb/agent-kit
+  license: MIT
+
+# Defaults applied to every plugin unless the plugin overrides them.
+defaults:
+  version: 0.1.0
+  author:
+    name: Beau Lyddon
+    url: https://github.com/lyddonb
+  license: MIT
+
+plugins:
+  - name: essentials
+    description: Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs.
+    keywords: [git, commits, handoff, productivity]
+    category: productivity
+
+  - name: eng-leadership
+    description: Skills for engineering leaders - design/RFC reviews and structured interview kits.
+    keywords: [leadership, hiring, interviews, design-review, rfc]
+    category: productivity
+
+  - name: research-tools
+    description: Up-to-date library and API documentation lookup via the Context7 MCP server, with a no-MCP fallback.
+    keywords: [docs, research, mcp, context7]
+    category: development
+    # Neutral MCP definition. The generator writes both the Agent Plugins
+    # mcp.json and Claude Code's .mcp.json from this. Use ${PLUGIN_ROOT} /
+    # ${PLUGIN_DATA}; they are translated per client.
+    mcp:
+      context7:
+        type: streamable-http
+        url: https://mcp.context7.com/mcp

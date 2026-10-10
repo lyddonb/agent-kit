@@ -1,0 +1,27 @@
+{
+  "name": "agent-kit",
+  "owner": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "metadata": {
+    "description": "Beau Lyddon's portable skills and plugins for Claude Code, Codex, Cursor, Copilot, pi, OpenCode and other Agent Skills / Agent Plugins clients."
+  },
+  "plugins": [
+    {
+      "name": "essentials",
+      "source": "plugins/essentials",
+      "description": "Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs."
+    },
+    {
+      "name": "eng-leadership",
+      "source": "plugins/eng-leadership",
+      "description": "Skills for engineering leaders - design/RFC reviews and structured interview kits."
+    },
+    {
+      "name": "research-tools",
+      "source": "plugins/research-tools",
+      "description": "Up-to-date library and API documentation lookup via the Context7 MCP server, with a no-MCP fallback."
+    }
+  ]
+}

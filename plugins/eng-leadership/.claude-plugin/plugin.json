@@ -1,0 +1,19 @@
+{
+  "name": "eng-leadership",
+  "version": "0.1.0",
+  "description": "Skills for engineering leaders - design/RFC reviews and structured interview kits.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/eng-leadership",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "leadership",
+    "hiring",
+    "interviews",
+    "design-review",
+    "rfc"
+  ]
+}

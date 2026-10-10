@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "agent-kit",
+  "description": "Beau Lyddon's portable skills and plugins for Claude Code, Codex, Cursor, Copilot, pi, OpenCode and other Agent Skills / Agent Plugins clients.",
+  "owner": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "plugins": [
+    {
+      "name": "essentials",
+      "description": "Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs.",
+      "version": "0.1.0",
+      "source": "./plugins/essentials",
+      "category": "productivity",
+      "keywords": [
+        "git",
+        "commits",
+        "handoff",
+        "productivity"
+      ]
+    },
+    {
+      "name": "eng-leadership",
+      "description": "Skills for engineering leaders - design/RFC reviews and structured interview kits.",
+      "version": "0.1.0",
+      "source": "./plugins/eng-leadership",
+      "category": "productivity",
+      "keywords": [
+        "leadership",
+        "hiring",
+        "interviews",
+        "design-review",
+        "rfc"
+      ]
+    },
+    {
+      "name": "research-tools",
+      "description": "Up-to-date library and API documentation lookup via the Context7 MCP server, with a no-MCP fallback.",
+      "version": "0.1.0",
+      "source": "./plugins/research-tools",
+      "category": "development",
+      "keywords": [
+        "docs",
+        "research",
+        "mcp",
+        "context7"
+      ]
+    }
+  ]
+}

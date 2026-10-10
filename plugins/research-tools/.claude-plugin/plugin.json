@@ -1,0 +1,18 @@
+{
+  "name": "research-tools",
+  "version": "0.1.0",
+  "description": "Up-to-date library and API documentation lookup via the Context7 MCP server, with a no-MCP fallback.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/research-tools",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "docs",
+    "research",
+    "mcp",
+    "context7"
+  ]
+}
