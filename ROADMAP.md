@@ -65,7 +65,7 @@ on every matching event).
 **Prioritize when:** there is a concrete hook worth having in at least two tools.
 
 ### R7. Bundled stdio MCP server example
-**What:** A plugin that ships its own small MCP server (e.g. a Join-internal API
+**What:** A plugin that ships its own small MCP server (e.g. an internal API
 reader) to exercise the `./bin/...` + `${PLUGIN_DATA}` path translation.
 **Why not done:** The only MCP need so far is remote (Context7). The translation code
 exists and is unit-testable, but there is no real server to ship.
