@@ -164,6 +164,17 @@ def main(argv=None) -> int:
                 r.err(str(skill_md.relative_to(ROOT)), f"skill name {sname!r} also used in {names[sname]}")
             names[sname] = pdir.name
 
+    # Relative links in every Markdown file inside a skill (references, playbooks, ...) must resolve.
+    for md in sorted(ROOT.glob("plugins/*/skills/**/*.md")):
+        if md.name == "SKILL.md":
+            continue  # checked in check_skill
+        text = md.read_text()
+        for target in LINK_RE.findall(text):
+            if "://" in target or target.startswith(("mailto:", "#")):
+                continue
+            if not (md.parent / target).exists():
+                r.err(str(md.relative_to(ROOT)), f"links to {target!r}, which does not exist")
+
     for w in r.warnings:
         print(f"warning: {w}")
     for e in r.errors:

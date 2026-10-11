@@ -19,7 +19,20 @@ Outputs (all committed, so plain `git clone` / marketplace installs work):
     .cursor-plugin/marketplace.json           Cursor marketplace
     package.json                              pi package manifest
     docs/CATALOG.md                           human-readable catalog
+    docs/PRINCIPLES.md                        human-readable principle index
     .generated                                list of generated files (used by --check)
+
+It also fills GENERATED blocks inside authored Markdown files, so indexes and shared
+text have one source and cannot drift:
+
+    <!-- BEGIN GENERATED: <block> (...) -->  ...  <!-- END GENERATED: <block> -->
+
+    principles-index     full principle table, from plugins/*/skills/principles/references/*.md
+    principles-compact   grouped one-line principle list (for router skills)
+    playbooks-index      the skill's own playbooks/*.md, from their frontmatter
+    snippet:<name>       plugins/<this plugin>/snippets/<name>.md, verbatim
+    upstream-files       table of files adapted from other projects (from their source/upstream
+                         field or "Adapted from" header), for docs/UPSTREAM.md
 
 Only depends on PyYAML.
 """
@@ -87,7 +100,11 @@ def skill_description(pdir: Path, skill: str) -> str:
     m = re.match(r"^---\n(.*?)\n---", text, re.S)
     if not m:
         return ""
-    fm = yaml.safe_load(m.group(1)) or {}
+    try:
+        fm = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError as e:
+        raise KitError(f"plugins/.../skills/{skill}/SKILL.md: frontmatter is not valid YAML "
+                       f"(quote values that contain ': '): {e}") from e
     return str(fm.get("description", "")).strip()
 
 
@@ -312,8 +329,185 @@ def generate(kit: dict) -> dict[str, str]:
             lines.append("")
     files["docs/CATALOG.md"] = "\n".join(lines)
 
+    principles = load_principles()
+    if principles:
+        files["docs/PRINCIPLES.md"] = principles_doc(principles)
+
     files[".generated"] = "".join(f"{f}\n" for f in sorted(files) + [".generated"])
     return files
+
+
+# --------------------------------------------------------------------------- generated blocks
+
+BLOCK_RE = re.compile(
+    r"(<!-- BEGIN GENERATED: (?P<name>[a-z0-9:_-]+)[^>]*-->\n)(?P<body>.*?)(<!-- END GENERATED: (?P=name) -->)",
+    re.S)
+PRINCIPLE_GROUPS = ("core", "architecture", "verification", "delegation", "meta")
+PRINCIPLE_KEYS = {"id", "title", "group", "when", "rule", "source"}
+
+
+def _frontmatter(path: Path) -> tuple[dict, str]:
+    text = path.read_text()
+    m = re.match(r"^---\n(.*?)\n---\n?", text, re.S)
+    if not m:
+        return {}, text
+    try:
+        fm = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError as e:
+        raise KitError(f"{path.relative_to(ROOT)}: invalid frontmatter: {e}") from e
+    return fm, text[m.end():]
+
+
+def load_principles() -> list[dict]:
+    out, seen = [], {}
+    for f in sorted(ROOT.glob("plugins/*/skills/principles/references/*.md")):
+        fm, _ = _frontmatter(f)
+        rel = f.relative_to(ROOT)
+        missing = {k for k in ("id", "title", "group", "when", "rule") if not str(fm.get(k) or "").strip()}
+        if missing:
+            raise KitError(f"{rel}: principle frontmatter is missing or empty: {sorted(missing)}")
+        unknown = set(fm) - PRINCIPLE_KEYS
+        if unknown:
+            raise KitError(f"{rel}: unknown principle keys {sorted(unknown)}")
+        if fm["id"] != f.stem or not NAME_RE.match(fm["id"]):
+            raise KitError(f"{rel}: id {fm['id']!r} must be kebab-case and match the file name")
+        if fm["group"] not in PRINCIPLE_GROUPS:
+            raise KitError(f"{rel}: group {fm['group']!r} not in {PRINCIPLE_GROUPS}")
+        if fm["id"] in seen:
+            raise KitError(f"{rel}: duplicate principle id (also {seen[fm['id']]})")
+        seen[fm["id"]] = rel
+        out.append({**fm, "path": f})
+    order = {g: i for i, g in enumerate(PRINCIPLE_GROUPS)}
+    return sorted(out, key=lambda p: (order[p["group"]], p["title"].lower()))
+
+
+def _cell(s: str) -> str:
+    return " ".join(str(s).split()).replace("|", "\\|")
+
+
+def gen_principles_index(principles: list[dict]) -> str:
+    lines = ["| Principle | Group | When | Rule |", "|---|---|---|---|"]
+    for p in principles:
+        lines.append(f"| [{p['title']}](references/{p['id']}.md) (`{p['id']}`) | {p['group']} | "
+                     f"{_cell(p['when'])} | {_cell(p['rule'])} |")
+    return "\n".join(lines) + "\n"
+
+
+def gen_principles_compact(principles: list[dict]) -> str:
+    lines = []
+    for g in PRINCIPLE_GROUPS:
+        group = [p for p in principles if p["group"] == g]
+        if not group:
+            continue
+        lines += [f"**{g.capitalize()}**", ""]
+        lines += [f"- **{p['title']}** (`{p['id']}`). {_cell(p['when'])}" for p in group]
+        lines.append("")
+    return "\n".join(lines)
+
+
+def gen_playbooks_index(skill_dir: Path) -> str:
+    lines = []
+    for f in sorted((skill_dir / "playbooks").glob("*.md")):
+        fm, _ = _frontmatter(f)
+        rel = f.relative_to(ROOT)
+        for key in ("id", "title", "when"):
+            if not fm.get(key):
+                raise KitError(f"{rel}: playbook frontmatter needs '{key}'")
+        if fm["id"] != f.stem:
+            raise KitError(f"{rel}: playbook id {fm['id']!r} must match the file name")
+        lines.append(f"- **{fm['title']}** (`playbooks/{f.name}`). {_cell(fm['when'])}")
+    if not lines:
+        raise KitError(f"{skill_dir.relative_to(ROOT)}: playbooks-index block but no playbooks/*.md")
+    return "\n".join(lines) + "\n"
+
+
+UPSTREAM_RE = re.compile(r"(?:^source|^  upstream): \"?(?P<a>[^\"\n]+)|Adapted from (?P<b>\S+) @ (?P<c>[0-9a-f]{7})", re.M)
+
+
+def gen_upstream_files() -> str:
+    rows = []
+    for f in sorted(ROOT.glob("plugins/**/*")):
+        if not f.is_file() or f.suffix not in (".md", ".sh", ".py", ".tsv"):
+            continue
+        m = UPSTREAM_RE.search(f.read_text(errors="replace"))
+        if not m:
+            continue
+        origin = m.group("a") or f"{m.group('b')} @ {m.group('c')}"
+        origin = origin.replace(" (MIT, Lauren Tan)", "")
+        rows.append(f"| `{f.relative_to(ROOT).as_posix()}` | `{origin}` |")
+    if not rows:
+        return "No adapted files.\n"
+    return "\n".join(["| File | Adapted from |", "|---|---|", *rows]) + "\n"
+
+
+def fill_blocks(principles: list[dict]) -> dict[str, str]:
+    """Return {relative path: new content} for every authored file with GENERATED blocks."""
+    out: dict[str, str] = {}
+    for f in sorted([*ROOT.glob("plugins/**/*.md"), *ROOT.glob("docs/*.md")]):
+        text = f.read_text()
+        if "<!-- BEGIN GENERATED:" not in text:
+            continue
+        rel = f.relative_to(ROOT)
+        plugin_root = ROOT / rel.parts[0] / rel.parts[1] if rel.parts[0] == "plugins" else None
+
+        def render(m):
+            name = m.group("name")
+            if name == "principles-index":
+                body = gen_principles_index(principles)
+            elif name == "principles-compact":
+                body = gen_principles_compact(principles)
+            elif name == "playbooks-index":
+                body = gen_playbooks_index(f.parent)
+            elif name == "upstream-files":
+                body = gen_upstream_files()
+            elif name.startswith("snippet:"):
+                if plugin_root is None:
+                    raise KitError(f"{rel}: snippet blocks are only allowed inside plugins/")
+                snip = plugin_root / "snippets" / f"{name.split(':', 1)[1]}.md"
+                if not snip.is_file():
+                    raise KitError(f"{rel}: snippet {snip.relative_to(ROOT)} not found")
+                body = snip.read_text()
+                if not body.endswith("\n"):
+                    body += "\n"
+            else:
+                raise KitError(f"{rel}: unknown GENERATED block {name!r}")
+            return m.group(1) + body + m.group(4)
+
+        # Blocks inside fenced code (documentation examples) are left alone.
+        parts = re.split(r"(^```.*?^```[^\n]*\n?)", text, flags=re.S | re.M)
+        for i in range(0, len(parts), 2):
+            seg = parts[i]
+            if seg.count("<!-- BEGIN GENERATED:") != len(BLOCK_RE.findall(seg)):
+                raise KitError(f"{rel}: a GENERATED block is missing its END marker")
+            parts[i] = BLOCK_RE.sub(render, seg)
+        new = "".join(parts)
+        if new != text or BLOCK_RE.search("".join(parts[0::2])):
+            out[str(rel)] = new
+    return out
+
+
+def principles_doc(principles: list[dict]) -> str:
+    lines = [
+        "<!-- GENERATED by tools/kitgen.py from plugins/principles/skills/principles/references - do not edit -->",
+        "# Principles",
+        "",
+        "Named rules that steer how agents design, build and verify. Steer an agent by name "
+        "(\"apply prove it works\"); the agent must say which decision each principle changed.",
+        "Source files live in [`plugins/principles/skills/principles/references/`]"
+        "(../plugins/principles/skills/principles/references/). Each has a stable `id` that other skills, "
+        "profiles and (later) the knowledge base use to refer to it.",
+        "",
+    ]
+    for g in PRINCIPLE_GROUPS:
+        group = [p for p in principles if p["group"] == g]
+        if not group:
+            continue
+        lines += [f"## {g.capitalize()}", "", "| Principle | When | Rule |", "|---|---|---|"]
+        for p in group:
+            rel = p["path"].relative_to(ROOT).as_posix()
+            lines.append(f"| [{p['title']}](../{rel}) `{p['id']}` | {_cell(p['when'])} | {_cell(p['rule'])} |")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def main(argv=None) -> int:
@@ -324,6 +518,7 @@ def main(argv=None) -> int:
 
     try:
         files = generate(load_kit())
+        blocks = fill_blocks(load_principles())
     except KitError as e:
         print(f"kitgen: error: {e}", file=sys.stderr)
         return 2
@@ -336,6 +531,7 @@ def main(argv=None) -> int:
 
     if args.list:
         print("\n".join(sorted(files)))
+        print("\n".join(f"{r} (blocks)" for r in sorted(blocks)))
         return 0
 
     if args.check:
@@ -345,12 +541,13 @@ def main(argv=None) -> int:
             if not path.exists() or path.read_text() != content:
                 bad.append(rel)
         bad += [f"{r} (should be deleted)" for r in stale_removed if (ROOT / r).exists()]
+        bad += [f"{r} (GENERATED block)" for r, c in blocks.items() if (ROOT / r).read_text() != c]
         if bad:
             print("kitgen: generated files are stale. Run `make gen` and commit:", file=sys.stderr)
             for b in bad:
                 print(f"  {b}", file=sys.stderr)
             return 1
-        print(f"kitgen: {len(files)} generated files up to date")
+        print(f"kitgen: {len(files)} generated files and {len(blocks)} files with GENERATED blocks up to date")
         return 0
 
     for rel in stale_removed:
@@ -364,6 +561,11 @@ def main(argv=None) -> int:
         if not path.exists() or path.read_text() != content:
             path.write_text(content)
             print(f"wrote    {rel}")
+    for rel, content in sorted(blocks.items()):
+        path = ROOT / rel
+        if path.read_text() != content:
+            path.write_text(content)
+            print(f"filled   {rel}")
     return 0
 
 
