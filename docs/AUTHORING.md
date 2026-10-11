@@ -32,6 +32,52 @@
 The generator refuses plugin directories that are not declared in `kit.yaml`, and
 declared plugins whose directory is missing.
 
+## Add a principle
+
+1. Create `plugins/principles/skills/principles/references/<id>.md`:
+
+   ```markdown
+   ---
+   id: <id>                 # kebab-case, equals the file name, never changes once published
+   title: Readable Title
+   group: core              # core | architecture | verification | delegation | meta
+   when: "The trigger, as one sentence."
+   rule: "The rule, in one or two sentences."
+   source: where it came from (omit for your own)
+   ---
+   # Readable Title
+
+   The full rule, why it matters, the pattern, and when to stop.
+   ```
+
+2. `make gen` adds it to the index in `principles`, the compact list in `beau-mode`, and
+   `docs/PRINCIPLES.md`. Link other principles as `[Title](<other-id>.md)`.
+
+## Add a beau-mode playbook
+
+Create `plugins/bstack/skills/beau-mode/playbooks/<id>.md` with `id`, `title` and `when` in its
+frontmatter (`when` is the trigger the router matches on), then numbered steps and a
+**Reply:** line. `make gen` adds it to the router's playbook list.
+
+## Generated blocks and snippets
+
+Text that appears in more than one skill lives once, in `plugins/<plugin>/snippets/<name>.md`,
+and is pulled into each skill with an empty block:
+
+```markdown
+<!-- BEGIN GENERATED: snippet:roles (tools/kitgen.py; edit plugins/bstack/snippets/roles.md) -->
+<!-- END GENERATED: snippet:roles -->
+```
+
+`make gen` fills it; `make check` (CI) fails if it is stale. Never edit inside a block. Other
+block types: `principles-index`, `principles-compact`, `playbooks-index`, `upstream-files`.
+
+## Adapting someone else's skill
+
+Keep their license terms (add them to `THIRD_PARTY_NOTICES.md`), record the origin in a
+`source` or `metadata.upstream` field or an `Adapted from <path> @ <commit>` header comment,
+and `make gen` lists the file in `docs/UPSTREAM.md`.
+
 ## Portability rules (enforced by `make validate`)
 
 These keep a skill behaving the same in every client:
@@ -43,6 +89,8 @@ These keep a skill behaving the same in every client:
 | Keep `SKILL.md` under ~500 lines; move detail into `references/` | Paste whole manuals into `SKILL.md` | The full body loads into context when the skill activates |
 | Prefer CLI scripts (`scripts/`) for tool access | Require MCP for core behavior | pi has no MCP; scripts run everywhere a shell exists |
 | Give skill names that are unique across the whole repo | Reuse a name in two plugins | All skills share one `~/.agents/skills` directory |
+| Quote frontmatter values that contain `: ` | Write `description: does X: a, b` unquoted | It is invalid YAML; some tools then skip the skill silently |
+| Name a model role (`judgment`, `reviewers`) | Hard-code a model id in a skill | Model ids differ per tool and change often; agentfiles maps roles to models |
 | Write descriptions with trigger phrases ("Use when ...") | Write "Helps with X" | Agents choose skills from the description alone |
 
 ## MCP servers

@@ -27,3 +27,15 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
   if it jumps.
 - **Cross-tool smoke test in containers** — run Codex/pi/OpenCode headless in CI against a fixture repo.
   Heavy; probably only worth it if this becomes widely used.
+
+## bstack ideas
+- **Principle usage stats.** Count which principles agents cite in transcripts and which
+  decisions they changed. Unused principles are candidates for deletion.
+- **A "steer" cheat sheet.** One printable page of the 24 principle names with one-line
+  triggers, for steering agents mid-task.
+- **Per-project principle sets.** Let a project's `.agentfiles.yaml` exclude principles that
+  don't apply there (for example `type-system-discipline` in a shell-script repo).
+- **Write it up.** A public post on adapting pstack to work across agents, once it has been
+  used for a while.
+- **Mode for reviewing other people's PRs.** A playbook that reviews a teammate's PR the way
+  you would, using `interrogate` plus your team's conventions from the KB.

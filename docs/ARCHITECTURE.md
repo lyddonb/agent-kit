@@ -48,6 +48,34 @@ Choosing third-party skills, grouping them into personas, and pinning versions i
 job of [agentfiles](https://github.com/lyddonb/agentfiles). Keeping curation out of
 here keeps this repo shareable and free of personal preferences.
 
+### D6. Fork pstack's ideas into a tool-neutral bstack instead of installing pstack
+pstack is the best available model of rigorous agent work, but nearly all of it is bound to
+Cursor: model ids in subagent calls, a `.cursor/rules` config, Cursor's transcript folder,
+custom modes and Cursor-only plugins. Its 24 principles have no Cursor references at all.
+So the principles are adapted nearly verbatim, and the router and workflow skills are
+rewritten around tool-neutral roles and steps. pstack stays a watched upstream
+(see [UPSTREAM.md](UPSTREAM.md)) so improvements are pulled in deliberately.
+
+### D7. Principles are one skill with reference files, not 24 skills
+Every installed skill adds its description to every session in every tool. pstack hides its
+24 principle skills with Cursor's `disable-model-invocation`, which other tools ignore. One
+`principles` skill with one file per principle costs about 120 tokens instead of about 900,
+works identically everywhere, and keeps each principle addressable by a stable id (D9).
+
+### D8. Model choice lives in a roles file, not in skills
+Skills name a role (`code`, `judgment`, `explorer`, `reviewers`); agentfiles writes which model
+each role uses per tool to `~/.agents/roles.yaml`. Model ids change monthly and differ by tool
+and subscription, so hard-coding them (as pstack does) would make every skill tool-specific
+and stale. A missing entry means "use the current model", so the skills still work with no
+roles file at all.
+
+### D9. Shared text and indexes are generated, never copied
+The principle index in `principles` and `beau-mode`, the playbook list, the roles and
+transcript snippets, and the provenance table are `GENERATED` blocks filled by `make gen`
+from one source each, and CI fails when they are stale. This applies the
+`encode-lessons-in-structure` principle to the repo itself, and it is the seam a future
+knowledge base will use to feed skills (see [KNOWLEDGE.md](KNOWLEDGE.md)).
+
 ## Generated vs. authored files
 
 | Authored | Generated (`make gen`) |
@@ -56,4 +84,5 @@ here keeps this repo shareable and free of personal preferences.
 | `plugins/*/skills/**` | `plugins/*/.claude-plugin/plugin.json`, `plugins/*/.mcp.json` |
 | `plugins/*/hooks`, `agents`, `rules` | `plugins/*/.cursor-plugin/plugin.json` (if rules) |
 | docs, tools, scripts | `.claude-plugin/`, `.agents/plugins/`, `.cursor-plugin/` marketplaces |
-| | `package.json`, `docs/CATALOG.md`, `.generated` |
+| `plugins/*/snippets/*.md` (shared text) | `package.json`, `docs/CATALOG.md`, `docs/PRINCIPLES.md`, `.generated` |
+| `principles/references/*.md`, `beau-mode/playbooks/*.md` | `GENERATED` blocks inside skills and `docs/UPSTREAM.md` |

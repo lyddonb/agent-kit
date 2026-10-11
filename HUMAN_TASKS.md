@@ -12,6 +12,10 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H4 | Verify installs in each tool you use | **Skipped** |
 | H5 | Decide what is public, and keep employer content separate | **Done** |
 | H6 | Review the example skills | To do |
+| H7 | Review beau-mode and unslop for your voice | To do |
+| H8 | Dogfood beau-mode on real tasks | 🚧 **BLOCKER** for ROADMAP R10, R12, R13 |
+| H9 | Share the three Poteto posts | To do |
+| H10 | Review and merge the bstack branch | 🚧 **BLOCKER** for agentfiles' builder profile |
 
 ---
 
@@ -62,3 +66,35 @@ signed off on publishing standard engineering capabilities.
 `design-review`, `interview-kit`, `commit-message`, `handoff-notes`, and `library-docs`
 and adjust them to how you actually work (for example, your real interview loop and
 competencies, and your team's RFC template).
+
+### H7. Review beau-mode and unslop for your voice
+**Why a human:** They encode personal style, and they were written from pstack plus what
+you have said, not from watching you work.
+**What to check:**
+- `plugins/bstack/skills/beau-mode/SKILL.md`: the Autonomy rules (what may proceed without
+  asking, what always pauses), the reply style, and the non-negotiables. Delete anything that
+  isn't you.
+- `plugins/bstack/skills/unslop/SKILL.md` is Lauren Tan's standard almost unchanged. It bans
+  em dashes and mid-sentence colons, which is a taste call. Keep, loosen or drop those rules.
+- The 24 principles in `plugins/principles/`. Remove any you disagree with rather than
+  leaving rules agents will follow that you don't believe.
+
+### H8. Dogfood beau-mode on real tasks — 🚧 BLOCKER for R10, R12, R13
+**Why a human:** Only real work shows what the skill gets wrong.
+**Steps:** Run `/beau-mode` on a real bug, a feature and an investigation in Claude Code and in
+Cursor. After each, run `/reflect` and approve or reject its proposals. Note anything that felt
+slow or heavy.
+
+### H9. Share the three Poteto posts
+**Why a human:** X blocks automated reading, so the bstack build used pstack's code and
+guide but not these posts:
+`x.com/poteto/status/2102050467505430555`, `x.com/poteto/status/2108290818746528017` and
+`x.com/poteto/status/2094457600259842065`.
+**Steps:** Paste their text into a session and ask for anything they add to be folded into
+bstack.
+
+### H10. Review and merge the bstack branch — 🚧 BLOCKER for agentfiles
+**Why a human:** Merging to `main` publishes the change, and agentfiles' `builder` profile
+installs `bstack@agent-kit` from GitHub.
+**Steps:** Review the `feat/bstack` branch (start with `docs/BSTACK.md` and
+`plugins/bstack/skills/beau-mode/SKILL.md`), merge it, then run `agentfiles lock` in agentfiles.

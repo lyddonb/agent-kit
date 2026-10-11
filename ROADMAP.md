@@ -85,3 +85,93 @@ fields (privacy policy, support URL). Only worth it for plugins others will use.
 repo and reference it from the marketplace with a git source.
 **Why not done:** No plugin has its own build. Splitting early multiplies release work.
 **Prioritize when:** a plugin needs its own CI, dependencies, or release cadence.
+
+---
+
+# bstack and principles
+
+Work deferred from the first bstack build (October 2026). The first build ported the parts
+that matter most for daily rigor; these are the rest, in priority order.
+
+## P0
+
+### R10. Tune beau-mode from real use
+**What:** Use `/beau-mode` on at least three real tasks (one bug, one feature, one
+investigation) in Claude Code and Cursor, then run `/reflect` after each and merge the
+approved edits.
+**Why not done:** `beau-mode` is written from pstack's poteto-mode and what Beau has said
+about how he works. Only real sessions show which rules are wrong for him. Inventing
+evidence would overfit.
+**Blocked by:** HUMAN_TASKS H8.
+
+## P1
+
+### R11. Cross-model reviewers through other agents' CLIs
+**What:** A `second-opinion` script that runs a review prompt through another installed
+agent CLI (`claude -p`, `cursor-agent -p`, later `codex exec` and `pi -p`) and returns its
+answer, plus a roles-file syntax for it, for example
+`reviewers: {claude-code: [opus, "cli:cursor-agent:gpt-5"]}`. `interrogate`, `reflect` and
+the trail review in `show-me-your-work` would then get reviewers from a different model
+family even inside Claude Code.
+**Why not done:** Deferred by choice in the first build. It needs each CLI signed in on the
+machine and real runs to settle timeouts, output parsing and cost. The roles file already
+takes lists, so adding a `cli:` entry type changes no skill text.
+**Prioritize when:** a review panel inside one tool keeps agreeing with itself, or a
+cross-family review catches something a same-family panel missed.
+
+### R12. `automate-me`: refine beau-mode from transcripts
+**What:** Port pstack's automate-me. Mine the current project's transcripts (with
+`find-transcripts.py`) for repeated preferences and corrections, ask which ones are really
+Beau's, and propose edits to `beau-mode`.
+**Why not done:** It needs a few weeks of sessions that used beau-mode to have anything
+worth mining.
+**Prioritize when:** R10 has run and corrections start repeating.
+
+### R13. Evals for bstack
+**What:** Run the Eval playbook comparing beau-mode against no mode on three organic tasks,
+and add `claude plugin eval` cases that check `beau-mode`, `verify-work` and `interrogate`
+trigger on the right prompts and stay quiet on casual ones.
+**Why not done:** Same reason as R3: good eval prompts come from real use. Also costs model
+calls in CI.
+**Prioritize when:** before changing beau-mode's description or core rules, or after R10.
+
+### R14. Port `why`, `architect` and `arena`
+**What:** `why` researches the motivation behind code across git history, PRs, tickets and
+chat (through whatever MCP servers are connected). `architect` and `arena` run parallel
+design attempts on different models and graft the best parts.
+**Why not done:** `why` depends on which MCP servers each machine has; `architect` and
+`arena` depend on cross-family models (R11) to be worth their cost. The Feature and
+Refactoring playbooks cover design with `exhaust-the-design-space` in the meantime.
+**Prioritize when:** R11 lands (`architect`, `arena`) or ticket and chat MCPs are connected (`why`).
+
+## P2
+
+### R15. `lead-mode` for engineering leadership work
+**What:** A second router with playbooks for leadership work: a hiring loop end to end, a
+design review round, quarterly planning, incident communication, 1:1 preparation. It
+reuses the principles and the `eng-leadership` skills.
+**Why not done:** Deferred by choice. pstack has nothing in this area, so it is new design,
+and it should follow once beau-mode has settled.
+**Prioritize when:** beau-mode has had a month of use, or a leadership workflow repeats weekly.
+
+### R16. Knowledge base integration
+**What:** Make a knowledge base the source of truth for principles, playbooks and
+conventions, and give agents a KB MCP server to query while they work. Design notes and the
+seams that already exist: [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
+**Why not done:** Planned as its own follow-up project.
+**Prioritize when:** the KB has an MCP interface.
+
+### R17. The remaining pstack playbooks
+**What:** Babysit and Shipping (drive PRs to merged), Hillclimb (loop on one metric),
+Visual parity, runtime and trace forensics, Orchestrate and the autopilot pair (fleets of
+PRs), and worktree cleanup.
+**Why not done:** They depend on forge, CI and UI-driving tools that differ per setup, and
+on trust that has to be earned with the core playbooks first (pstack's own guide says the same).
+**Prioritize when:** you start leaving multi-PR work running overnight.
+
+### R18. Project verification skills
+**What:** Port `create-verification-skill` and `maintain-verification-skill`, which give a
+project a scripted way to drive its app and prove behavior, with a feature map.
+**Why not done:** Valuable per project, so it belongs with the first project that needs it.
+**Prioritize when:** `verify-work` keeps returning INCONCLUSIVE in a project because it
+can't drive the app.
