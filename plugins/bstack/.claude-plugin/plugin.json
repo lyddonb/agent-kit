@@ -1,0 +1,20 @@
+{
+  "name": "bstack",
+  "version": "0.1.0",
+  "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/bstack",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "rigor",
+    "verification",
+    "review",
+    "playbooks",
+    "beau-mode"
+  ]
+}

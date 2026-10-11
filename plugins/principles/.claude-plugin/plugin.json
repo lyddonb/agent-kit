@@ -1,0 +1,19 @@
+{
+  "name": "principles",
+  "version": "0.1.0",
+  "description": "Twenty-four named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and more) that steer how agents design, build and verify, plus a benchmark checklist. One skill with one file per principle.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/principles",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "principles",
+    "engineering",
+    "verification",
+    "design",
+    "rigor"
+  ]
+}

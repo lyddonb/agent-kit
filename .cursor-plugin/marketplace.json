@@ -11,17 +11,27 @@
     {
       "name": "essentials",
       "source": "plugins/essentials",
-      "description": "Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs."
+      "description": "Everyday engineering skills that work in any agent, for commit messages and cross-tool session handoffs."
     },
     {
       "name": "eng-leadership",
       "source": "plugins/eng-leadership",
-      "description": "Skills for engineering leaders - design/RFC reviews and structured interview kits."
+      "description": "Skills for engineering leaders, for design/RFC reviews and structured interview kits."
     },
     {
       "name": "research-tools",
       "source": "plugins/research-tools",
       "description": "Up-to-date library and API documentation lookup via the Context7 MCP server, with a no-MCP fallback."
+    },
+    {
+      "name": "principles",
+      "source": "plugins/principles",
+      "description": "Twenty-four named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and more) that steer how agents design, build and verify, plus a benchmark checklist. One skill with one file per principle."
+    },
+    {
+      "name": "bstack",
+      "source": "plugins/bstack",
+      "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent."
     }
   ]
 }

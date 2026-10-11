@@ -14,7 +14,9 @@
     "skills": [
       "./plugins/essentials/skills",
       "./plugins/eng-leadership/skills",
-      "./plugins/research-tools/skills"
+      "./plugins/research-tools/skills",
+      "./plugins/principles/skills",
+      "./plugins/bstack/skills"
     ]
   }
 }
