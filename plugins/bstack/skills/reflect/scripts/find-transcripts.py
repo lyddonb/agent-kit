@@ -2,7 +2,7 @@
 """List recent agent session transcripts for ONE project, across Claude Code, Codex, Cursor and pi.
 
 Usage:
-    python3 find-transcripts.py [--project DIR] [--limit N] [--tool claude-code|codex|cursor|pi]
+    python3 find-transcripts.py --project DIR [--limit N] [--tool claude-code|codex|cursor|pi]
 
 Prints newest first: tool, modified time, path, and the first user message (truncated).
 Only the given project's sessions are listed (default: the current directory's git root).
@@ -92,7 +92,7 @@ def codex(root: Path) -> list[tuple[str, Path]]:
     out = []
     if not base.is_dir():
         return out
-    needle = json.dumps(str(root))[1:-1]
+    needle = json.dumps(str(root))   # quoted, so /a/proj does not match /a/proj2
     for p in sorted(base.glob("*/*/*/*.jsonl"), key=lambda x: x.stat().st_mtime, reverse=True)[:500]:
         try:
             head = p.open(errors="replace").read(8192)

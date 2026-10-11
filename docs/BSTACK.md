@@ -12,7 +12,7 @@ It has two plugins:
 Install both plugins in every tool you use. With [agentfiles](https://github.com/lyddonb/agentfiles), the `builder` profile does this, and also:
 
 - writes a short always-on instruction into each tool's global instructions, telling the agent to use `beau-mode` for non-trivial engineering work, and
-- writes `~/.agents/roles.yaml`, which says which model each subagent role uses in each tool.
+- writes `~/.agents/roles.yaml` (and `.agents/roles.yaml` in projects that differ), which says which model each subagent role uses in each tool. Skills read the project file first.
 
 Without agentfiles, install the plugins per [INSTALL.md](INSTALL.md) and add this to your global instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, Cursor's User Rules, `~/.pi/agent/AGENTS.md`):
 
@@ -90,7 +90,7 @@ A duration ("work on this for four hours") is not a finish condition. In the mor
 
 ## Models and roles
 
-Playbooks delegate to subagents by role: `code`, `judgment`, `explorer` and `reviewers`. agentfiles writes the model for each role per tool into `~/.agents/roles.yaml`; when a role has no entry, the subagent runs on the current model. Review panels (`interrogate`, `reflect`, the trail review in `show-me-your-work`) get their value from model diversity, so give `reviewers` at least two different models where your tool allows it.
+Playbooks delegate to subagents by role: `code`, `judgment`, `explorer` and `reviewers`. agentfiles writes the model for each role per tool into `~/.agents/roles.yaml` (a project's `.agents/roles.yaml` wins when present); when a role has no entry, the subagent runs on the current model. Review panels (`interrogate`, `reflect`, the trail review in `show-me-your-work`) get their value from model diversity, so give `reviewers` at least two different models where your tool allows it.
 
 Within one tool, diversity is limited to that tool's models (Claude Code offers Claude models; Cursor offers several families). Running reviewers through other agents' CLIs is on the [roadmap](../ROADMAP.md).
 

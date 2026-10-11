@@ -190,6 +190,9 @@ def generate(kit: dict) -> dict[str, str]:
         merged = {**defaults, **p}
         if not merged.get("description"):
             raise KitError(f"plugin {name}: description is required")
+        for dep in merged.get("depends_on") or []:
+            if dep not in {q["name"] for q in kit["plugins"]}:
+                raise KitError(f"plugin {name}: depends_on {dep!r} is not a plugin in kit.yaml")
         resolved.append((merged, pdir))
 
     undeclared = sorted(
@@ -223,6 +226,7 @@ def generate(kit: dict) -> dict[str, str]:
         claude = drop_none({
             "name": name,
             "version": p.get("version"),
+            "dependencies": p.get("depends_on"),
             "description": p["description"],
             "author": author,
             "homepage": homepage,

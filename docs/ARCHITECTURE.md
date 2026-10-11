@@ -64,7 +64,7 @@ works identically everywhere, and keeps each principle addressable by a stable i
 
 ### D8. Model choice lives in a roles file, not in skills
 Skills name a role (`code`, `judgment`, `explorer`, `reviewers`); agentfiles writes which model
-each role uses per tool to `~/.agents/roles.yaml`. Model ids change monthly and differ by tool
+each role uses per tool to `~/.agents/roles.yaml` (a project's `.agents/roles.yaml` wins when present). Model ids change monthly and differ by tool
 and subscription, so hard-coding them (as pstack does) would make every skill tool-specific
 and stale. A missing entry means "use the current model", so the skills still work with no
 roles file at all.

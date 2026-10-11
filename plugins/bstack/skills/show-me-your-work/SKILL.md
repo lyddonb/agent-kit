@@ -23,7 +23,7 @@ A TSV file, one row per decision, cells on one line, evidence as a pointer. Colu
 - **evidence**: a commit SHA, PR, `file:line`, or artifact path. Never a paragraph.
 - **result**: the outcome, such as `tests green`, `reverted`, `pixel-diff 0`, `INCONCLUSIVE`, `open`.
 
-Append rows with `bash scripts/log.sh <logfile> <phase> <decision> <why> <evidence> <result>` (run from this skill's folder, or by its full path). It stamps the time, writes the header on first use, flattens tabs and newlines, and neutralizes cells that a spreadsheet would run as formulas.
+Append rows with `bash <this skill's folder>/scripts/log.sh <logfile> <phase> <decision> <why> <evidence> <result>`, run from the project root with a log path inside the project. Never write the log inside the skill's folder: installed skills are replaced on every sync. It stamps the time, writes the header on first use, flattens tabs and newlines, and neutralizes cells that a spreadsheet would run as formulas.
 
 Log decision points, not every action: a fork chosen, a unit finished with its verification result, a pivot or revert and its trigger, a blocker. In a loop, one row per iteration. Write rows the way you'd tell a teammate (the **unslop** rules apply).
 
@@ -53,13 +53,14 @@ Rules: append-only. A wrong call gets a new row that supersedes it. Never edit o
 The reflect skill ships `scripts/find-transcripts.py`, which lists the current project's newest sessions across these tools. If no transcript resolves, write a tight digest of the session from your own context and use that instead. Say which one you used.
 <!-- END GENERATED: snippet:transcripts -->
 
-2. **Get an outside read.** Start a read-only subagent on a model different from the one that did the work (the first `reviewers` entry that differs from yours). It reads the log and the transcript and flags: decisions with weak evidence, verification claimed without proof, choices that look risky in hindsight, and gaps a casual skim would miss.
+2. **Get an outside read.** Start a subagent that doesn't edit files, on a model different from the one that did the work (the first `reviewers` entry that differs from yours). It reads the log and the transcript and flags: decisions with weak evidence, verification claimed without proof, choices that look risky in hindsight, and gaps a casual skim would miss.
 
 <!-- BEGIN GENERATED: snippet:roles (tools/kitgen.py; edit plugins/bstack/snippets/roles.md) -->
 **Model roles.** Before you start a subagent, look up its role in `.agents/roles.yaml` in the project, then `~/.agents/roles.yaml` (agentfiles writes both). Use the entry for the tool you are running in: `claude-code`, `cursor`, `codex`, `pi` or `opencode`. A list means one subagent per entry.
 
 - If the file, the role, or your tool's entry is missing, or the value is `inherit`, don't pass a model. The subagent runs on the current model.
 - If your tool rejects a model name, rerun that subagent on the current model and say so in the reply.
+- When a step asks for a *different* model and none is configured, pick a different one your tool offers if you can choose models. Otherwise use the current model and say in the reply that the review was not independent.
 - If your tool can't start subagents, do the subagent's work yourself, one step at a time, and say in the reply that the review was not independent.
 
 Roles: `code` writes code to a precise brief, `judgment` handles design, prose, synthesis and the hardest changes, `explorer` reads in bulk and returns findings, `reviewers` is the review panel (model diversity is the point).

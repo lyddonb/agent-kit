@@ -54,4 +54,6 @@ plugins:
     description: Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.
     keywords: [workflow, rigor, verification, review, playbooks, beau-mode]
     category: development
+    # Claude Code installs principles with it. Other tools: install both (agentfiles' builder does).
+    depends_on: [principles]
 

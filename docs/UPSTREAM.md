@@ -10,7 +10,7 @@ improvements on purpose instead of drifting apart silently.
 |---|---|---|
 | Principles | 24 skills, one per principle, Cursor frontmatter | One `principles` skill with 24 reference files and a generated index. Text nearly verbatim; cross-links rewritten; "brain note" became the knowledge base |
 | Router | `poteto-mode` with 23 playbooks, a Cursor custom mode | `beau-mode` with 12 playbooks; always-on behavior comes from agentfiles' instruction block instead of a Cursor mode |
-| Models | Cursor `Task` calls with Grok and Opus model ids, configured in `.cursor/rules/pstack-models.mdc` | Four roles (`code`, `judgment`, `explorer`, `reviewers`) read from `~/.agents/roles.yaml`, per tool, written by agentfiles |
+| Models | Cursor `Task` calls with Grok and Opus model ids, configured in `.cursor/rules/pstack-models.mdc` | Four roles (`code`, `judgment`, `explorer`, `reviewers`) read from `.agents/roles.yaml` in the project or `~/.agents/roles.yaml`, per tool, written by agentfiles |
 | Workflow skills | how, why, architect, arena, swarm, interrogate, show-me-your-work, figure-it-out, reflect, correct, unslop, technical-writing, tdd, ... | how, interrogate, verify-work (new), show-me-your-work, figure-it-out, reflect, correct, unslop |
 | Transcripts | Cursor's `agent-transcripts/` only | Claude Code, Codex, Cursor and pi, via a shared snippet and `find-transcripts.py` |
 | Dependencies | `cursor-team-kit` (deslop, control-ui, control-cli), Cursor built-ins (`create-skill`, `/loop`, `/babysit`) | None; replaced with tool-neutral steps |

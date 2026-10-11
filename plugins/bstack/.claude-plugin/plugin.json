@@ -1,6 +1,9 @@
 {
   "name": "bstack",
   "version": "0.1.0",
+  "dependencies": [
+    "principles"
+  ],
   "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
   "author": {
     "name": "Beau Lyddon",

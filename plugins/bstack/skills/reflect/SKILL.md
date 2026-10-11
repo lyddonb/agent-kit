@@ -16,7 +16,7 @@ Skip it when the session was trivial, or when an existing skill already covered 
 
 ## 1. Find the transcript
 
-Run `python3 scripts/find-transcripts.py` (from this skill's folder) to list the current project's recent sessions across tools, and pick the one whose first message matches this conversation.
+Run `python3 <this skill's folder>/scripts/find-transcripts.py --project <project root>` to list the project's recent sessions across tools, and pick the one whose first message matches this conversation. Always pass `--project`; without it the script uses the current directory.
 
 <!-- BEGIN GENERATED: snippet:transcripts (tools/kitgen.py; edit plugins/bstack/snippets/transcripts.md) -->
 **Finding transcripts.** Read only the current project's sessions. Never search other projects' transcripts: they hold private conversations that have nothing to do with this work.
@@ -34,7 +34,7 @@ The reflect skill ships `scripts/find-transcripts.py`, which lists the current p
 
 ## 2. Three reviewers, in parallel
 
-Start three read-only subagents, each with one prompt filled with the transcript path or digest:
+Start three subagents that don't edit files (keep their MCP access; some tools drop it in read-only mode), each with one prompt filled with the transcript path or digest:
 
 | Lens | Role | Prompt |
 |---|---|---|
@@ -47,6 +47,7 @@ Start three read-only subagents, each with one prompt filled with the transcript
 
 - If the file, the role, or your tool's entry is missing, or the value is `inherit`, don't pass a model. The subagent runs on the current model.
 - If your tool rejects a model name, rerun that subagent on the current model and say so in the reply.
+- When a step asks for a *different* model and none is configured, pick a different one your tool offers if you can choose models. Otherwise use the current model and say in the reply that the review was not independent.
 - If your tool can't start subagents, do the subagent's work yourself, one step at a time, and say in the reply that the review was not independent.
 
 Roles: `code` writes code to a precise brief, `judgment` handles design, prose, synthesis and the hardest changes, `explorer` reads in bulk and returns findings, `reviewers` is the review panel (model diversity is the point).
@@ -63,7 +64,7 @@ Show the user the full Accepted, Rejected and Backlog lists and wait for approva
 ## 5. Apply the approved items
 
 Route each edit to where it belongs:
-- **Generic and public-safe** (a principle, a bstack skill or playbook): edit agent-kit, usually checked out at `~/code/agent-kit`, on a branch, following the Authoring a skill playbook in **beau-mode**. Run `make gen validate`.
+- **Generic and public-safe** (a principle, a bstack skill or playbook): edit the repo the skill is published from (for bstack and principles, your checkout of agent-kit or your fork of it) on a branch, following the Authoring a skill playbook in **beau-mode**. In agent-kit, run `make gen validate claude-validate`.
 - **Project- or employer-specific**: the project's own `.agents/skills/` or its private skills repo.
 - **A fact or convention, not a behavior**: the knowledge base if one is available, otherwise the project's agent instructions.
 - **The skill existed but didn't trigger**: rewrite its `description` with the words the user actually used.
