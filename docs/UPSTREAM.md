@@ -9,16 +9,19 @@ improvements on purpose instead of drifting apart silently.
 | Area | pstack | Here |
 |---|---|---|
 | Principles | 24 skills, one per principle, Cursor frontmatter | One `principles` skill with 24 reference files and a generated index. Text nearly verbatim; cross-links rewritten; "brain note" became the knowledge base |
-| Router | `poteto-mode` with 23 playbooks, a Cursor custom mode | `beau-mode` with 12 playbooks; always-on behavior comes from agentfiles' instruction block instead of a Cursor mode |
+| Router | `poteto-mode` with 23 playbooks, a Cursor custom mode | `beau-mode` with 13 playbooks; always-on behavior comes from agentfiles' instruction block instead of a Cursor mode. Adds a "restate the task" start step from the pstack guide |
 | Models | Cursor `Task` calls with Grok and Opus model ids, configured in `.cursor/rules/pstack-models.mdc` | Four roles (`code`, `judgment`, `explorer`, `reviewers`) read from `.agents/roles.yaml` in the project or `~/.agents/roles.yaml`, per tool, written by agentfiles |
-| Workflow skills | how, why, architect, arena, swarm, interrogate, show-me-your-work, figure-it-out, reflect, correct, unslop, technical-writing, tdd, ... | how, interrogate, verify-work (new), show-me-your-work, figure-it-out, reflect, correct, unslop |
+| Workflow skills | how, why, architect, arena, swarm, interrogate, show-me-your-work, figure-it-out, reflect, correct, unslop, technical-writing, tdd, ... | how, why, teach, recall, architect, arena, swarm, technical-writing, interrogate, verify-work (new), create- and maintain-verification-skill, show-me-your-work, figure-it-out, reflect, correct, unslop |
 | Transcripts | Cursor's `agent-transcripts/` only | Claude Code, Codex, Cursor and pi, via a shared snippet and `find-transcripts.py` |
-| Dependencies | `cursor-team-kit` (deslop, control-ui, control-cli), Cursor built-ins (`create-skill`, `/loop`, `/babysit`) | None; replaced with tool-neutral steps |
+| Dependencies | `cursor-team-kit` (deslop, control-ui, control-cli), Cursor built-ins (`create-skill`, `/loop`, `/babysit`) | None; replaced with tool-neutral steps. Verification skills generate a project `control-<app>` CLI instead of relying on control-ui and control-cli |
+| Verification skills | Generated into `.cursor/skills/verify-<app>/` | Generated into `.agents/skills/verify-<app>/`, linked into `.claude/skills/` for Claude Code |
+| Plan checker | `check-plan.mjs` (Node), fixed ten live lanes, Cursor cloud VMs, Bugbot, `/loop` audit ticks | `check-plan.py` (Python, unit-tested), 3 to 10 lanes through the project's verification skill, perf may be declared not perf-sensitive, plan deleted at close |
+| Workflow references | `why/references/**`, `architect/references/**`, the feature-map example | Copied from pstack @ 11713c6 with principle cross-links rewritten; they carry no frontmatter, so the generated table below lists only their parent skills |
 
-Not ported yet (see [ROADMAP.md](../ROADMAP.md)): `why`, `architect`, `arena`, `swarm`, `automate-me`,
-`recall`, `teach`, `blast-radius`, `tdd`, `technical-writing`, `no-comments`, the verification-skill
-generators, and the babysit, shipping, orchestrate, autopilot, hillclimb, forensics, visual-parity
-and worktree-cleanup playbooks.
+Not ported yet (see [ROADMAP.md](../ROADMAP.md)): `automate-me`, `blast-radius`, `tdd`, `no-comments`,
+`ketchup`, and the babysit, shipping, orchestrate, autopilot, hillclimb, forensics, visual-parity
+and worktree-cleanup playbooks. Upstream's prompt distillation (00b14f1) is adopted only in the
+skills ported at 11713c6; the files still marked `@ ccb5507` predate it.
 
 ## Taking in upstream changes
 
@@ -44,13 +47,16 @@ only what is still unreviewed.
 <!-- BEGIN GENERATED: upstream-files (tools/kitgen.py) -->
 | File | Adapted from |
 |---|---|
-| `plugins/bstack/skills/beau-mode/SKILL.md` | `pstack poteto-mode @ ccb5507` |
+| `plugins/bstack/skills/architect/SKILL.md` | `pstack architect @ 11713c6` |
+| `plugins/bstack/skills/arena/SKILL.md` | `pstack arena @ 11713c6` |
+| `plugins/bstack/skills/beau-mode/SKILL.md` | `pstack poteto-mode @ ccb5507, playbooks updated from 11713c6` |
 | `plugins/bstack/skills/beau-mode/playbooks/authoring-a-skill.md` | `pstack/skills/poteto-mode/playbooks/authoring-a-skill.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/autonomous-run.md` | `pstack/skills/poteto-mode/playbooks/autonomous-run.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/bug-fix.md` | `pstack/skills/poteto-mode/playbooks/bug-fix.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/eval.md` | `pstack/skills/poteto-mode/playbooks/eval.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/feature.md` | `pstack/skills/poteto-mode/playbooks/feature.md @ ccb5507` |
-| `plugins/bstack/skills/beau-mode/playbooks/investigation.md` | `pstack/skills/poteto-mode/playbooks/investigation.md @ ccb5507` |
+| `plugins/bstack/skills/beau-mode/playbooks/investigation.md` | `pstack/skills/poteto-mode/playbooks/investigation.md @ 11713c6` |
+| `plugins/bstack/skills/beau-mode/playbooks/multi-phase-plan.md` | `pstack/skills/poteto-mode/playbooks/multi-phase-plan.md @ 11713c6` |
 | `plugins/bstack/skills/beau-mode/playbooks/opening-a-pr.md` | `pstack/skills/poteto-mode/playbooks/opening-a-pr.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/pause-safely.md` | `pstack/skills/poteto-mode/playbooks/pause-safely.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/perf-issue.md` | `pstack/skills/poteto-mode/playbooks/perf-issue.md @ ccb5507` |
@@ -58,6 +64,7 @@ only what is still unreviewed.
 | `plugins/bstack/skills/beau-mode/playbooks/refactoring.md` | `pstack/skills/poteto-mode/playbooks/refactoring.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/session-pickup.md` | `pstack/skills/poteto-mode/playbooks/session-pickup.md @ ccb5507` |
 | `plugins/bstack/skills/correct/SKILL.md` | `pstack correct @ ccb5507` |
+| `plugins/bstack/skills/create-verification-skill/SKILL.md` | `pstack create-verification-skill @ 11713c6` |
 | `plugins/bstack/skills/figure-it-out/SKILL.md` | `pstack figure-it-out @ ccb5507` |
 | `plugins/bstack/skills/how/SKILL.md` | `pstack how @ ccb5507` |
 | `plugins/bstack/skills/how/references/explainer-prompt.md` | `pstack/skills/how/references/explainer-prompt.md @ ccb5507` |
@@ -67,6 +74,8 @@ only what is still unreviewed.
 | `plugins/bstack/skills/interrogate/references/lead-judgment.md` | `pstack/skills/interrogate/references/lead-judgment.md @ ccb5507` |
 | `plugins/bstack/skills/interrogate/references/reviewer-prompt.md` | `pstack/skills/interrogate/references/reviewer-prompt.md @ ccb5507` |
 | `plugins/bstack/skills/interrogate/references/rubric.md` | `pstack/skills/interrogate/references/rubric.md @ ccb5507` |
+| `plugins/bstack/skills/maintain-verification-skill/SKILL.md` | `pstack maintain-verification-skill @ 11713c6` |
+| `plugins/bstack/skills/recall/SKILL.md` | `pstack recall @ 11713c6` |
 | `plugins/bstack/skills/reflect/SKILL.md` | `pstack reflect @ ccb5507` |
 | `plugins/bstack/skills/reflect/references/divergent-reviewer.md` | `pstack/skills/reflect/references/divergent-reviewer.md @ ccb5507` |
 | `plugins/bstack/skills/reflect/references/judgment-reviewer.md` | `pstack/skills/reflect/references/judgment-reviewer.md @ ccb5507` |
@@ -74,7 +83,11 @@ only what is still unreviewed.
 | `plugins/bstack/skills/reflect/references/tooling-reviewer.md` | `pstack/skills/reflect/references/tooling-reviewer.md @ ccb5507` |
 | `plugins/bstack/skills/show-me-your-work/SKILL.md` | `pstack show-me-your-work @ ccb5507` |
 | `plugins/bstack/skills/show-me-your-work/scripts/log.sh` | `pstack/skills/show-me-your-work/scripts/log.sh @ ccb5507` |
+| `plugins/bstack/skills/swarm/SKILL.md` | `pstack swarm @ 11713c6` |
+| `plugins/bstack/skills/teach/SKILL.md` | `pstack teach @ 11713c6` |
+| `plugins/bstack/skills/technical-writing/SKILL.md` | `pstack technical-writing @ 11713c6` |
 | `plugins/bstack/skills/unslop/SKILL.md` | `pstack unslop @ ccb5507` |
+| `plugins/bstack/skills/why/SKILL.md` | `pstack why @ 11713c6` |
 | `plugins/principles/skills/principles/SKILL.md` | `pstack @ ccb5507` |
 | `plugins/principles/skills/principles/references/attack-the-premise.md` | `pstack/skills/principle-attack-the-premise @ ccb5507` |
 | `plugins/principles/skills/principles/references/boundary-discipline.md` | `pstack/skills/principle-boundary-discipline @ ccb5507` |

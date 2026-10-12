@@ -135,14 +135,14 @@ trigger on the right prompts and stay quiet on casual ones.
 calls in CI.
 **Prioritize when:** before changing beau-mode's description or core rules, or after R10.
 
-### R14. Port `why`, `architect` and `arena`
-**What:** `why` researches the motivation behind code across git history, PRs, tickets and
-chat (through whatever MCP servers are connected). `architect` and `arena` run parallel
-design attempts on different models and graft the best parts.
-**Why not done:** `why` depends on which MCP servers each machine has; `architect` and
-`arena` depend on cross-family models (R11) to be worth their cost. The Feature and
-Refactoring playbooks cover design with `exhaust-the-design-space` in the meantime.
-**Prioritize when:** R11 lands (`architect`, `arena`) or ticket and chat MCPs are connected (`why`).
+### R14. Adopt upstream's distillation in the older bstack files
+**What:** Upstream commit 00b14f1 tightened the prompts of principles, reflect, unslop and
+why. `why` came over already distilled (ported at 11713c6). Diff the rest against
+`agentfiles update pstack --diff` and adopt what keeps meaning while cutting words.
+**Why not done:** It is Beau's call (HUMAN_TASKS H11 in agentfiles), and the gain is
+shorter prompts, not new behavior.
+**Prioritize when:** before the next round of beau-mode tuning (R10), so edits land on the
+current text.
 
 ## P2
 
@@ -169,9 +169,21 @@ PRs), and worktree cleanup.
 on trust that has to be earned with the core playbooks first (pstack's own guide says the same).
 **Prioritize when:** you start leaving multi-PR work running overnight.
 
-### R18. Project verification skills
-**What:** Port `create-verification-skill` and `maintain-verification-skill`, which give a
-project a scripted way to drive its app and prove behavior, with a feature map.
-**Why not done:** Valuable per project, so it belongs with the first project that needs it.
-**Prioritize when:** `verify-work` keeps returning INCONCLUSIVE in a project because it
-can't drive the app.
+### R18. Verification at scale: cloud lanes and automatic repros
+**What:** Three things the pstack guide does once every app has a verification skill:
+run **swarm** lanes on cloud agents instead of local worktrees (no port or CPU contention);
+schedule **maintain-verification-skill** daily per app; and an automation that takes a user
+report (Slack, a ticket), reproduces it through the verification skill, and posts the
+evidence back.
+**Why not done:** The skills are tool-neutral, but cloud agents, schedules and chat triggers
+are per tool and per org (Cursor background agents, Claude Code scheduled tasks, Codex
+cloud). Each needs a verification skill in a real app first (agent-kit H12).
+**Prioritize when:** two apps have verification skills and local lanes start colliding.
+
+### R19. A shared transcript script
+**What:** `recall` calls `reflect`'s `find-transcripts.py` by its sibling folder. Move the
+script to a small shared location (or have kitgen copy it into each skill that needs it) so
+installing one skill alone still works.
+**Why not done:** Both skills ship in bstack and install side by side in every supported tool,
+so the sibling path works today.
+**Prioritize when:** someone installs `recall` without `reflect`.

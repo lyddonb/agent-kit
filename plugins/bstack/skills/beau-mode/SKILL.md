@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: lyddonb
   version: "0.1.0"
-  upstream: "pstack poteto-mode @ ccb5507 (MIT, Lauren Tan)"
+  upstream: "pstack poteto-mode @ ccb5507, playbooks updated from 11713c6 (MIT, Lauren Tan)"
 ---
 
 # Beau mode
@@ -14,21 +14,42 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 
 ## Start every task this way
 
-1. **Match a playbook.** Pick one from the list at the end. Open its file and copy its steps into your todo list word for word, before any task-specific todos. A step you skip stays in the list as `skip: <reason>`. If no playbook fits, or the work is large, cross-cutting, or will run while the human is away, use the **figure-it-out** skill instead.
-2. **Read the principles that apply.** Scan the index below. For each principle you will apply, read its full file in the **principles** skill (`references/<id>.md`). In the reply, name each principle that shaped a decision and the choice it changed. Cite only principles you read this session.
-3. **Check for team knowledge.** If the project or your tools provide a knowledge base (an MCP server, a docs folder, or a skill that holds conventions and best practices), search it for the area you are about to change before you design. Prefer its conventions over your defaults, and say which entries you used.
+1. **Restate the task.** In one or two plain sentences, say what you think is being asked and what done looks like. When the request points at a thread, ticket or log, read all of it first. This catches a wrong reading before it costs anything, and the user can redirect.
+2. **Match a playbook.** Pick one from the list at the end. Open its file and copy its steps into your todo list word for word, before any task-specific todos. A step you skip stays in the list as `skip: <reason>`. If no playbook fits, or the work is large, cross-cutting, or will run while the human is away, use the **figure-it-out** skill instead.
+3. **Read the principles that apply.** Scan the index below. For each principle you will apply, read its full file in the **principles** skill (`references/<id>.md`). In the reply, name each principle that shaped a decision and the choice it changed. Cite only principles you read this session.
+4. **Check for team knowledge.** If the project or your tools provide a knowledge base (an MCP server, a docs folder, or a skill that holds conventions and best practices), search it for the area you are about to change before you design. Prefer its conventions over your defaults, and say which entries you used.
 
 ## Non-negotiables
 
 - **Any code:** name the data shape first, and choose its organizing structure (state machine, typed model, table or registry, reducer) per the `model-the-domain` principle.
-- **Nontrivial change, architecture question, or "are we sure?":** run the **how** skill on the affected code first.
+- **Nontrivial change, architecture question, or "are we sure?":** run the **how** skill on the affected code first. For why it's built that way, run **why**.
 - **A "which approach" or "what should this do" question you are about to ask:** if the answer is a fact you could observe by running something (behavior, timing, layout, output, performance), don't ask. Settle it with the Prototype playbook. Ask the human only for product or preference calls that no experiment can settle.
-- **Done means proven:** run the **verify-work** skill before you say a task is done. "It compiles" and "tests pass" are not proof of behavior.
+- **Done means proven:** run the **verify-work** skill before you say a task is done. "It compiles" and "tests pass" are not proof of behavior. Verification is infrastructure: when a project has no `verify-<app>` skill, offer **create-verification-skill**.
+- **A one-way door or a design with no precedent:** run the **architect** skill. Plan with code (prototypes, sketches), not long documents, and don't adversarially review an abstract plan: reviewers invent risks for code that doesn't exist.
 - **Contested design or risky diff:** run the **interrogate** skill before shipping.
 - **Long, unattended or multi-phase work:** keep a decision trail with the **show-me-your-work** skill.
 - **Any prose (replies, docs, PR bodies, commit messages):** write it per **Writing the reply** and the **unslop** skill.
 - **The same mistake twice:** stop patching it by hand. Run the **correct** skill so the repo makes the mistake impossible.
 - **A skill is broken mid-task:** fix it in its own change, not tangled into the task. Don't silently work around it.
+
+## Skills to call
+
+| Need | Skill |
+|---|---|
+| How code works | **how** |
+| Why it's that way, where a number came from | **why** |
+| The user wants to understand it, not just get an answer | **teach** |
+| Resuming the user's own recent work on a topic | **recall** |
+| Proving a change works | **verify-work** |
+| A project has no scripted way to drive the app | **create-verification-skill**, then **maintain-verification-skill** daily |
+| Designing before code | **architect** (uses **arena**) |
+| Several attempts at one artifact, judged | **arena** |
+| Parallel lanes: coverage, fuzzing, perf samples, live checks | **swarm** |
+| Docs, READMEs, plans, PR bodies | **technical-writing**, then **unslop** |
+| Skeptical review of a diff | **interrogate** |
+| A decision trail for long or unattended work | **show-me-your-work** |
+| Work no playbook fits | **figure-it-out** |
+| Lessons from a session; a repeated mistake | **reflect**; **correct** |
 
 ## Principles
 
@@ -123,6 +144,7 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - **Eval** (`playbooks/eval.md`). Testing how a skill, principle or prompt change affects agent behavior before you keep it, including adopting someone else's skill.
 - **Feature** (`playbooks/feature.md`). New or changed behavior, built from a named data shape.
 - **Investigation** (`playbooks/investigation.md`). A read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y.
+- **Multi-phase plan** (`playbooks/multi-phase-plan.md`). Turning an agreed design into a tactical execution plan of small, verifiable PRs: "turn this design into a plan", a migration, or any change too big for one PR.
 - **Opening a PR** (`playbooks/opening-a-pr.md`). The last step of every playbook that changes code.
 - **Pause safely** (`playbooks/pause-safely.md`). An explicit request to pause, going offline, a restart, or imminent context compaction. Never on "keep going".
 - **Perf issue** (`playbooks/perf-issue.md`). A measured slowness to trace and improve against a baseline.

@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "bstack",
-  "version": "0.1.0",
-  "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
+  "version": "0.2.0",
+  "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, swarm), design and planning (architect, arena, technical-writing), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
   "author": {
     "name": "Beau Lyddon",
     "url": "https://github.com/lyddonb"
@@ -16,6 +16,7 @@
     "verification",
     "review",
     "playbooks",
+    "planning",
     "beau-mode"
   ]
 }
