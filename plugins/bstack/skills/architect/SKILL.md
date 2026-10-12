@@ -32,7 +32,7 @@ Arena returns one synthesized design. Its synthesis note fills the rationale's "
 
 ## Phase C: Agree (opt-in)
 
-By default, go straight to implementation with no human checkpoint. Stop for sign-off only when asked: "/architect with checkpoint", "show me before implementing", or similar.
+When a beau-mode playbook called this skill, stop after Phase B and return to the playbook: it owns implementation, delegation and any planning. Run alone, go straight to implementation with no human checkpoint by default. Stop for sign-off only when asked: "/architect with checkpoint", "show me before implementing", or similar.
 
 The sketch can ship as its own commit either way (scaffold first, per `foundational-thinking`). Planned breakage while filling it in is fine (`outcome-oriented-execution`). Don't run an adversarial review on an abstract sketch: reviewers invent theoretical risks for code that doesn't exist yet. Settle open questions with a prototype instead, and save **interrogate** for the implemented diff.
 

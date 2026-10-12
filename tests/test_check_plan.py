@@ -43,7 +43,29 @@ class CheckPlanTest(unittest.TestCase):
                            "lane 2 has no pass predicate")
 
     def test_lane_count_mismatch(self):
-        self.assertProblem(GOOD.replace("2 lanes at the PR head", "3 lanes at the PR head"), "expected 1 to 3")
+        self.assertProblem(GOOD.replace("3 lanes at the PR head", "4 lanes at the PR head", 1), "expected 1 to 4")
+
+    def test_lane_count_bounds(self):
+        two = GOOD.replace("3 lanes at the PR head", "2 lanes at the PR head", 1).replace(
+            "- [ ] Lane 3. Retry twice in a row. Save `retry-twice.txt`. Pass when the table still holds 60000 distinct rows.\n", "")
+        self.assertProblem(two, "2 lanes, expected 3 to 10")
+
+    def test_missing_close_still_checks_prs(self):
+        text = GOOD.replace("## Close the program\n\n- [ ] Every box above is checked with its evidence.\n", "")
+        text = text.replace("Pass when the table holds 60000 distinct rows.", "Done.")
+        found = problems(text)
+        self.assertTrue(any("Close the program" in p for p in found), found)
+        self.assertTrue(any("lane 2 has no pass predicate" in p for p in found), found)
+        self.assertFalse(any("no PR sections" in p for p in found), found)
+
+    def test_indented_and_tilde_fences_are_code(self):
+        snippet = "\n  ```yaml\n  key: value\n  - [ ] not a box\n  ```\n\n~~~\n## not a section\n~~~\n"
+        text = GOOD.replace("The prototype on branch", snippet + "\nThe prototype on branch")
+        self.assertEqual(problems(text), [])
+
+    def test_review_gate_words_ignore_case(self):
+        text = GOOD.replace("Post the lane screenshot and a short video to the human.", "Screenshots and a Video go to the Human.")
+        self.assertEqual(problems(text), [])
 
     def test_first_lane_must_be_regression(self):
         self.assertProblem(GOOD.replace("Lane 1. Regression lane against trunk. Export", "Lane 1. Export"),

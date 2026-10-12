@@ -28,6 +28,8 @@ PERF_ITEMS = ["Metric.", "Probe.", "Baseline.", "Rule."]
 LANES = re.compile(r"(\d+) lanes at the PR head through `[^`<>]+`")
 BOX = re.compile(r"^\s*- \[[ xX]\] (.*)$")
 PLACEHOLDER = re.compile(r"<[A-Za-z][^<>]*>")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+MIN_LANES, MAX_LANES = 3, 10
 
 
 class Line:
@@ -65,13 +67,15 @@ def check(path: Path) -> tuple[list[str], list[str]]:
             fail(1, "front matter never closes")
 
     lines: list[Line] = []
-    fence = False
+    fence = ""   # the marker that opened the current fenced block, or "" outside one
     for i in range(start, len(raw)):
         text, n = raw[i], i + 1
-        if text.startswith("```"):
-            fence = not fence
-        lines.append(Line(n, text, fence))
-        if fence or text.startswith("```"):
+        m = FENCE.match(text)
+        is_fence = bool(m) and (not fence or (m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence)))
+        if is_fence:
+            fence = "" if fence else m.group(1)
+        lines.append(Line(n, text, bool(fence) or is_fence))
+        if fence or is_fence:
             continue
         prose = prose_of(text)
         if re.search("[–—]", prose):
@@ -126,10 +130,16 @@ def check(path: Path) -> tuple[list[str], list[str]]:
     close = find("Close the program")
     if not close:
         fail(1, 'no "## Close the program" section')
+    # When an anchor is missing, still check the PR sections around it so one missing heading
+    # doesn't hide every other problem.
+    known = {"How to read this", "Program checklist", "Close the program"}
+    first_appendix = next((i for i, s in enumerate(sections) if s["title"].startswith("Appendix")), len(sections))
     pi = sections.index(program) if program else -1
     ci = sections.index(close) if close else -1
-    prs = sections[pi + 1:ci] if pi != -1 and ci != -1 else []
-    if not prs:
+    lo = pi + 1 if pi != -1 else 0
+    hi = ci if ci != -1 else first_appendix
+    prs = [s for s in sections[lo:hi] if s["title"] not in known]
+    if not prs and program and close:
         fail(1, "no PR sections between Program checklist and Close the program")
 
     report = []
@@ -169,6 +179,8 @@ def check(path: Path) -> tuple[list[str], list[str]]:
                 fail(live["n"], f"{title}: Verify, live lacks \"<N> lanes at the PR head through `<verification skill>`\"")
             lanes = [(n, t, re.match(r"^Lane (\d+)\. ", t)) for n, t in boxes(live["lines"])]
             numbers = sorted(int(x.group(1)) for _, _, x in lanes if x)
+            if m and not MIN_LANES <= int(m.group(1)) <= MAX_LANES:
+                fail(live["n"], f"{title}: {m.group(1)} lanes, expected {MIN_LANES} to {MAX_LANES}")
             want = list(range(1, (int(m.group(1)) if m else len(numbers)) + 1))
             if not numbers or numbers != want:
                 fail(live["n"], f"{title}: lanes are {numbers}, expected 1 to {len(want) or 'N'}")
@@ -201,7 +213,7 @@ def check(path: Path) -> tuple[list[str], list[str]]:
                 if gb:
                     fail(gate["n"], f"{title}: Review gate says None but has boxes")
             else:
-                text = "\n".join(l.text for l in gate["lines"])
+                text = "\n".join(l.text for l in gate["lines"]).lower()
                 if not gb:
                     fail(gate["n"], f"{title}: Review gate has no box")
                 for word in ["screenshot", "video", "human"]:

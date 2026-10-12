@@ -78,4 +78,4 @@ Follow its instructions end to end once: launch, doctor, drive one mapped featur
 
 Commit the skill and the control CLI on a branch and run **Opening a PR** from **beau-mode**. In the reply, give the skill path, the features mapped, the evidence from step 5, and anything you couldn't make drivable and why.
 
-Point the user at **maintain-verification-skill** to keep the map honest as the app changes. A daily scheduled run works well; suggest one only if they ask how often.
+Point the user at **maintain-verification-skill** to keep the map honest as the app changes, and recommend running it daily with their tool's scheduler (for example a scheduled task or automation).

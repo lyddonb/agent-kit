@@ -222,11 +222,15 @@ def main(argv=None) -> int:
             continue
         found += finder(root)
     found = sorted(((t, tool, p) for tool, p in found if (t := mtime(p)) is not None), reverse=True)
+    total = len(found)
     if args.days is not None:
         cutoff = datetime.now().timestamp() - args.days * 86400
         found = [f for f in found if f[0] >= cutoff]
     if args.grep:
         found = [f for f in found if contains(f[2], args.grep)]
+    if not found and total:
+        print(f"{total} transcripts found for {root}, none matching --days/--grep", file=sys.stderr)
+        return 1
     if not found:
         print(f"no transcripts found for {root}", file=sys.stderr)
         return 1

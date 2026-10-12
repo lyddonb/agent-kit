@@ -139,7 +139,7 @@ calls in CI.
 **What:** Upstream commit 00b14f1 tightened the prompts of principles, reflect, unslop and
 why. `why` came over already distilled (ported at 11713c6). Diff the rest against
 `agentfiles update pstack --diff` and adopt what keeps meaning while cutting words.
-**Why not done:** It is Beau's call (HUMAN_TASKS H11 in agentfiles), and the gain is
+**Why not done:** It is Beau's call (agentfiles' HUMAN_TASKS, "Review the pending pstack changes"), and the gain is
 shorter prompts, not new behavior.
 **Prioritize when:** before the next round of beau-mode tuning (R10), so edits land on the
 current text.
@@ -172,7 +172,8 @@ on trust that has to be earned with the core playbooks first (pstack's own guide
 ### R18. Verification at scale: cloud lanes and automatic repros
 **What:** Three things the pstack guide does once every app has a verification skill:
 run **swarm** lanes on cloud agents instead of local worktrees (no port or CPU contention);
-schedule **maintain-verification-skill** daily per app; and an automation that takes a user
+set up the daily **maintain-verification-skill** schedule per app automatically (today the
+human creates it, HUMAN_TASKS H12); and an automation that takes a user
 report (Slack, a ticket), reproduces it through the verification skill, and posts the
 evidence back.
 **Why not done:** The skills are tool-neutral, but cloud agents, schedules and chat triggers

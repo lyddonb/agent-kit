@@ -46,10 +46,11 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 - [ ] `tests/test_writer.py` gains a retry case. Run `pytest tests/test_writer.py`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. 2 lanes at the PR head through `verify-exporter`.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. 3 lanes at the PR head through `verify-exporter`.
 
 - [ ] Lane 1. Regression lane against trunk. Export the 60k fixture at trunk and head. Save `export-60k.txt`. Pass when head writes 60000 rows and trunk's count is recorded.
 - [ ] Lane 2. Kill the run at row 30000 and retry. Save `retry.txt`. Pass when the table holds 60000 distinct rows.
+- [ ] Lane 3. Retry twice in a row. Save `retry-twice.txt`. Pass when the table still holds 60000 distinct rows.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -84,9 +85,11 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 - [ ] `tests/test_cli.py` gains a resume case. Run `pytest tests/test_cli.py`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. 1 lanes at the PR head through `verify-exporter`.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. 3 lanes at the PR head through `verify-exporter`.
 
 - [ ] Lane 1. Regression lane against trunk. Resume a killed export at trunk and head. Save `resume.png`. Pass when head prints the resume line.
+- [ ] Lane 2. Resume with nothing left to write. Save `resume-done.png`. Pass when the CLI prints `nothing to resume`.
+- [ ] Lane 3. Run a fresh export. Save `fresh.png`. Pass when no resume line appears.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Not perf-sensitive. It changes one print call.
 

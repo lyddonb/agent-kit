@@ -26,7 +26,7 @@ Edit only the verification skill's own folder: its `SKILL.md`, `features/`, and 
 
 ## Pass
 
-0. **Find the target.** Look for a project-local skill with launch and drive sections and a feature map, usually `.agents/skills/verify-*/` or `.claude/skills/verify-*/`. Several candidates: ask which one, or if no one is watching, do all of them one at a time. None: stop and point at **create-verification-skill**. Don't invent a target.
+0. **Find the target.** Look for a project-local skill with launch and drive sections and a feature map, usually `.agents/skills/verify-*/` or `.claude/skills/verify-*/`. Paths that resolve to the same folder (a `.claude/skills` link to `.agents/skills`) are one target. Several real candidates: ask which one, or if no one is watching, do all of them one at a time. None: stop and point at **create-verification-skill**. Don't invent a target.
 
 1. **Index hygiene.** Read `features/README.md` and list its sibling files. Fix missing, extra, duplicate or dead entries.
 

@@ -17,14 +17,14 @@ Context lives in two records. The user's own agent sessions hold what they did a
 ## Steps
 
 1. **Route first.** Resuming one specific prior session is the **Session pickup** playbook in **beau-mode**, not this. A summary of an unattended run's trail is **show-me-your-work**. If the user already gave you a full state capsule (paths, branch, the change), use it and skip the mining.
-2. **Lock the scope.** Pin the window (default: the last 7 days), the topic if named, and the project (default: the current one). State the scope back in one line. Never read another project's transcripts unless asked, and never quietly turn "all" into "recent".
+2. **Lock the scope.** Pin the window (default: the last 7 days), the topic if named, and the project (default: the current one). State the scope back in one line. Never read another project's transcripts, and never quietly turn "all" into "recent".
 3. **Mine the user's sessions.** List the matching transcripts with the **reflect** skill's script (in the `reflect` folder next to this skill when bstack is installed):
 
    ```bash
    python3 <reflect skill folder>/scripts/find-transcripts.py --project <project root> --days 7 --grep "<topic>" --limit 50
    ```
 
-   Skip the current session and obvious noise (subagent, eval and test sessions). For one or two sessions, read them directly. For more, split them across parallel `explorer` subagents. Tell each to grep the topic first, read only the matching regions, and return one block per session: topic, the user's goal, decisions, open threads, struggles and corrections, and artifacts (PRs, tickets, branches), each citing the transcript file. The raw transcripts stay in the subagents.
+   An empty list with `--days` or `--grep` means no session in the window touched the topic. Say so; don't fall back to a digest of the current session. Skip the current session and obvious noise (subagent, eval and test sessions). For one or two sessions, read them directly. For more, split them across parallel `explorer` subagents. Tell each to grep the topic first, read only the matching regions, and return one block per session: topic, the user's goal, decisions, open threads, struggles and corrections, and artifacts (PRs, tickets, branches), each citing the transcript file. The raw transcripts stay in the subagents.
 
 <!-- BEGIN GENERATED: snippet:transcripts (tools/kitgen.py; edit plugins/bstack/snippets/transcripts.md) -->
 **Finding transcripts.** Read only the current project's sessions. Never search other projects' transcripts: they hold private conversations that have nothing to do with this work.
