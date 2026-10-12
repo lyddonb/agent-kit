@@ -166,7 +166,26 @@ def neutral_mcp_to_claude(servers: dict) -> dict:
 
 # --------------------------------------------------------------------------- generation
 
-def generate(kit: dict) -> dict[str, str]:
+def check_acyclic(deps: dict[str, list[str]]):
+    """Reject depends_on cycles (a -> b -> a); clients only discover them at install time."""
+    state: dict[str, str] = {}   # name -> "visiting" | "done"
+
+    def visit(name: str, path: list[str]):
+        if state.get(name) == "done":
+            return
+        if state.get(name) == "visiting":
+            cycle = path[path.index(name):] + [name]
+            raise KitError(f"depends_on cycle: {' -> '.join(cycle)}")
+        state[name] = "visiting"
+        for dep in deps.get(name, []):
+            visit(dep, path + [name])
+        state[name] = "done"
+
+    for name in deps:
+        visit(name, [])
+
+
+def generate(kit: dict, principles: list[dict]) -> dict[str, str]:
     files: dict[str, str] = {}
     mk = kit["marketplace"]
     defaults = kit.get("defaults", {})
@@ -177,6 +196,8 @@ def generate(kit: dict) -> dict[str, str]:
 
     seen = set()
     resolved = []
+    plugin_names = {q["name"] for q in kit["plugins"]}
+    deps: dict[str, list[str]] = {}
     for p in kit["plugins"]:
         name = p["name"]
         if not NAME_RE.match(name) or len(name) > 64:
@@ -190,10 +211,14 @@ def generate(kit: dict) -> dict[str, str]:
         merged = {**defaults, **p}
         if not merged.get("description"):
             raise KitError(f"plugin {name}: description is required")
-        for dep in merged.get("depends_on") or []:
-            if dep not in {q["name"] for q in kit["plugins"]}:
+        deps[name] = list(merged.get("depends_on") or [])
+        for dep in deps[name]:
+            if dep == name:
+                raise KitError(f"plugin {name}: depends_on itself")
+            if dep not in plugin_names:
                 raise KitError(f"plugin {name}: depends_on {dep!r} is not a plugin in kit.yaml")
         resolved.append((merged, pdir))
+    check_acyclic(deps)
 
     undeclared = sorted(
         d.name for d in (ROOT / "plugins").iterdir()
@@ -333,7 +358,6 @@ def generate(kit: dict) -> dict[str, str]:
             lines.append("")
     files["docs/CATALOG.md"] = "\n".join(lines)
 
-    principles = load_principles()
     if principles:
         files["docs/PRINCIPLES.md"] = principles_doc(principles)
 
@@ -425,7 +449,9 @@ def gen_playbooks_index(skill_dir: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-UPSTREAM_RE = re.compile(r"(?:^source|^  upstream): \"?(?P<a>[^\"\n]+)|Adapted from (?P<b>\S+) @ (?P<c>[0-9a-f]{7})", re.M)
+UPSTREAM_RE = re.compile(r"(?:^source|^[ \t]+upstream): [\"']?(?P<a>[^\"'\n]+)|Adapted from (?P<b>\S+) @ (?P<c>[0-9a-f]{7})", re.M)
+# Trailing "(MIT, Author)" style attribution; the table shows the origin path and commit only.
+ATTRIBUTION_RE = re.compile(r"\s*\([^()]*\)\s*$")
 
 
 def gen_upstream_files() -> str:
@@ -437,7 +463,7 @@ def gen_upstream_files() -> str:
         if not m:
             continue
         origin = m.group("a") or f"{m.group('b')} @ {m.group('c')}"
-        origin = origin.replace(" (MIT, Lauren Tan)", "")
+        origin = ATTRIBUTION_RE.sub("", origin.strip())
         rows.append(f"| `{f.relative_to(ROOT).as_posix()}` | `{origin}` |")
     if not rows:
         return "No adapted files.\n"
@@ -477,17 +503,42 @@ def fill_blocks(principles: list[dict]) -> dict[str, str]:
                 raise KitError(f"{rel}: unknown GENERATED block {name!r}")
             return m.group(1) + body + m.group(4)
 
-        # Blocks inside fenced code (documentation examples) are left alone.
-        parts = re.split(r"(^```.*?^```[^\n]*\n?)", text, flags=re.S | re.M)
-        for i in range(0, len(parts), 2):
-            seg = parts[i]
-            if seg.count("<!-- BEGIN GENERATED:") != len(BLOCK_RE.findall(seg)):
-                raise KitError(f"{rel}: a GENERATED block is missing its END marker")
-            parts[i] = BLOCK_RE.sub(render, seg)
-        new = "".join(parts)
-        if new != text or BLOCK_RE.search("".join(parts[0::2])):
+        new, n = fill_text(text, render, rel)
+        if n:
             out[str(rel)] = new
     return out
+
+
+# A fence line, or a BEGIN marker, whichever comes first.
+SCAN_RE = re.compile(r"^(?:(?P<fence>```)[^\n]*$|<!-- BEGIN GENERATED: (?P<name>[a-z0-9:_-]+)[^>]*-->\n)", re.M)
+FENCE_CLOSE_RE = re.compile(r"^```[^\n]*$", re.M)
+
+
+def fill_text(text: str, render, rel) -> tuple[str, int]:
+    """Replace every GENERATED block outside fenced code. Returns (new text, block count).
+
+    Fences are tracked only outside blocks, so a block whose generated body contains a code fence
+    (a snippet with an example) still finds its END marker on the next run.
+    """
+    out, pos, n = [], 0, 0
+    while m := SCAN_RE.search(text, pos):
+        if m.group("fence"):
+            # Blocks inside fenced code (documentation examples) are left alone.
+            close = FENCE_CLOSE_RE.search(text, m.end() + 1)
+            end = close.end() if close else len(text)
+            out.append(text[pos:end])
+            pos = end
+            continue
+        end_marker = f"<!-- END GENERATED: {m.group('name')} -->"
+        close = text.find(end_marker, m.end())
+        if close < 0:
+            raise KitError(f"{rel}: GENERATED block {m.group('name')!r} is missing its END marker")
+        block = BLOCK_RE.match(text, m.start())
+        out += [text[pos:m.start()], render(block)]
+        pos = close + len(end_marker)
+        n += 1
+    out.append(text[pos:])
+    return "".join(out), n
 
 
 def principles_doc(principles: list[dict]) -> str:
@@ -521,8 +572,9 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     try:
-        files = generate(load_kit())
-        blocks = fill_blocks(load_principles())
+        principles = load_principles()
+        files = generate(load_kit(), principles)
+        blocks = fill_blocks(principles)
     except KitError as e:
         print(f"kitgen: error: {e}", file=sys.stderr)
         return 2

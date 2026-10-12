@@ -36,6 +36,7 @@ NON_PORTABLE = {
 }
 RESERVED_PREFIXES = ("claude-", "anthropic-", "anthropics-", "cc-plugin-")
 LINK_RE = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
+FENCE_RE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.S | re.M)
 
 
 class Report:
@@ -116,10 +117,15 @@ def check_skill(skill_md: Path, r: Report):
         if token in body:
             r.warn(where, f"uses {token} ({why}); use paths relative to the skill directory instead")
 
-    for target in LINK_RE.findall(body):
+    check_links(skill_md, body, where, r)
+
+
+def check_links(md: Path, text: str, where: str, r: Report):
+    """Relative links must resolve. Links in fenced code are examples, not links."""
+    for target in LINK_RE.findall(FENCE_RE.sub("", text)):
         if "://" in target or target.startswith("mailto:"):
             continue
-        if not (skill_md.parent / target).exists():
+        if not (md.parent / target).exists():
             r.err(where, f"links to {target!r}, which does not exist")
 
 
@@ -168,12 +174,7 @@ def main(argv=None) -> int:
     for md in sorted(ROOT.glob("plugins/*/skills/**/*.md")):
         if md.name == "SKILL.md":
             continue  # checked in check_skill
-        text = md.read_text()
-        for target in LINK_RE.findall(text):
-            if "://" in target or target.startswith(("mailto:", "#")):
-                continue
-            if not (md.parent / target).exists():
-                r.err(str(md.relative_to(ROOT)), f"links to {target!r}, which does not exist")
+        check_links(md, md.read_text(), str(md.relative_to(ROOT)), r)
 
     for w in r.warnings:
         print(f"warning: {w}")
