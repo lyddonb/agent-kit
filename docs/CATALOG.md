@@ -5,7 +5,7 @@ Every plugin and skill in this repo. See [INSTALL.md](INSTALL.md) for how to ins
 
 ## `essentials`
 
-Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs.
+Everyday engineering skills that work in any agent, for commit messages and cross-tool session handoffs.
 
 | Skill | Description |
 |---|---|
@@ -14,7 +14,7 @@ Everyday engineering skills that work in any agent - commit messages and cross-t
 
 ## `eng-leadership`
 
-Skills for engineering leaders - design/RFC reviews and structured interview kits.
+Skills for engineering leaders, for design/RFC reviews and structured interview kits.
 
 | Skill | Description |
 |---|---|
@@ -30,3 +30,29 @@ Up-to-date library and API documentation lookup via the Context7 MCP server, wit
 | Skill | Description |
 |---|---|
 | [`library-docs`](../plugins/research-tools/skills/library-docs/SKILL.md) | Look up current, version-specific documentation and code examples for a library, framework, SDK, or API before writing or fixing code that uses it. Use when working with a third-party package, when an API may have changed, when unsure of a function signature, or when the user asks for up-to-date docs. |
+
+## `principles`
+
+Twenty-four named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and more) that steer how agents design, build and verify, plus a benchmark checklist. One skill with one file per principle.
+
+| Skill | Description |
+|---|---|
+| [`principles`](../plugins/principles/skills/principles/SKILL.md) | Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof. |
+
+## `bstack`
+
+Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.
+
+- client-specific `agents/` (not portable)
+
+| Skill | Description |
+|---|---|
+| [`beau-mode`](../plugins/bstack/skills/beau-mode/SKILL.md) | Beau's way of doing engineering work with an agent. It picks a playbook, applies named principles, verifies on the real artifact, keeps a decision trail, and writes plain replies. Use for /beau-mode, "beau mode", or any non-trivial engineering task (a bug, a feature, a refactor, a perf problem, an investigation, a prototype, a skill edit, or an unattended run). Skip it for casual questions and one-line answers. |
+| [`correct`](../plugins/bstack/skills/correct/SKILL.md) | Find the mistakes agents keep repeating in this repo and make each one impossible. Tries architecture first, then types, then a lint or CI check whose error names the fix, then a test, and docs last, and proves each new check fails on a real past mistake. Use for /correct, "agents keep doing X", or after correcting the same mistake twice. |
+| [`figure-it-out`](../plugins/bstack/skills/figure-it-out/SKILL.md) | Design a rigorous, auditable playbook for work no standard playbook fits (a large migration, an ambitious multi-part change, or anything the human will review after stepping away), then run it as a hypothesis loop with a decision trail. Use for "figure it out", large or cross-cutting changes, or overnight and unattended work. |
+| [`how`](../plugins/bstack/skills/how/SKILL.md) | Explain how a subsystem, feature or code path works, at the level a senior engineer needs before changing it, covering runtime flow, key concepts, where things live and gotchas. Use for "how does X work", walkthroughs before a change, onboarding to unfamiliar code, and "where should this live" or "which layer owns this" questions. |
+| [`interrogate`](../plugins/bstack/skills/interrogate/SKILL.md) | Adversarial multi-model review of a diff, branch or PR. Several independent reviewers try to break it, then a lead reviewer sorts findings into act on, consider, noted and dismissed. Use for "interrogate", "adversarial review", "tear this apart", "stress test this change", "find blind spots", or before shipping a contested or risky change. |
+| [`reflect`](../plugins/bstack/skills/reflect/SKILL.md) | Mine the current session for durable lessons and turn each one into a concrete, approved edit to a skill, playbook or principle, or a backlog item. Three independent reviewers read the transcript, a synthesizer sorts their findings, and nothing changes without the user's approval. Use when the user says reflect, "capture what we learned", or "so the next run doesn't repeat this". |
+| [`show-me-your-work`](../plugins/bstack/skills/show-me-your-work/SKILL.md) | Keep a reviewable decision trail for long, unattended or multi-phase work (one TSV row per decision with what, why, evidence and result), then audit it against the transcript and have a different model flag what deserves attention. Use for /show-me-your-work, "keep a decision log", autonomous or overnight runs, or "catch me up on what you did". |
+| [`unslop`](../plugins/bstack/skills/unslop/SKILL.md) | Cut AI writing tells from prose, such as filler, inflated vocabulary, em dashes, rule-of-three padding, chatbot phrases, vague metaphors, over-compression. Use when writing or reviewing any prose (replies, docs, READMEs, PR descriptions, commit messages, skill files), or when asked to unslop, tighten or de-AI text. |
+| [`verify-work`](../plugins/bstack/skills/verify-work/SKILL.md) | Prove a change works by checking the real artifact (run the feature, read the actual value, drive the real surface) and return VERIFIED, NOT VERIFIED or INCONCLUSIVE with evidence. Use before saying any task is done, when asked "does it work", "prove it", "verify", or when a claim rests on "it compiles" or "tests pass". |

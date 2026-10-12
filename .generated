@@ -2,11 +2,16 @@
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
 docs/CATALOG.md
+docs/PRINCIPLES.md
 package.json
+plugins/bstack/.claude-plugin/plugin.json
+plugins/bstack/plugin.json
 plugins/eng-leadership/.claude-plugin/plugin.json
 plugins/eng-leadership/plugin.json
 plugins/essentials/.claude-plugin/plugin.json
 plugins/essentials/plugin.json
+plugins/principles/.claude-plugin/plugin.json
+plugins/principles/plugin.json
 plugins/research-tools/.claude-plugin/plugin.json
 plugins/research-tools/.mcp.json
 plugins/research-tools/mcp.json

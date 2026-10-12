@@ -22,6 +22,26 @@ Everything in the repo: **[docs/CATALOG.md](docs/CATALOG.md)**.
 | `essentials` | `commit-message` (Conventional Commits from the staged diff), `handoff-notes` (resume work in another session or another tool) |
 | `eng-leadership` | `design-review` (senior-level RFC/design critique), `interview-kit` (competencies, loop, questions, rubric) |
 | `research-tools` | `library-docs` skill + the Context7 MCP server for version-correct library docs |
+| `bstack` | **`beau-mode`**, a rigorous engineering workflow: routes each task to a playbook, applies named principles, proves the work on the real artifact, keeps a decision trail. Plus `how`, `interrogate`, `verify-work`, `show-me-your-work`, `figure-it-out`, `reflect`, `correct`, `unslop` |
+| `principles` | 24 named engineering principles ("prove it works", "subtract before you add", ...) that steer agents by name |
+
+### bstack and beau-mode
+
+If you want to go fast, go deep first. `bstack` is the foundation for doing engineering work
+with agents at a high bar, in any tool. Start a task with:
+
+```text
+/beau-mode the export writes duplicate rows when a retry lands mid-run. repro first, then fix and verify.
+```
+
+It picks the Bug fix playbook, copies its steps into the todo list, applies the principles
+that fit, proves the fix on the real surface, and says which principle changed which
+decision. Steer it mid-task by principle name: "apply prove it works", "subtract before you add".
+
+The ideas, and much of the text, come from Lauren Tan's [pstack](https://github.com/cursor/plugins/tree/main/pstack)
+(MIT), reworked to run in Claude Code, Codex, Cursor, pi and OpenCode instead of Cursor alone.
+Guide: **[docs/BSTACK.md](docs/BSTACK.md)**. Principles: **[docs/PRINCIPLES.md](docs/PRINCIPLES.md)**.
+What came from where: [docs/UPSTREAM.md](docs/UPSTREAM.md).
 
 ## How it works (one minute)
 
@@ -41,8 +61,10 @@ Everything in the repo: **[docs/CATALOG.md](docs/CATALOG.md)**.
 
 - **`kit.yaml` is the source of truth.** `make gen` writes every manifest, the three
   marketplaces (`.claude-plugin/`, `.agents/plugins/`, `.cursor-plugin/`), pi's
-  `package.json`, and `docs/CATALOG.md`. Generated files are committed so installs
-  straight from git work; CI fails if they are stale.
+  `package.json`, `docs/CATALOG.md` and `docs/PRINCIPLES.md`. It also fills the
+  `GENERATED` blocks inside skills (the principle and playbook indexes, shared snippets),
+  so an index can never drift from the files it lists. Generated output is committed so
+  installs straight from git work; CI fails if anything is stale.
 
 Design rationale: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -71,8 +93,10 @@ Adding a skill or plugin: [docs/AUTHORING.md](docs/AUTHORING.md).
 | [ROADMAP.md](ROADMAP.md) | Planned work that is intentionally not done yet, with priorities |
 | [HUMAN_TASKS.md](HUMAN_TASKS.md) | Things only a person can do (accounts, publishing, decisions) — **includes blockers** |
 | [IDEAS.md](IDEAS.md) | Maybe-someday ideas that are not on the roadmap |
+| [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) | How a future knowledge base plugs into principles and skills (design only) |
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Third-party content is not vendored here; it is pulled
-by agentfiles under its own licenses.
+MIT. See [LICENSE](LICENSE). Parts of `bstack` and `principles` are adapted from pstack
+(MIT, Copyright (c) 2026 Lauren Tan); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Other third-party content is not vendored here; agentfiles pulls it under its own licenses.

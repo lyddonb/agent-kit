@@ -24,12 +24,12 @@ defaults:
 
 plugins:
   - name: essentials
-    description: Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs.
+    description: Everyday engineering skills that work in any agent, for commit messages and cross-tool session handoffs.
     keywords: [git, commits, handoff, productivity]
     category: productivity
 
   - name: eng-leadership
-    description: Skills for engineering leaders - design/RFC reviews and structured interview kits.
+    description: Skills for engineering leaders, for design/RFC reviews and structured interview kits.
     keywords: [leadership, hiring, interviews, design-review, rfc]
     category: productivity
 
@@ -44,3 +44,16 @@ plugins:
       context7:
         type: streamable-http
         url: https://mcp.context7.com/mcp
+
+  - name: principles
+    description: Twenty-four named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and more) that steer how agents design, build and verify, plus a benchmark checklist. One skill with one file per principle.
+    keywords: [principles, engineering, verification, design, rigor]
+    category: development
+
+  - name: bstack
+    description: Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.
+    keywords: [workflow, rigor, verification, review, playbooks, beau-mode]
+    category: development
+    # Claude Code installs principles with it. Other tools: install both (agentfiles' builder does).
+    depends_on: [principles]
+

@@ -1,7 +1,7 @@
 {
   "name": "essentials",
   "version": "0.1.0",
-  "description": "Everyday engineering skills that work in any agent - commit messages and cross-tool session handoffs.",
+  "description": "Everyday engineering skills that work in any agent, for commit messages and cross-tool session handoffs.",
   "author": {
     "name": "Beau Lyddon",
     "url": "https://github.com/lyddonb"
