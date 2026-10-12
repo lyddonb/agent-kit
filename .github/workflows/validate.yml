@@ -27,6 +27,9 @@ jobs:
       - name: Portability lint
         run: python3 tools/validate.py
 
+      - name: Script unit tests
+        run: make unit
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

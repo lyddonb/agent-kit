@@ -29,6 +29,12 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
   Heavy; probably only worth it if this becomes widely used.
 
 ## bstack ideas
+- **Dr Eggbot-style maintenance.** A small always-running agent per repo that tends the
+  garden: notices repeated helpers, creeping lint suppressions, stale feature maps, and opens
+  small cleanup PRs (pstack guide part 1). Needs R18's schedules first.
+- **A `control-<app>` template.** A starter control CLI (subcommands, `--json`, `--dry-run`,
+  rich `--help`) that `create-verification-skill` copies and fills, instead of writing one
+  from scratch per repo.
 - **Principle usage stats.** Count which principles agents cite in transcripts and which
   decisions they changed. Unused principles are candidates for deletion.
 - **A "steer" cheat sheet.** One printable page of the 24 principle names with one-line

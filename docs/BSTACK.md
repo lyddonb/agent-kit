@@ -4,7 +4,7 @@ bstack is a way of working with agents: describe the outcome and how you'll know
 
 It has two plugins:
 
-- **`bstack`**: the `beau-mode` router and its playbooks, plus the workflow skills it calls.
+- **`bstack`**: the `beau-mode` router and its 13 playbooks, plus the workflow skills it calls.
 - **`principles`**: 24 named rules, one file each, that the router and the playbooks cite.
 
 ## Set it up
@@ -37,6 +37,10 @@ More examples:
 /beau-mode build two prototypes of the settings layout behind a switcher and screenshot both.
 /beau-mode migrate every caller to the new parser in a fresh branch. done means zero old callers,
            all parser fixtures pass, old api deleted. keep a decision log. don't ask before committing.
+/beau-mode read this thread. restate in your own words and in plain english what you think the underlying issue is.
+/recall my work on the export retries from the past week, then /teach me why the current fix keeps regressing.
+/architect a rate limiter for the public api. prototype the two strongest shapes before picking one.
+/beau-mode turn this design into a plan. small, verifiable PRs.
 /interrogate review this branch skeptically. no nitpicks unless it's a real bug.
 /reflect that took too long. capture what we learned so the next run doesn't repeat it.
 /correct agents keep calling the database client directly instead of the repository layer.
@@ -57,9 +61,49 @@ More examples:
 | Pause safely | Stop cleanly with a resume note any tool can pick up. |
 | Authoring a skill | Write or edit a skill, playbook or principle. |
 | Eval | Test a skill change blind before keeping it. |
+| Multi-phase plan | Turn an agreed design into a checklist of small, verifiable PRs, checked by a script. |
 | Opening a PR | The last step of every code playbook. |
 
 Large, cross-cutting or unattended work that fits none of them goes to **figure-it-out**, which designs a playbook for the task first.
+
+## Make verification infrastructure
+
+An agent is only as good as its ability to check its own work, so give every app you work on a way for agents to drive it.
+
+```text
+/create-verification-skill
+```
+
+Run once per app repo. It reads the repo, works out how to launch and drive the app, builds a small `control-<app>` CLI (subcommands, `--json` output, `--dry-run` for destructive commands, clear errors and `--help`), and writes a `verify-<app>` skill with a **feature map**: one file per user-facing feature, with every way a user reaches it, the exact commands that drive it, and the traps. It proves the skill by running it end to end before handing it over. From then on, `verify-work` and every playbook verify through it.
+
+The map goes stale as the app changes, so keep it honest:
+
+```text
+/maintain-verification-skill
+```
+
+It checks every feature against source with parallel read-only subagents, drives every feature live, and opens at most one PR of proven fixes. Schedule it daily per repo.
+
+Use **swarm** when one run isn't enough: ten lanes driving different scenarios to fuzz a change, or interleaved baseline and change runs to get a perf number you can trust.
+
+## Understand before you change it
+
+You're supervising agents that read code faster than you. Make them explain themselves.
+
+- Ask for a restatement. "Restate in your own words what you think the issue is" catches a wrong reading before it costs anything. `beau-mode` now does this as its first step.
+- **how** explains what the code does. **why** finds out why it's that way: it searches git and PRs plus whatever ticket, doc, chat, observability and error tools you have connected, and keeps what's known apart from what's inferred.
+- **teach** combines the two into a plain, layered explanation with diagrams that build up one part at a time. Use it whenever you want to understand and trust the work, not just get an answer.
+- **recall** rebuilds your own recent context on a topic from your agent transcripts (Claude Code, Codex, Cursor and pi), the PRs and tickets around it, and live git state, and ends with the next move.
+
+## Plan with code
+
+Abstract plans look productive and contain little. Plan with things you can check:
+
+- **Write the README first** with **technical-writing**: the tutorial a user would follow, the how-to guides, the reference, and the design reasoning, each in its own Diátaxis mode. The agent builds to it and checks its work against it.
+- **Prototype open questions** (the Prototype playbook) instead of debating them.
+- **architect** grounds itself with how and why, sketches types and signatures in at least two structurally different shapes on different models (through **arena**), picks one, and implements against it, scrapping the sketch when friction shows the shape is wrong.
+- Don't run adversarial reviews on abstract plans. Reviewers invent risks for code that doesn't exist yet. Review the implemented diff with **interrogate** instead.
+- When the design is settled and the work spans several PRs, ask for a plan. The Multi-phase plan playbook writes a checklist where every PR has unit, live and perf verification, and `check-plan.py` checks its structure. For a week-long program, commit the plan temporarily so other agents see it, and delete it at the end.
 
 ## Steer with principle names
 

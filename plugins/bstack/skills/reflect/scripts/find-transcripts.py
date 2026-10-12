@@ -2,7 +2,11 @@
 """List recent agent session transcripts for ONE project, across Claude Code, Codex, Cursor and pi.
 
 Usage:
-    python3 find-transcripts.py --project DIR [--limit N] [--tool claude-code|codex|cursor|pi]
+    python3 find-transcripts.py --project DIR [--limit N] [--days N] [--grep TEXT]
+                                [--tool claude-code|codex|cursor|pi]
+
+--days keeps sessions modified in the last N days. --grep keeps sessions whose text contains TEXT
+(case-insensitive); the recall skill uses both to scope a window and a topic.
 
 Prints newest first: tool, modified time, path, and the first user message (truncated).
 Only the given project's sessions are listed: the git root of --project (default: the current
@@ -190,6 +194,15 @@ def mtime(path: Path) -> float | None:
         return None
 
 
+def contains(path: Path, needle: str) -> bool:
+    needle = needle.lower()
+    try:
+        with path.open(errors="replace") as fh:
+            return any(needle in line.lower() for line in fh)
+    except OSError:
+        return False
+
+
 FINDERS = {"claude-code": claude_code, "codex": codex, "cursor": cursor, "pi": pi}
 
 
@@ -198,6 +211,8 @@ def main(argv=None) -> int:
     ap.add_argument("--project", default=".", help="project directory (default: current directory)")
     ap.add_argument("--limit", type=int, default=10)
     ap.add_argument("--tool", choices=sorted(FINDERS))
+    ap.add_argument("--days", type=float, help="only sessions modified in the last N days")
+    ap.add_argument("--grep", help="only sessions whose text contains this (case-insensitive)")
     args = ap.parse_args(argv)
 
     root = project_root(Path(args.project).expanduser().resolve())
@@ -207,6 +222,15 @@ def main(argv=None) -> int:
             continue
         found += finder(root)
     found = sorted(((t, tool, p) for tool, p in found if (t := mtime(p)) is not None), reverse=True)
+    total = len(found)
+    if args.days is not None:
+        cutoff = datetime.now().timestamp() - args.days * 86400
+        found = [f for f in found if f[0] >= cutoff]
+    if args.grep:
+        found = [f for f in found if contains(f[2], args.grep)]
+    if not found and total:
+        print(f"{total} transcripts found for {root}, none matching --days/--grep", file=sys.stderr)
+        return 1
     if not found:
         print(f"no transcripts found for {root}", file=sys.stderr)
         return 1

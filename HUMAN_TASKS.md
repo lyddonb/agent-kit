@@ -14,8 +14,10 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H6 | Review the example skills | To do |
 | H7 | Review beau-mode and unslop for your voice | To do |
 | H8 | Dogfood beau-mode on real tasks | 🚧 **BLOCKER** for ROADMAP R10, R12, R13 |
-| H9 | Share the three Poteto posts | To do |
-| H10 | Review and merge the bstack branch | 🚧 **BLOCKER** for agentfiles' builder profile |
+| H9 | Share the Poteto posts | **Done** (the pstack guide parts 1 and 2) |
+| H10 | Review and merge the bstack branch | **Done** |
+| H11 | Review and merge the verification and planning branch | 🚧 **BLOCKER** for agentfiles picking it up |
+| H12 | Create a verification skill in one real app | 🚧 **BLOCKER** for ROADMAP R18 |
 
 ---
 
@@ -85,16 +87,26 @@ you have said, not from watching you work.
 Cursor. After each, run `/reflect` and approve or reject its proposals. Note anything that felt
 slow or heavy.
 
-### H9. Share the three Poteto posts
-**Why a human:** X blocks automated reading, so the bstack build used pstack's code and
-guide but not these posts:
-`x.com/poteto/status/2102050467505430555`, `x.com/poteto/status/2108290818746528017` and
-`x.com/poteto/status/2094457600259842065`.
-**Steps:** Paste their text into a session and ask for anything they add to be folded into
-bstack.
+### H9. Share the Poteto posts — Done
+You pasted "The complete guide to pstack" parts 1 and 2. They were folded in on
+`feat/bstack-verification-and-planning`. The three original status posts were not pasted; if
+they add anything beyond the guide, paste them the same way.
 
-### H10. Review and merge the bstack branch — 🚧 BLOCKER for agentfiles
-**Why a human:** Merging to `main` publishes the change, and agentfiles' `builder` profile
-installs `bstack@agent-kit` from GitHub.
-**Steps:** Review the `feat/bstack` branch (start with `docs/BSTACK.md` and
-`plugins/bstack/skills/beau-mode/SKILL.md`), merge it, then run `agentfiles lock` in agentfiles.
+### H10. Review and merge the bstack branch — Done
+
+### H11. Review and merge the verification and planning branch — 🚧 BLOCKER for agentfiles
+**Why a human:** Merging to `main` publishes it.
+**Steps:** Review `feat/bstack-verification-and-planning` (start with `docs/BSTACK.md`,
+`create-verification-skill` and the Multi-phase plan playbook), merge it, then in agentfiles run
+`agentfiles lock` (or bump `mine` in `agentfiles.lock`) and `agentfiles sync`.
+
+### H12. Create a verification skill in one real app — 🚧 BLOCKER for R18
+**Why a human:** It runs against your app, its dev setup and its test accounts, and you decide
+which app goes first.
+**Steps:**
+1. In the app's repo, run `/create-verification-skill`. Have test users and seed data ready, or
+   tell the agent where they come from.
+2. Review and merge its PR (the `verify-<app>` skill, the feature map and the control CLI).
+3. Use it for a week: `/beau-mode` bug fixes and features will verify through it.
+4. Schedule `/maintain-verification-skill` daily for that repo with your tool's scheduler
+   (for example a Claude Code scheduled task or a Cursor automation).

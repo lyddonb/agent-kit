@@ -51,8 +51,9 @@ plugins:
     category: development
 
   - name: bstack
-    description: Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles, then how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop do the steps. Adapted from Lauren Tan's pstack to work in any agent.
-    keywords: [workflow, rigor, verification, review, playbooks, beau-mode]
+    version: 0.2.0
+    description: Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, swarm), design and planning (architect, arena, technical-writing), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
+    keywords: [workflow, rigor, verification, review, playbooks, planning, beau-mode]
     category: development
     # Claude Code installs principles with it. Other tools: install both (agentfiles' builder does).
     depends_on: [principles]

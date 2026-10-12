@@ -76,6 +76,20 @@ from one source each, and CI fails when they are stale. This applies the
 `encode-lessons-in-structure` principle to the repo itself, and it is the seam a future
 knowledge base will use to feed skills (see [KNOWLEDGE.md](KNOWLEDGE.md)).
 
+### D10. Project verification skills live in the app repo, under `.agents/skills`
+`create-verification-skill` writes `verify-<app>` into the app's own repo, not into agent-kit,
+because it is about one app's launch commands, test users and selectors. It goes in
+`.agents/skills/` (read by Codex, Cursor, pi and OpenCode) with a link from `.claude/skills/`
+for Claude Code. Its feature map is per-feature files with a fixed set of headings, the same
+one-file-per-unit shape as the principles, so tools (and a future knowledge base) can index it.
+
+### D11. New subagent jobs reuse the four roles
+Arena runners and judges, why investigators, recall miners, swarm workers and verification
+source readers all map onto `code`, `judgment`, `explorer` and `reviewers` instead of adding
+roles. A new role would need a change in agentfiles and in every profile; a mapping in the
+skill text costs nothing. Add a role only when one job's model choice genuinely conflicts with
+another's.
+
 ## Generated vs. authored files
 
 | Authored | Generated (`make gen`) |
