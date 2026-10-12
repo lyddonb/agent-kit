@@ -2,6 +2,8 @@
 
 bstack is a way of working with agents: describe the outcome and how you'll know it's done, and let the agent pick the playbook, apply the principles, prove the result, and show you the evidence. It works best when you stop micromanaging and start steering.
 
+New to it? Follow the [tutorial](BSTACK-TUTORIAL.md) first. For what each skill needs and returns, see the [skill reference](BSTACK-SKILLS.md).
+
 It has two plugins:
 
 - **`bstack`**: the `beau-mode` router and its 13 playbooks, plus the workflow skills it calls.
