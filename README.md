@@ -22,7 +22,7 @@ Everything in the repo: **[docs/CATALOG.md](docs/CATALOG.md)**.
 | `essentials` | `commit-message` (Conventional Commits from the staged diff), `handoff-notes` (resume work in another session or another tool) |
 | `eng-leadership` | `design-review` (senior-level RFC/design critique), `interview-kit` (competencies, loop, questions, rubric) |
 | `research-tools` | `library-docs` skill + the Context7 MCP server for version-correct library docs |
-| `bstack` | **`beau-mode`**, a rigorous engineering workflow: routes each task to a playbook, applies named principles, proves the work on the real artifact, keeps a decision trail. Plus `how`, `interrogate`, `verify-work`, `show-me-your-work`, `figure-it-out`, `reflect`, `correct`, `unslop` |
+| `bstack` | **`beau-mode`**, a rigorous engineering workflow: routes each task to a playbook, applies named principles, proves the work on the real artifact, keeps a decision trail. Plus skills to understand code (`how`, `why`, `teach`, `recall`), prove it works (`verify-work`, `create-verification-skill`, `maintain-verification-skill`, `swarm`), design and plan (`architect`, `arena`, `technical-writing`), review (`interrogate`, `show-me-your-work`), and improve (`reflect`, `correct`, `unslop`) |
 | `principles` | 24 named engineering principles ("prove it works", "subtract before you add", ...) that steer agents by name |
 
 ### bstack and beau-mode
@@ -40,7 +40,7 @@ decision. Steer it mid-task by principle name: "apply prove it works", "subtract
 
 The ideas, and much of the text, come from Lauren Tan's [pstack](https://github.com/cursor/plugins/tree/main/pstack)
 (MIT), reworked to run in Claude Code, Codex, Cursor, pi and OpenCode instead of Cursor alone.
-Guide: **[docs/BSTACK.md](docs/BSTACK.md)**. Principles: **[docs/PRINCIPLES.md](docs/PRINCIPLES.md)**.
+Start with the **[tutorial](docs/BSTACK-TUTORIAL.md)** (your first session, about an hour). Then the **[guide](docs/BSTACK.md)**, the **[skill reference](docs/BSTACK-SKILLS.md)** and the **[principles](docs/PRINCIPLES.md)**.
 What came from where: [docs/UPSTREAM.md](docs/UPSTREAM.md).
 
 ## How it works (one minute)
