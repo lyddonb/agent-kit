@@ -4,3 +4,5 @@ __pycache__/
 .DS_Store
 HANDOFF.md
 node_modules/
+# Local agentfiles install (marketplace and MCP snippets). Not the profile.
+.agentfiles/

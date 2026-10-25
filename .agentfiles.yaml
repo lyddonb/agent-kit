@@ -1,0 +1,4 @@
+# Project profile. `agentfiles sync --project` installs it into this checkout.
+# `builder` already sets mode to beau-mode, so this file does not repeat it.
+description: Work on agent-kit with beau-mode.
+extends: [builder]
