@@ -88,6 +88,7 @@ only what is still unreviewed.
 | `plugins/bstack/skills/technical-writing/SKILL.md` | `pstack technical-writing @ 11713c6` |
 | `plugins/bstack/skills/unslop/SKILL.md` | `pstack unslop @ ccb5507` |
 | `plugins/bstack/skills/why/SKILL.md` | `pstack why @ 11713c6` |
+| `plugins/essentials/skills/grilling/SKILL.md` | `mattpocock/skills skills/productivity/grilling/SKILL.md @ 95249b0` |
 | `plugins/principles/skills/principles/SKILL.md` | `pstack @ ccb5507` |
 | `plugins/principles/skills/principles/references/attack-the-premise.md` | `pstack/skills/principle-attack-the-premise @ ccb5507` |
 | `plugins/principles/skills/principles/references/boundary-discipline.md` | `pstack/skills/principle-boundary-discipline @ ccb5507` |

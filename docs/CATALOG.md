@@ -5,11 +5,12 @@ Every plugin and skill in this repo. See [INSTALL.md](INSTALL.md) for how to ins
 
 ## `essentials`
 
-Everyday engineering skills that work in any agent, for commit messages and cross-tool session handoffs.
+Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, and grilling a plan before you act on it.
 
 | Skill | Description |
 |---|---|
 | [`commit-message`](../plugins/essentials/skills/commit-message/SKILL.md) | Write a clear git commit message (Conventional Commits style) from the staged diff. Use when the user asks to commit, write or improve a commit message, or summarize staged changes for a commit. |
+| [`grilling`](../plugins/essentials/skills/grilling/SKILL.md) | Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases. |
 | [`handoff-notes`](../plugins/essentials/skills/handoff-notes/SKILL.md) | Write a concise handoff note so another agent session, another tool (Claude Code, Codex, Cursor, pi, OpenCode), or a teammate can resume the current work without re-reading the conversation. Use when the user says hand off, wrap up, save progress, pause, switch tools, or before a context reset. |
 
 ## `eng-leadership`
