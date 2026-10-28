@@ -19,7 +19,7 @@ Everything in the repo: **[docs/CATALOG.md](docs/CATALOG.md)**.
 
 | Plugin | What it gives you |
 |---|---|
-| `essentials` | `commit-message` (Conventional Commits from the staged diff), `handoff-notes` (resume work in another session or another tool) |
+| `essentials` | `commit-message` (Conventional Commits from the staged diff), `handoff-notes` (resume work in another session or another tool), `grilling` (stress-test a plan one round of questions at a time) |
 | `eng-leadership` | `design-review` (senior-level RFC/design critique), `interview-kit` (competencies, loop, questions, rubric) |
 | `research-tools` | `library-docs` skill + the Context7 MCP server for version-correct library docs |
 | `bstack` | **`beau-mode`**, a rigorous engineering workflow: routes each task to a playbook, applies named principles, proves the work on the real artifact, keeps a decision trail. Plus skills to understand code (`how`, `why`, `teach`, `recall`), prove it works (`verify-work`, `create-verification-skill`, `maintain-verification-skill`, `swarm`), design and plan (`architect`, `arena`, `technical-writing`), review (`interrogate`, `show-me-your-work`), and improve (`reflect`, `correct`, `unslop`) |

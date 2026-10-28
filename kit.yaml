@@ -24,8 +24,9 @@ defaults:
 
 plugins:
   - name: essentials
-    description: Everyday engineering skills that work in any agent, for commit messages and cross-tool session handoffs.
-    keywords: [git, commits, handoff, productivity]
+    version: 0.1.1
+    description: Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, and grilling a plan before you act on it.
+    keywords: [git, commits, handoff, productivity, grilling]
     category: productivity
 
   - name: eng-leadership
