@@ -1,5 +1,7 @@
 """Tests for the CFO books checker (plugins/cfo/skills/cfo-books/scripts/books.py)."""
 import importlib.util
+import json
+import os
 import shutil
 import subprocess
 import sys
@@ -566,6 +568,244 @@ class CliTest(Case):
 
     def test_no_subcommand_is_usage_error(self):
         self.assertEqual(self.run_cli().returncode, 2)
+
+
+class AppendTest(Case):
+    HEADER = "evidence,charge_date,period_start,provider,service,charge_type,billed_cost,currency,project,status,source"
+
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(SCRIPT)] + list(args), capture_output=True, text=True)
+
+    def rows_file(self, text):
+        path = Path(self._tmp.name) / "rows.csv"
+        path.write_text(text)
+        return str(path)
+
+    def new_row(self, evidence, **kw):
+        c = dict(evidence=evidence, charge_date="2026-03-01", period_start="2026-03-01", provider="Acme Cloud",
+                 service="Pro plan", charge_type="subscription", billed_cost="20.00", currency="USD",
+                 project="shared", status="verified", source="gmail-receipt")
+        c.update(kw)
+        return ",".join(c[h] for h in self.HEADER.split(","))
+
+    def ledger(self):
+        return (self.dir / books.LEDGER).read_bytes()
+
+    def append(self, *rows, header=None):
+        text = (header or self.HEADER) + "\n" + "".join(r + "\n" for r in rows)
+        return self.run_cli("append", str(self.dir), self.rows_file(text))
+
+    def test_adds_rows_in_schema_order_and_keeps_old_bytes(self):
+        before = self.ledger()
+        r = self.append(self.new_row("Acme receipt A1"), self.new_row("Acme receipt A2"))
+        self.assertEqual((r.returncode, r.stdout), (0, "added 2, skipped 0 (evidence already in the ledger)\n"))
+        after = self.ledger()
+        self.assertTrue(after.startswith(before))
+        self.assertEqual(after[len(before):].decode(),
+                         "2026-03-01,2026-03-01,,Acme Cloud,Pro plan,subscription,20.00,USD,,shared,verified,gmail-receipt,Acme receipt A1\n"
+                         "2026-03-01,2026-03-01,,Acme Cloud,Pro plan,subscription,20.00,USD,,shared,verified,gmail-receipt,Acme receipt A2\n")
+        self.assertClean()
+
+    def test_skips_evidence_already_in_the_ledger(self):
+        r = self.append(self.new_row("  Acme receipt #1000-2000-3000 "), self.new_row("Acme receipt B1"))
+        self.assertEqual(r.stdout, "added 1, skipped 1 (evidence already in the ledger)\n")
+        self.assertEqual(self.ledger().count(b"Acme receipt #1000-2000-3000"), 1)
+
+    def test_skips_duplicate_evidence_inside_the_input(self):
+        r = self.append(self.new_row("Acme receipt C1"), self.new_row("Acme receipt C1", billed_cost="21.00"))
+        self.assertEqual(r.stdout, "added 1, skipped 1 (evidence already in the ledger)\n")
+
+    def test_nothing_to_add_leaves_the_file_untouched(self):
+        path = self.dir / books.LEDGER
+        os.utime(path, (1_000_000_000, 1_000_000_000))
+        before = (self.ledger(), path.stat().st_mtime_ns)
+        r = self.append(self.new_row("Acme receipt #1000-2000-3000"))
+        self.assertEqual((r.returncode, r.stdout), (0, "added 0, skipped 1 (evidence already in the ledger)\n"))
+        self.assertEqual((self.ledger(), path.stat().st_mtime_ns), before)
+
+    def test_columns_not_given_stay_empty(self):
+        r = self.run_cli("append", str(self.dir), self.rows_file(
+            "evidence,charge_date,period_start,provider,service,charge_type,currency,project,status\n"
+            "Acme invoice D1,2026-03-02,2026-03-01,Acme Cloud,Metered usage,usage,USD,unassigned,unknown\n"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        last = self.ledger().decode().splitlines()[-1]
+        self.assertEqual(last, "2026-03-02,2026-03-01,,Acme Cloud,Metered usage,usage,,USD,,unassigned,unknown,,Acme invoice D1")
+
+    def test_unknown_column_is_an_error_and_writes_nothing(self):
+        before = self.ledger()
+        r = self.append("E1,5", header="evidence,price")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("price", r.stderr)
+        self.assertEqual(self.ledger(), before)
+
+    def test_evidence_column_is_required(self):
+        r = self.append("2026-03-01", header="charge_date")
+        self.assertEqual(r.returncode, 2)
+
+    def test_refused_by_check_leaves_file_identical(self):
+        before = self.ledger()
+        r = self.append(self.new_row("Acme receipt F1", service="card 4242 4242 4242 4242"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("forbidden content", r.stdout)
+        self.assertTrue(r.stdout.endswith("refused, ledger unchanged\n"))
+        self.assertNotIn("4242 4242", r.stdout)
+        self.assertEqual(self.ledger(), before)
+
+    def test_refused_when_a_new_row_breaks_a_rule(self):
+        before = self.ledger()
+        r = self.append(self.new_row("Acme receipt G1", status="verified", billed_cost=""))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("billed_cost is empty", r.stdout)
+        self.assertEqual(self.ledger(), before)
+
+    def test_existing_problem_blocks_append(self):
+        self.append_row(status="maybe")
+        before = self.ledger()
+        r = self.append(self.new_row("Acme receipt H1"))
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue(r.stdout.endswith("refused, ledger unchanged\n"))
+        self.assertEqual(self.ledger(), before)
+
+    def test_existing_problem_blocks_even_when_nothing_to_add(self):
+        self.append_row(status="maybe")
+        r = self.append(self.new_row("Acme receipt #1000-2000-3000"))
+        self.assertEqual(r.returncode, 1)
+
+    def test_missing_trailing_newline_is_added(self):
+        path = self.dir / books.LEDGER
+        path.write_bytes(path.read_bytes().rstrip(b"\n"))
+        r = self.append(self.new_row("Acme receipt I1"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        lines = self.ledger().decode().split("\n")
+        self.assertEqual(len(lines), 6)  # header, 3 old rows, 1 new, trailing empty
+        self.assertTrue(lines[4].endswith("Acme receipt I1"))
+        self.assertClean()
+
+    def test_no_temp_file_left_behind(self):
+        self.append(self.new_row("Acme receipt J1"))
+        self.assertEqual(sorted(p.name for p in (self.dir / "ledger").iterdir()), ["charges.csv"])
+
+
+class SummaryTest(Case):
+    # The fixture ledger holds January 2026: Acme Pro 20.00 (shared), Example AI credits 10.50
+    # (widget, API-equivalent 12.25) and one unknown Acme usage row dated February. Envelope is 100, warning at 80%.
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(SCRIPT)] + list(args), capture_output=True, text=True)
+
+    def summary(self, month="2026-01", as_of="2026-01-06"):
+        r = self.run_cli("summary", str(self.dir), "--month", month, "--as-of", as_of, "--json")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return json.loads(r.stdout)
+
+    def test_cash_by_provider_and_project(self):
+        cash = self.summary()["cash"]
+        self.assertEqual(cash, {"total": "30.50", "by_provider": {"Acme Cloud": "20.00", "Example AI": "10.50"},
+                                "by_project": {"shared": "20.00", "widget": "10.50"}, "rows": 2})
+
+    def test_unknown_row_is_listed_and_not_cash(self):
+        s = self.summary(month="2026-02", as_of="2026-02-01")
+        self.assertEqual(s["cash"]["total"], "0.00")
+        self.assertEqual(s["unknown"], [{"line": 4, "charge_date": "2026-02-01", "provider": "Acme Cloud",
+                                         "service": "Metered usage",
+                                         "evidence": "Acme invoice 99887 (amount is in the PDF; not yet read)"}])
+        self.assertEqual(self.summary()["unknown"][0]["line"], 4)  # open in every month's view
+
+    def test_adjustment_can_be_negative(self):
+        self.append_row(charge_date="2026-01-20", charge_type="adjustment", billed_cost="-5.00",
+                        evidence="Acme credit note 7")
+        self.assertEqual(self.summary()["cash"]["total"], "25.50")
+
+    def test_usage_equivalent_is_not_cash(self):
+        self.append_row(charge_date="2026-01-21", charge_type="usage-equivalent", billed_cost="99.00",
+                        api_equivalent_cost="99.00", evidence="Acme log 1")
+        s = self.summary()
+        self.assertEqual(s["cash"]["total"], "30.50")
+        self.assertEqual(s["api_equivalent"]["total"], "111.25")
+
+    def test_api_equivalent_is_separate_and_by_project(self):
+        self.assertEqual(self.summary()["api_equivalent"], {"total": "12.25", "by_project": {"widget": "12.25"}})
+
+    def test_envelope_percentage(self):
+        env = self.summary()["envelope"]
+        self.assertEqual(env, {"usd": "100.00", "status": "proposed", "spent": "30.50", "pct": "30.5",
+                               "warning_pct": 80, "over_warning": False, "over_envelope": False})
+
+    def test_over_warning_flips_past_the_share(self):
+        self.append_row(charge_date="2026-01-25", billed_cost="49.50", evidence="Acme receipt at80")
+        env = self.summary()["envelope"]
+        self.assertEqual((env["pct"], env["over_warning"]), ("80.0", False))  # exactly at the share is not past it
+        self.append_row(charge_date="2026-01-26", billed_cost="0.01", evidence="Acme receipt over80")
+        env = self.summary()["envelope"]
+        self.assertEqual((env["pct"], env["over_warning"], env["over_envelope"]), ("80.0", True, False))
+        self.append_row(charge_date="2026-01-27", billed_cost="30.00", evidence="Acme receipt over100")
+        self.assertTrue(self.summary()["envelope"]["over_envelope"])
+
+    def test_missing_envelope_is_null(self):
+        self.write("budgets.yaml", "version: 1\nmonthly_envelope: {}\nalerts: {}\n")
+        self.assertIsNone(self.summary()["envelope"])
+
+    def test_yearly_charge_is_cash_once_and_a_monthly_equivalent(self):
+        self.append_row(charge_date="2026-01-20", period_start="2026-01-20", period_end="2027-01-19",
+                        service="Pro yearly", billed_cost="100.00", evidence="Acme receipt yearly")
+        s = self.summary()
+        self.assertEqual(s["cash"]["total"], "130.50")
+        self.assertEqual(s["monthly_equivalent"]["lines"],
+                         [{"provider": "Acme Cloud", "service": "Pro yearly", "billed_cost": "100.00",
+                           "period_start": "2026-01-20", "period_end": "2027-01-19", "months": 12, "monthly": "8.33"}])
+        self.assertEqual(s["monthly_equivalent"]["total"], "28.33")  # 20.00 monthly plan + 8.33
+        self.assertEqual(self.summary(month="2026-09")["monthly_equivalent"]["total"], "8.33")  # mid-year
+        self.assertEqual(self.summary(month="2027-02")["monthly_equivalent"]["total"], "0.00")  # lapsed
+
+    def test_renewed_monthly_plan_counts_once_in_the_run_rate(self):
+        self.append_row(charge_date="2026-02-04", period_start="2026-02-04", period_end="2026-03-05",
+                        evidence="Acme receipt renew")
+        self.assertEqual(self.summary(month="2026-02")["monthly_equivalent"]["total"], "20.00")
+
+    def test_renewals_window_includes_day_30_and_excludes_day_31(self):
+        self.assertEqual(self.summary(as_of="2026-01-06")["renewals"],
+                         [{"vendor": "Acme Cloud", "plan": "Pro", "amount_usd": "20.00", "cadence": "monthly",
+                           "next": "2026-02-05", "days": 30}])
+        self.assertEqual(self.summary(as_of="2026-01-05")["renewals"], [])
+        self.assertEqual(self.summary(as_of="2026-02-05")["renewals"][0]["days"], 0)
+        self.assertEqual(self.summary(as_of="2026-02-06")["renewals"], [])
+
+    def test_undated_renewal_is_listed_apart(self):
+        self.assertEqual(self.summary()["renewals_undated"], [{"vendor": "Example AI", "plan": "unknown"}])
+
+    def test_json_keys_and_string_money(self):
+        s = self.summary()
+        self.assertEqual(list(s), ["month", "as_of", "currency", "cash", "envelope", "monthly_equivalent",
+                                   "renewals", "renewals_undated", "unknown", "api_equivalent"])
+        self.assertEqual((s["month"], s["as_of"], s["currency"]), ("2026-01", "2026-01-06", "USD"))
+        for value in (s["cash"]["total"], s["envelope"]["usd"], s["monthly_equivalent"]["total"],
+                      s["api_equivalent"]["total"], *s["cash"]["by_provider"].values()):
+            self.assertIsInstance(value, str)
+
+    def test_rounds_half_up_only_at_output(self):
+        for i in range(3):
+            self.append_row(charge_date="2026-01-2%d" % i, billed_cost="0.005", evidence=f"Acme receipt tiny{i}")
+        self.assertEqual(self.summary()["cash"]["total"], "30.52")  # 30.515 rounds up, not 3 x 0.01
+
+    def test_text_output_sections_in_order(self):
+        r = self.run_cli("summary", str(self.dir), "--month", "2026-01", "--as-of", "2026-01-06")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        heads = ["Cash for 2026-01: $30.50", "  By provider:", "  By project:",
+                 "Envelope: $30.50 of $100.00 (30.5%), warning at 80%, status proposed",
+                 "Monthly equivalent", "Renewals in the next 30 days", "Unknown amounts", "API-equivalent"]
+        at = [r.stdout.find(h) for h in heads]
+        self.assertNotIn(-1, at, r.stdout)
+        self.assertEqual(at, sorted(at))
+
+    def test_refuses_on_a_broken_ledger(self):
+        self.append_row(status="maybe")
+        r = self.run_cli("summary", str(self.dir), "--month", "2026-01")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("status 'maybe'", r.stdout)
+        self.assertNotIn("Cash for", r.stdout)
+
+    def test_bad_month_and_as_of_are_usage_errors(self):
+        self.assertEqual(self.run_cli("summary", str(self.dir), "--month", "2026-13").returncode, 2)
+        self.assertEqual(self.run_cli("summary", str(self.dir), "--month", "2026-01", "--as-of", "soon").returncode, 2)
 
 
 if __name__ == "__main__":
