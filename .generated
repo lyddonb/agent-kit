@@ -6,6 +6,8 @@ docs/PRINCIPLES.md
 package.json
 plugins/bstack/.claude-plugin/plugin.json
 plugins/bstack/plugin.json
+plugins/cfo/.claude-plugin/plugin.json
+plugins/cfo/plugin.json
 plugins/eng-leadership/.claude-plugin/plugin.json
 plugins/eng-leadership/plugin.json
 plugins/essentials/.claude-plugin/plugin.json

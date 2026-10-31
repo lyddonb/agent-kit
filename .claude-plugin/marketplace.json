@@ -77,6 +77,21 @@
         "planning",
         "beau-mode"
       ]
+    },
+    {
+      "name": "cfo",
+      "description": "A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself.",
+      "version": "0.1.0",
+      "source": "./plugins/cfo",
+      "category": "productivity",
+      "keywords": [
+        "finops",
+        "costs",
+        "budget",
+        "billing",
+        "forecasting",
+        "cfo"
+      ]
     }
   ]
 }

@@ -1,0 +1,20 @@
+{
+  "name": "cfo",
+  "version": "0.1.0",
+  "description": "A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/cfo",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "finops",
+    "costs",
+    "budget",
+    "billing",
+    "forecasting",
+    "cfo"
+  ]
+}
