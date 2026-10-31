@@ -29,7 +29,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
@@ -613,6 +613,11 @@ def check_yaml(books: Books) -> Iterator[Problem]:
     doc = books.yaml.get("projects.yaml")
     if isinstance(doc, dict) and "projects" in doc and not isinstance(doc["projects"], dict):
         yield Problem("projects.yaml", 1, "'projects' must be a mapping of project names")
+    elif isinstance(doc, dict) and "projects" in doc:
+        for name, entry in doc["projects"].items():
+            paths = entry.get("paths") if isinstance(entry, dict) else None
+            if paths is not None and not (isinstance(paths, list) and all(isinstance(p, str) and p for p in paths)):
+                yield Problem("projects.yaml", 1, f"project '{name}': 'paths' must be a list of directory paths")
 
 
 def _luhn(digits: str) -> bool:
@@ -864,6 +869,48 @@ CHECKS: Tuple[Tuple[str, Check], ...] = (
 )
 
 
+@dataclass(frozen=True)
+class Warn:
+    """Worth reading, never a failure: `check` still exits 0."""
+    path: str
+    line: int
+    message: str
+
+    def __str__(self) -> str:
+        return f"{self.path}:{self.line}: warning: {self.message}"
+
+
+PRICING_MAX_AGE_DAYS = 90
+PRICING_REL = "scripts/pricing.json"
+
+
+def warn_pricing_age(books: Books, today: date) -> Iterator[Warn]:
+    try:
+        text = PRICING_FILE.read_text()
+        as_of = json.loads(text)["as_of"]
+        if not _is_date(as_of):
+            raise ValueError("as_of is not a YYYY-MM-DD date")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        yield Warn(PRICING_REL, 1, f"cannot read the pricing date ({type(e).__name__}); API-equivalent costs may be stale")
+        return
+    age = (today - date.fromisoformat(as_of)).days
+    if age > PRICING_MAX_AGE_DAYS:
+        line = next((i for i, ln in enumerate(text.split("\n"), 1) if '"as_of"' in ln), 1)
+        yield Warn(PRICING_REL, line, f"pricing is from {as_of}, {age} days old (limit {PRICING_MAX_AGE_DAYS});"
+                   " check the source URL and update the table")
+
+
+WarnCheck = Callable[[Books, date], Iterable[Warn]]
+WARNINGS: Tuple[Tuple[str, WarnCheck], ...] = (
+    ("pricing-age", warn_pricing_age),
+)
+
+
+def run_warnings(books: Books, today: date) -> List[Warn]:
+    return sorted({w for _, check in WARNINGS for w in check(books, today)},
+                  key=lambda w: (w.path, w.line, w.message))
+
+
 def run_checks(books: Books) -> List[Problem]:
     problems = [p for _, check in CHECKS for p in check(books)]
     return sorted(set(problems), key=lambda p: (p.path, p.line, p.message))
@@ -926,24 +973,19 @@ def _write_atomic(path: Path, data: bytes) -> None:
         raise
 
 
-def cmd_append(args: argparse.Namespace) -> int:
-    books_dir = Path(args.books_dir)
-    if not books_dir.is_dir():
-        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
-        return 2
-    try:
-        incoming = _read_new_rows(Path(args.rows_csv))
-    except UsageError as e:
-        print(f"books.py: {e}", file=sys.stderr)
-        return 2
-
+def append_cells(books_dir: Path, incoming: List[Dict[str, str]],
+                 write: bool = True) -> Tuple[int, List[Dict[str, str]], int]:
+    """The one path that adds rows to the ledger: skip evidence already there, run the full check on
+    the ledger as it would be after the append, then write atomically. Returns (exit code, rows
+    added or that would be added, rows skipped). Prints the problems and "refused" itself.
+    `write=False` runs every step except the write."""
     books = load(books_dir)
     before = run_checks(books)  # the books must be clean before and after
     if before:
         for p in before:
             print(p)
         print("refused, ledger unchanged")
-        return 1
+        return 1, [], 0
 
     seen = {r.cells["evidence"].strip() for r in books.rows}
     fresh: List[Dict[str, str]] = []
@@ -955,8 +997,7 @@ def cmd_append(args: argparse.Namespace) -> int:
             seen.add(cells["evidence"])
             fresh.append(cells)
     if not fresh:
-        print(f"added 0, skipped {skipped} (evidence already in the ledger)")
-        return 0
+        return 0, [], skipped
 
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
@@ -970,10 +1011,26 @@ def cmd_append(args: argparse.Namespace) -> int:
         for p in problems:
             print(p)
         print("refused, ledger unchanged")
-        return 1
-    _write_atomic(books_dir / LEDGER, candidate)
-    print(f"added {len(fresh)}, skipped {skipped} (evidence already in the ledger)")
-    return 0
+        return 1, [], skipped
+    if write:
+        _write_atomic(books_dir / LEDGER, candidate)
+    return 0, fresh, skipped
+
+
+def cmd_append(args: argparse.Namespace) -> int:
+    books_dir = Path(args.books_dir)
+    if not books_dir.is_dir():
+        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    try:
+        incoming = _read_new_rows(Path(args.rows_csv))
+    except UsageError as e:
+        print(f"books.py: {e}", file=sys.stderr)
+        return 2
+    code, fresh, skipped = append_cells(books_dir, incoming)
+    if code == 0:
+        print(f"added {len(fresh)}, skipped {skipped} (evidence already in the ledger)")
+    return code
 
 
 # ---------------------------------------------------------------------------
@@ -1206,6 +1263,292 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# claude-code: price local Claude Code session logs at API rates
+# ---------------------------------------------------------------------------
+
+PRICING_FILE = Path(__file__).resolve().parent / "pricing.json"
+PRICE_KINDS = ("input", "output", "cache_write_5m", "cache_write_1h", "cache_read")
+MILLION = Decimal(1000000)
+UNASSIGNED = "unassigned"
+
+
+@dataclass(frozen=True)
+class Pricing:
+    source: str
+    as_of: str
+    models: Dict[str, Dict[str, Decimal]]  # model id -> kind -> USD per million tokens
+    fast_multiplier: Dict[str, Decimal]    # only models with a documented fast-mode price
+
+
+def load_pricing(path: Path) -> Pricing:
+    try:
+        doc = json.loads(path.read_text())
+        models: Dict[str, Dict[str, Decimal]] = {}
+        fast: Dict[str, Decimal] = {}
+        for model, entry in doc["models"].items():
+            models[model] = {k: Decimal(str(entry[k])) for k in PRICE_KINDS}
+            if "fast_multiplier" in entry:
+                fast[model] = Decimal(str(entry["fast_multiplier"]))
+        if not _is_date(doc["as_of"]):
+            raise ValueError("as_of is not a YYYY-MM-DD date")
+        return Pricing(str(doc["source"]), doc["as_of"], models, fast)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, InvalidOperation) as e:
+        raise UsageError(f"cannot use {path.name}: {type(e).__name__}: {e}")
+
+
+@dataclass
+class Tokens:
+    input: int = 0
+    output: int = 0
+    cache_write_5m: int = 0
+    cache_write_1h: int = 0
+    cache_read: int = 0
+
+    def add(self, other: "Tokens") -> None:
+        for k in PRICE_KINDS:
+            setattr(self, k, getattr(self, k) + getattr(other, k))
+
+    def as_dict(self) -> Dict[str, int]:
+        return {k: getattr(self, k) for k in PRICE_KINDS}
+
+
+@dataclass(frozen=True)
+class Message:
+    model: str
+    day: date  # UTC
+    cwd: str
+    speed: str
+    tokens: Tokens
+
+
+def _int(v: Any) -> int:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+
+
+def _message(d: Any) -> Optional[Tuple[Tuple[str, Optional[str]], Message]]:
+    """The few fields the pricing needs, or None for a line that is not a priced assistant message.
+    Nothing else in the line is read, so no prompt or tool text can leave this function."""
+    msg = d.get("message") if isinstance(d, dict) else None
+    if not isinstance(msg, dict) or not isinstance(msg.get("usage"), dict):
+        return None
+    usage = msg["usage"]
+    mid, model, ts = msg.get("id"), msg.get("model"), d.get("timestamp")
+    if not (isinstance(mid, str) and isinstance(model, str) and isinstance(ts, str)) or model == "<synthetic>":
+        return None
+    try:
+        when = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if when.tzinfo is not None:
+        when = when.astimezone(timezone.utc)
+    split = usage.get("cache_creation")
+    w5 = w1 = 0
+    if isinstance(split, dict):
+        w5, w1 = _int(split.get("ephemeral_5m_input_tokens")), _int(split.get("ephemeral_1h_input_tokens"))
+    w5 += max(0, _int(usage.get("cache_creation_input_tokens")) - w5 - w1)  # unsplit writes price as 5m
+    tokens = Tokens(_int(usage.get("input_tokens")), _int(usage.get("output_tokens")), w5, w1,
+                    _int(usage.get("cache_read_input_tokens")))
+    cwd = d.get("cwd") if isinstance(d.get("cwd"), str) else ""
+    speed = usage.get("speed") if isinstance(usage.get("speed"), str) else "standard"
+    request = d.get("requestId") if isinstance(d.get("requestId"), str) else None
+    return (mid, request), Message(model, when.date(), cwd, speed, tokens)
+
+
+def read_logs(logs: Path) -> Tuple[List[Message], int]:
+    """Unique messages under `logs` and the number of duplicate lines dropped. The same message is
+    written on several lines; of a repeated (message id, request id) the line with the most output
+    tokens wins, because a streamed message's early lines are partial."""
+    unique: Dict[Tuple[str, Optional[str]], Message] = {}
+    duplicates = 0
+    for path in sorted(logs.glob("**/*.jsonl")):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if '"usage"' not in line:
+                        continue
+                    try:
+                        found = _message(json.loads(line))
+                    except ValueError:
+                        continue
+                    if found is None:
+                        continue
+                    key, m = found
+                    if key in unique:
+                        duplicates += 1
+                        if m.tokens.output <= unique[key].tokens.output:
+                            continue
+                    unique[key] = m
+        except OSError:
+            continue
+    return list(unique.values()), duplicates
+
+
+def project_paths(books: Books) -> List[Tuple[str, str]]:
+    """(directory, project) pairs from the `paths:` lists in projects.yaml, longest directory first."""
+    doc = books.yaml.get("projects.yaml")
+    projects = doc.get("projects") if isinstance(doc, dict) else None
+    pairs: List[Tuple[str, str]] = []
+    for name, entry in (projects.items() if isinstance(projects, dict) else []):
+        for p in entry.get("paths") or [] if isinstance(entry, dict) else []:
+            pairs.append((os.path.normpath(os.path.expanduser(p)), name))
+    return sorted(pairs, key=lambda t: (-len(t[0]), t[1]))
+
+
+def project_for(cwd: str, pairs: List[Tuple[str, str]]) -> str:
+    cwd = os.path.normpath(cwd) if cwd else ""
+    for path, name in pairs:
+        if cwd == path or cwd.startswith(path.rstrip("/") + "/"):
+            return name
+    return UNASSIGNED
+
+
+def price(m: Message, pricing: Pricing) -> Decimal:
+    p = pricing.models[m.model]
+    cost = sum((Decimal(getattr(m.tokens, k)) * p[k] for k in PRICE_KINDS), Decimal(0)) / MILLION
+    if m.speed == "fast" and m.model in pricing.fast_multiplier:
+        cost *= pricing.fast_multiplier[m.model]
+    return cost
+
+
+def _monday(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def _week(monday: date) -> str:
+    iso = monday.isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
+def price_weeks(messages: List[Message], pricing: Pricing, pairs: List[Tuple[str, str]],
+                first: date, until: date) -> Dict[str, Any]:
+    """Cost per (week, project) for whole weeks that start on or after `first` and end before `until`."""
+    cells: Dict[Tuple[date, str], Dict[str, Any]] = {}
+    unpriced: Dict[str, Tokens] = {}
+    counted = outside = 0
+    speeds: Dict[str, int] = {}
+    fast_at_standard = 0
+    for m in messages:
+        monday = _monday(m.day)
+        if monday < first or monday + timedelta(days=6) >= until:
+            outside += 1
+            continue
+        counted += 1
+        speeds[m.speed] = speeds.get(m.speed, 0) + 1
+        if m.model not in pricing.models:
+            unpriced.setdefault(m.model, Tokens()).add(m.tokens)
+            continue
+        if m.speed != "standard" and m.model not in pricing.fast_multiplier:
+            fast_at_standard += 1
+        cell = cells.setdefault((monday, project_for(m.cwd, pairs)), {"tokens": Tokens(), "cost": Decimal(0)})
+        cell["tokens"].add(m.tokens)
+        cell["cost"] += price(m, pricing)
+    return {"cells": cells, "unpriced": unpriced, "counted": counted, "outside": outside,
+            "speeds": speeds, "nonstandard_at_standard_price": fast_at_standard}
+
+
+def claude_code_rows(cells: Dict[Tuple[date, str], Dict[str, Any]]) -> List[Dict[str, str]]:
+    rows = []
+    for (monday, project), cell in sorted(cells.items()):
+        sunday = monday + timedelta(days=6)
+        row = {k: "" for k in SCHEMA}
+        row.update(charge_date=sunday.isoformat(), period_start=monday.isoformat(), period_end=sunday.isoformat(),
+                   provider="Anthropic", service="Claude Code (API-equivalent)", charge_type="usage-equivalent",
+                   billed_cost="0", currency="USD", api_equivalent_cost=str(_q(cell["cost"])), project=project,
+                   status="verified", source="claude-code-logs", evidence=f"claude-code:{_week(monday)}:{project}")
+        rows.append(row)
+    return rows
+
+
+def cmd_claude_code(args: argparse.Namespace) -> int:
+    books_dir = Path(args.books_dir)
+    if not books_dir.is_dir():
+        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    until = date.today() if args.until is None else None
+    for flag, value in (("--since", args.since), ("--until", args.until)):
+        if value is not None and not _is_date(value):
+            print(f"books.py: {flag} must look like 2026-10-19, got {value!r}", file=sys.stderr)
+            return 2
+    if args.until is not None:
+        until = date.fromisoformat(args.until)
+    first = _monday(date.fromisoformat(args.since))
+    logs = Path(os.path.expanduser(args.logs))
+    if not logs.is_dir():
+        print(f"books.py: not a directory: {args.logs}", file=sys.stderr)
+        return 2
+    try:
+        pricing = load_pricing(PRICING_FILE)
+    except UsageError as e:
+        print(f"books.py: {e}", file=sys.stderr)
+        return 2
+
+    books = load(books_dir)
+    problems = run_checks(books)
+    if problems:
+        for p in problems:
+            print(p)
+        print(f"{len(problems)} problems; no Claude Code rows from unchecked books")
+        return 1
+
+    messages, duplicates = read_logs(logs)
+    result = price_weeks(messages, pricing, project_paths(books), first, until)
+    rows = claude_code_rows(result["cells"])
+    code, fresh, skipped = append_cells(books_dir, rows, write=not args.dry_run)
+    if code != 0:
+        return code
+
+    weeks = sorted({monday for monday, _ in result["cells"]})
+    summary = {
+        "weeks": [_week(w) for w in weeks], "messages_counted": result["counted"],
+        "duplicates_dropped": duplicates, "messages_outside_weeks": result["outside"],
+        "unpriced_models": {k: v.as_dict() for k, v in sorted(result["unpriced"].items())},
+        "speeds": dict(sorted(result["speeds"].items())),
+        "nonstandard_speed_priced_at_standard": result["nonstandard_at_standard_price"],
+        "pricing_as_of": pricing.as_of, "dry_run": bool(args.dry_run),
+        "totals": [{"week": _week(monday), "project": project, "tokens": cell["tokens"].as_dict(),
+                    "api_equivalent_cost": str(_q(cell["cost"]))}
+                   for (monday, project), cell in sorted(result["cells"].items())],
+        "rows_added": len(fresh), "rows_skipped": skipped, "rows": fresh,
+    }
+    if args.json:
+        print(json.dumps(summary, indent=2))
+        return 0
+    print(render_claude_code(summary))
+    return 0
+
+
+def render_claude_code(s: Dict[str, Any]) -> str:
+    out = [f"Claude Code API-equivalent cost (not cash), pricing as of {s['pricing_as_of']}",
+           "Weeks covered: " + (", ".join(s["weeks"]) if s["weeks"] else "none (no complete week with priced usage)")]
+    for t in s["totals"]:
+        k = t["tokens"]
+        out.append(f"  {t['week']} {t['project']}: ${t['api_equivalent_cost']}  (input {k['input']}, output {k['output']},"
+                   f" cache write 5m {k['cache_write_5m']}, cache write 1h {k['cache_write_1h']}, cache read {k['cache_read']})")
+    out.append(f"Messages counted after dedupe: {s['messages_counted']}; duplicates dropped: {s['duplicates_dropped']};"
+               f" messages outside the weeks: {s['messages_outside_weeks']}")
+    if s["unpriced_models"]:
+        out.append("Unpriced models (tokens listed, cost EXCLUDED from every total above):")
+        for model, k in s["unpriced_models"].items():
+            out.append(f"  {model}: input {k['input']}, output {k['output']}, cache write 5m {k['cache_write_5m']},"
+                       f" cache write 1h {k['cache_write_1h']}, cache read {k['cache_read']}")
+    else:
+        out.append("Unpriced models: none")
+    speeds = ", ".join(f"{k} {v}" for k, v in s["speeds"].items()) or "none"
+    out.append(f"Speed of counted messages: {speeds}; non-standard speed priced at standard rates:"
+               f" {s['nonstandard_speed_priced_at_standard']}")
+    verb = "would add" if s["dry_run"] else "added"
+    out.append(f"Rows {verb}: {s['rows_added']}, skipped: {s['rows_skipped']} (evidence already in the ledger)")
+    if s["dry_run"] and s["rows"]:
+        buf = io.StringIO()
+        w = csv.writer(buf, lineterminator="\n")
+        for r in s["rows"]:
+            w.writerow([r[k] for k in SCHEMA])
+        out.append(",".join(SCHEMA))
+        out.append(buf.getvalue().rstrip("\n"))
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -1216,12 +1559,23 @@ def cmd_check(args: argparse.Namespace) -> int:
         return 2
     books = load(books_dir, args.base)
     problems = run_checks(books)
+    if args.today is None:
+        today = date.today()
+    elif _is_date(args.today):
+        today = date.fromisoformat(args.today)
+    else:
+        print(f"books.py: --today must look like 2026-10-31, got {args.today!r}", file=sys.stderr)
+        return 2
+    warnings = run_warnings(books, today)
     for p in problems:
         print(p)
+    for w in warnings:
+        print(w)
     if problems:
-        print(f"{len(problems)} problems")
+        print(f"{len(problems)} problems" + (f", {len(warnings)} warning{'s' * (len(warnings) != 1)}" if warnings else ""))
         return 1
-    print(f"ok, {len(books.rows)} rows, 0 problems")
+    note = f", {len(warnings)} warning{'s' * (len(warnings) != 1)}" if warnings else ""
+    print(f"ok, {len(books.rows)} rows, 0 problems{note}")
     return 0
 
 
@@ -1231,6 +1585,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     check = sub.add_parser("check", help="validate the books")
     check.add_argument("books_dir", metavar="BOOKS_DIR")
     check.add_argument("--base", metavar="REF", help="fail if a ledger line at REF changed or was removed")
+    check.add_argument("--today", metavar="YYYY-MM-DD", help=argparse.SUPPRESS)  # tests fix the date
     check.set_defaults(func=cmd_check)
     append = sub.add_parser("append", help="add ledger rows that are not already there, if the result passes check")
     append.add_argument("books_dir", metavar="BOOKS_DIR")
@@ -1242,6 +1597,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     summary.add_argument("--as-of", metavar="YYYY-MM-DD", help="today by default; fixes the renewals window")
     summary.add_argument("--json", action="store_true")
     summary.set_defaults(func=cmd_summary)
+    cc = sub.add_parser("claude-code", help="price local Claude Code usage at API rates, one row per project per ISO week")
+    cc.add_argument("books_dir", metavar="BOOKS_DIR")
+    cc.add_argument("--since", required=True, metavar="YYYY-MM-DD", help="rounded down to its Monday")
+    cc.add_argument("--logs", default="~/.claude/projects", metavar="DIR")
+    cc.add_argument("--until", metavar="YYYY-MM-DD", help="today by default; only weeks ending before it are written")
+    cc.add_argument("--dry-run", action="store_true", help="print totals and the rows, write nothing")
+    cc.add_argument("--json", action="store_true")
+    cc.set_defaults(func=cmd_claude_code)
     args = parser.parse_args(argv)
     return args.func(args)
 
