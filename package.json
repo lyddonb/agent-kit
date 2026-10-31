@@ -16,7 +16,8 @@
       "./plugins/eng-leadership/skills",
       "./plugins/research-tools/skills",
       "./plugins/principles/skills",
-      "./plugins/bstack/skills"
+      "./plugins/bstack/skills",
+      "./plugins/cfo/skills"
     ]
   }
 }

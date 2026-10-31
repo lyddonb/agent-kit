@@ -32,6 +32,11 @@
       "name": "bstack",
       "source": "plugins/bstack",
       "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, swarm), design and planning (architect, arena, technical-writing), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent."
+    },
+    {
+      "name": "cfo",
+      "source": "plugins/cfo",
+      "description": "A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself."
     }
   ]
 }
