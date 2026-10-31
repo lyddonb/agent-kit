@@ -159,12 +159,11 @@ class YamlFileTest(Case):
         (self.dir / "renewals.yaml").unlink()
         self.assertFlags("renewals.yaml", 1, "missing file")
 
-    def test_project_check_is_skipped_when_projects_unreadable(self):
+    def test_project_check_stays_on_when_projects_unreadable(self):
         self.write("projects.yaml", "version: 1\nprojects: &x\n  a: 1\n")
-        self.append_row(project="nope")
-        found = self.problems()
-        self.assertTrue(any(p.startswith("projects.yaml:") for p in found))
-        self.assertFalse(any("project 'nope'" in p for p in found))
+        line = self.append_row(project="nope")
+        self.assertFlags("projects.yaml", 2, "unsupported YAML")
+        self.assertFlags(books.LEDGER, line, "project 'nope'")
 
 
 class YamlReaderTest(unittest.TestCase):
@@ -182,7 +181,6 @@ class YamlReaderTest(unittest.TestCase):
             "folded: >-\n"
             "  one two\n"
             "  # not a comment\n"
-            "\n"
             "  three\n"
             "after: 2\n"
             "tree:\n"
@@ -191,14 +189,14 @@ class YamlReaderTest(unittest.TestCase):
             "list:\n"
             "  - plain\n"
             "  - {k: v, n: [x, y], z: null}\n"
-            "  - key: value here; with: no space-colon trap\n"
+            "  - key: value here; with a semicolon\n"
             "inline: {a: 1, b: {c: [d]}}\n")
         self.assertEqual(doc, {
             "version": 1, "ratio": 0.5, "nothing": None, "empty": None, "flag": True,
             "name": "has # hash", "note": "it's fine", "date": "2026-04-26",
             "folded": "one two # not a comment three", "after": 2,
             "tree": {"leaf": {"deep": ["a", "b, c", [1, 2.5]]}},
-            "list": ["plain", {"k": "v", "n": ["x", "y"], "z": None}, {"key": "value here; with: no space-colon trap"}],
+            "list": ["plain", {"k": "v", "n": ["x", "y"], "z": None}, {"key": "value here; with a semicolon"}],
             "inline": {"a": 1, "b": {"c": ["d"]}},
         })
 
@@ -230,9 +228,6 @@ class CardTest(Case):
     def test_amex_grouping(self):
         self.flagged_card("3782 822463 10005")
         self.flagged_card("378282246310005")
-
-    def test_mixed_separators_not_grouped(self):
-        self.not_flagged("4111 1111-1111 1111")
 
     def test_luhn_invalid_ignored(self):
         self.not_flagged("4242424242424241")
@@ -314,9 +309,9 @@ class SecretTest(Case):
 
 
 class SkipTest(Case):
-    def test_binary_files_skipped(self):
+    def test_binary_file_is_a_problem(self):
         (self.dir / "blob.bin").write_bytes(b"\0\1\2 4242424242424242")
-        self.assertClean()
+        self.assertFlags("blob.bin", 1, "binary file")
 
     def test_gitignored_files_skipped_in_a_git_repo(self):
         git(self.dir, "init", "-q")
@@ -366,6 +361,186 @@ class AppendOnlyTest(Case):
     def test_not_a_git_repo_is_a_problem_not_a_crash(self):
         shutil.rmtree(self.dir / ".git")
         self.assertFlags(books.LEDGER, 1, "cannot check against", "HEAD")
+
+
+class NoSilentSkipTest(Case):
+    def test_utf16_with_bom_is_scanned(self):
+        (self.dir / "notes.txt").write_bytes(b"\xff\xfe" + "ok\n4242424242424242\n".encode("utf-16-le"))
+        self.assertFlags("notes.txt", 2, "card number")
+
+    def test_utf8_bom_ledger_is_clean(self):
+        path = self.dir / books.LEDGER
+        path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+        self.assertClean()
+
+    def test_empty_projects_file_fails_and_keeps_project_rule(self):
+        self.write("projects.yaml", "# nothing\n")
+        self.write("budgets.yaml", "")
+        line = self.append_row(project="no-such-project")
+        self.assertFlags("projects.yaml", 1, "empty file")
+        self.assertFlags("budgets.yaml", 1, "empty file")
+        self.assertFlags(books.LEDGER, line, "project 'no-such-project'")
+
+    def test_broken_git_index_is_a_problem(self):
+        git(self.dir, "init", "-q")
+        (self.dir / ".git/index").write_bytes(b"garbage")
+        self.assertTrue(any("git ls-files" in p for p in self.problems()), self.problems())
+
+    def test_unreadable_file_is_a_problem(self):
+        import os
+        if os.geteuid() == 0:
+            self.skipTest("root can read anything")
+        path = self.dir / "secret.txt"
+        path.write_text("x\n")
+        path.chmod(0)
+        self.addCleanup(path.chmod, 0o644)
+        self.assertFlags("secret.txt", 1, "unreadable")
+
+    def test_file_name_is_scanned(self):
+        self.write("4242424242424242.txt", "hello\n")
+        self.assertFlags("4242424242424242.txt", 1, "file name")
+
+    def test_multi_line_row_is_a_problem(self):
+        with open(self.dir / books.LEDGER, "a") as f:
+            f.write(GOOD_ROW.replace("Pro plan", '"Pro\nplan"') + "\n")
+        self.assertFlags(books.LEDGER, 5, "more than one line")
+
+
+class CardHardeningTest(Case):
+    def test_tail_after_16_digits(self):
+        for i, text in enumerate(("card 4111 1111 1111 1111 123", "4111 1111 1111 1111 12/28",
+                                  "4111-1111-1111-1111-99"), 1):
+            with self.subTest(text):
+                self.write("notes.txt", text + "\n")
+                self.assertFlags("notes.txt", 1, "card number")
+
+    def test_other_separators(self):
+        for text in ("4111.1111.1111.1111", "4111\u20111111\u20111111\u20111111", "4111\u00a01111\u00a01111\u00a01111",
+                     "4111-1111 1111-1111", "3782.822463.10005", "4111\u20151111\u20151111\u20151111"):
+            with self.subTest(text):
+                self.write("notes.txt", text + "\n")
+                self.assertFlags("notes.txt", 1, "card number")
+
+    def test_dates_still_not_flagged(self):
+        self.write("notes.txt", "2026-10-01 2026.10.01 2026-10-01 2026-10-31\n")
+        self.assertClean()
+
+
+class HistoryTest(Case):
+    def setUp(self):
+        super().setUp()
+        git(self.dir, "init", "-q")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "base")
+
+    def commit_text(self, rel, text):
+        self.write(rel, text)
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "change")
+
+    def test_card_added_then_removed_still_fails(self):
+        original = (self.dir / "questions.md").read_text()
+        self.commit_text("questions.md", original + "\ncard 4242424242424242\n")
+        line = len((self.dir / "questions.md").read_text().split("\n")) - 1
+        self.commit_text("questions.md", original)
+        self.assertFlags("questions.md", line, "in commit", "HEAD~2")
+        self.assertTrue(any("card number" in p and "in commit" in p for p in self.problems("HEAD~2")))
+        self.assertClean()  # no --base, no history scan
+
+    def test_clean_history_is_fine(self):
+        self.commit_text("questions.md", "fine\n")
+        self.assertClean("HEAD~1")
+
+    def test_empty_range_is_fine(self):
+        self.assertClean("HEAD")
+
+    def test_evidence_exemption_for_12_digits_in_history(self):
+        self.append_row(evidence="Invoice 123456789012")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "row")
+        self.assertClean("HEAD~1")
+        self.append_row(service="123456789012")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "row2")
+        self.assertFlags(books.LEDGER, 6, "in commit", "HEAD~1")
+
+
+class YamlStrictTest(unittest.TestCase):
+    def rejects(self, text, line=1):
+        with self.assertRaises(books.YamlError, msg=text) as cm:
+            books.parse_yaml(text)
+        self.assertEqual(cm.exception.line, line, text)
+
+    def test_flow_punctuation(self):
+        for text in ('a: ["a" "b"]', "a: {x: 1 y: 2}", "a: [1 2]", "a: [1,,2]", "a: {x: 1, x: 2}",
+                     "a: {x: 1,, y: 2}"):
+            with self.subTest(text):
+                self.rejects(text + "\n")
+
+    def test_flow_trailing_comma_ok(self):
+        self.assertEqual(books.parse_yaml("a: [1, 2,]\n"), {"a": [1, 2]})
+
+    def test_escapes(self):
+        self.rejects('a: "x\\qy"\n')
+        self.rejects('a: "x\\u0041y"\n')
+        self.assertEqual(books.parse_yaml('a: "x\\ny\\"z\\\\"\n'), {"a": 'x\ny"z\\'})
+
+    def test_plain_scalar_shapes(self):
+        for text in ("a: x: y", "a: x:", "a: - x", "a: ]x", "a: }x", "a: ,x", "- - x", "a:\n  - - x"):
+            with self.subTest(text):
+                with self.assertRaises(books.YamlError):
+                    books.parse_yaml(text + "\n")
+
+    def test_block_scalars(self):
+        self.rejects("a: >-\n  one\n\n  two\nb: 1\n", 1)
+        self.rejects("a: |\n  one\n    deeper\nb: 1\n", 1)
+        self.assertEqual(books.parse_yaml("a: >-\n  one\n  two\n\nb: 1\n"), {"a": "one two", "b": 1})
+
+    def test_leading_zero_is_a_string(self):
+        self.assertEqual(books.parse_yaml("a: 012\nb: 0\nc: 10\nd: 0.5\ne: 007.5\n"),
+                         {"a": "012", "b": 0, "c": 10, "d": 0.5, "e": "007.5"})
+
+
+class AccountHardeningTest(Case):
+    def flagged(self, text, kind="account ID"):
+        self.write("questions.md", text + "\n")
+        self.assertFlags("questions.md", 1, kind)
+
+    def clean(self, text):
+        self.write("questions.md", text + "\n")
+        self.assertClean()
+
+    def test_space_grouped(self):
+        self.flagged("Account 1234 5678 9012 here")
+
+    def test_hash_exemption_unless_account_nearby(self):
+        self.clean("Receipt #1234-5678-9012 here")
+        self.flagged("AWS account #1234-5678-9012 here")
+        self.flagged("acct #1234-5678-9012 here")
+
+    def test_decimal_fraction_not_flagged(self):
+        self.clean("billed 0.123456789012 USD")
+        self.flagged("billed 123456789012 USD")
+
+    def test_secret_variants(self):
+        body = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0"
+        for token in ("ghs_" + body[:36], "gho_" + body[:36], "ghp_" + body, "ASIA" + "ABCDEFGHIJKLMNOP",
+                      "xoxe-" + "1234567890-ab", "sk_live_" + body[:24], "sk_test_" + body[:24],
+                      "OPENAI-sk-" + body[:24], "X_sk-ant-" + body[:24]):
+            with self.subTest(token):
+                self.flagged("key " + token + " end", "secret")
+
+    def test_words_not_flagged(self):
+        self.clean("task-" + "a" * 30 + " and risk-" + "b" * 30)
+
+    def test_append_only_compares_bytes(self):
+        git(self.dir, "init", "-q")
+        path = self.dir / books.LEDGER
+        path.write_bytes(path.read_bytes() + b"\xff junk\n")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "base")
+        path.write_bytes(path.read_bytes().replace(b"\xff junk", b"\xfe junk"))
+        self.assertFlags(books.LEDGER, 5, "changed since HEAD", "HEAD")
 
 
 class CliTest(Case):

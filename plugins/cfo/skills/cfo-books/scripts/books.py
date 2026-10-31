@@ -64,7 +64,8 @@ class Books:
     base: Optional[str]
     header: Optional[List[str]] = None
     rows: List[Row] = field(default_factory=list)
-    yaml: Dict[str, Any] = field(default_factory=dict)  # file name -> parsed value, or None if unreadable
+    yaml: Dict[str, Any] = field(default_factory=dict)  # file name -> parsed value; absent if load reported it
+    ledger_bytes: bytes = b""
     texts: Dict[str, str] = field(default_factory=dict)  # relative path -> text of each text file
     load_problems: List[Problem] = field(default_factory=list)
 
@@ -100,11 +101,15 @@ def _strip_comment(s: str) -> str:
     return s
 
 
-_INT = re.compile(r"[-+]?\d+\Z")
-_FLOAT = re.compile(r"[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?\Z")
+_INT = re.compile(r"[-+]?(0|[1-9]\d*)\Z")  # a leading zero (012) stays a string
+_FLOAT = re.compile(r"[-+]?((0|[1-9]\d*)\.\d*|\.\d+|(0|[1-9]\d*))([eE][-+]?\d+)?\Z")
 
 
-def _plain(text: str) -> Any:
+def _plain(text: str, n: int) -> Any:
+    if text.startswith("- ") or text == "-" or text[:1] in "]},":
+        raise YamlError(n, "unsupported YAML: plain value starts with '" + text[:1] + "'")
+    if ": " in text or text.endswith(":"):
+        raise YamlError(n, "unsupported YAML: ': ' inside a plain value (quote it)")
     if text in ("", "~", "null", "Null", "NULL"):
         return None
     if text in ("true", "True", "TRUE"):
@@ -126,7 +131,10 @@ def _quoted(text: str, start: int, n: int) -> Tuple[str, int]:
     while i < len(text):
         ch = text[i]
         if q == '"' and ch == "\\" and i + 1 < len(text):
-            out.append({"n": "\n", "t": "\t", '"': '"', "\\": "\\"}.get(text[i + 1], "\\" + text[i + 1]))
+            esc = {"n": "\n", "t": "\t", '"': '"', "\\": "\\"}.get(text[i + 1])
+            if esc is None:
+                raise YamlError(n, "unsupported YAML: escape \\" + text[i + 1] + " (only \\n \\t \\\" \\\\ are supported)")
+            out.append(esc)
             i += 2
             continue
         if q == "'" and ch == "'" and text[i + 1:i + 2] == "'":
@@ -165,7 +173,7 @@ class _Flow:
         start = self.i
         while self.i < len(self.s) and self.s[self.i] not in ",]}":
             self.i += 1
-        return _plain(self.s[start:self.i].strip())
+        return _plain(self.s[start:self.i].strip(), self.n)
 
     def sequence(self) -> List[Any]:
         self.i += 1
@@ -177,10 +185,23 @@ class _Flow:
             if self.s[self.i] == "]":
                 self.i += 1
                 return out
-            out.append(self.value())
-            self.ws()
-            if self.i < len(self.s) and self.s[self.i] == ",":
-                self.i += 1
+            if self.s[self.i] == ",":
+                raise YamlError(self.n, "unsupported YAML: empty element in a flow list")
+            quoted = self.s[self.i] in "\"'"
+            item = self.value()
+            if not quoted and isinstance(item, str) and re.search(r"\s", item):
+                raise YamlError(self.n, "unsupported YAML: quote flow list items that contain spaces")
+            out.append(item)
+            self.separator("]")
+
+    def separator(self, closer: str) -> None:
+        self.ws()
+        if self.i >= len(self.s):
+            raise YamlError(self.n, "unterminated flow collection")
+        if self.s[self.i] == ",":
+            self.i += 1
+        elif self.s[self.i] != closer:
+            raise YamlError(self.n, f"unsupported YAML: expected ',' or '{closer}' in a flow collection")
 
     def mapping(self) -> Dict[str, Any]:
         self.i += 1
@@ -202,15 +223,15 @@ class _Flow:
             self.ws()
             if self.i >= len(self.s) or self.s[self.i] != ":" or not key:
                 raise YamlError(self.n, "unsupported YAML: flow mapping entry without 'key: value'")
+            if key in out:
+                raise YamlError(self.n, f"unsupported YAML: duplicate key '{key}'")
             self.i += 1
             self.ws()
             if self.i < len(self.s) and self.s[self.i] in ",}":
                 out[key] = None
             else:
                 out[key] = self.value()
-            self.ws()
-            if self.i < len(self.s) and self.s[self.i] == ",":
-                self.i += 1
+            self.separator("}")
 
 
 def _inline(text: str, n: int) -> Any:
@@ -229,7 +250,7 @@ def _inline(text: str, n: int) -> Any:
         return v
     if text[:1] in ("&", "*", "!", "|", ">", "@", "`", "%"):
         raise YamlError(n, "unsupported YAML: anchors, aliases, tags or block scalars here")
-    return _plain(text)
+    return _plain(text, n)
 
 
 def _split_key(text: str) -> Optional[Tuple[str, str]]:
@@ -344,22 +365,29 @@ class _Yaml:
                 raise YamlError(n, "unsupported YAML: list item and mapping key at the same level")
 
     def block_scalar(self, n: int, key_indent: int, style: str) -> str:
-        lines: List[str] = []
+        content: List[str] = []
+        first_indent = None
         last = n
+        blank_seen = False
         for j in range(n, len(self.raw)):  # raw index j is line j + 1
             line = self.raw[j]
             if line.strip() == "":
-                lines.append("")
+                blank_seen = True
                 continue
-            if len(line) - len(line.lstrip(" ")) <= key_indent:
+            indent = len(line) - len(line.lstrip(" "))
+            if indent <= key_indent:
                 break
-            lines.append(line.strip())
+            if blank_seen:
+                raise YamlError(n, "unsupported YAML: blank line inside a block scalar")
+            if first_indent is None:
+                first_indent = indent
+            elif indent != first_indent:
+                raise YamlError(n, "unsupported YAML: block scalar lines must share one indentation")
+            content.append(line.strip())
             last = j + 1
         while self.pos < len(self.entries) and self.entries[self.pos][0] <= last:
             self.pos += 1
-        content = [l for l in lines[:max(0, last - n)] if l != ""]
-        joiner = " " if style.startswith(">") else "\n"
-        text = joiner.join(content)
+        text = (" " if style.startswith(">") else "\n").join(content)
         return text if style.endswith("-") else text + "\n"
 
 
@@ -376,8 +404,9 @@ def _git(books_dir: Path, *args: str) -> "subprocess.CompletedProcess[bytes]":
     return subprocess.run(["git", "-C", str(books_dir)] + list(args), capture_output=True)
 
 
-def _text_files(books_dir: Path) -> List[str]:
+def _text_files(books_dir: Path) -> Tuple[List[str], List[Problem]]:
     rels: List[str] = []
+    problems: List[Problem] = []
     try:
         inside = _git(books_dir, "rev-parse", "--is-inside-work-tree")
     except OSError:
@@ -386,34 +415,56 @@ def _text_files(books_dir: Path) -> List[str]:
         out = _git(books_dir, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
         if out.returncode == 0:
             rels = [p for p in out.stdout.decode("utf-8", "replace").split("\0") if p]
+        else:
+            problems.append(Problem(".", 1, "git ls-files failed, so the scan of tracked files did not run: "
+                                    + out.stderr.decode("utf-8", "replace").strip()[:200]))
     else:
         for p in sorted(books_dir.rglob("*")):
             if ".git" in p.relative_to(books_dir).parts or not p.is_file():
                 continue
             rels.append(p.relative_to(books_dir).as_posix())
-    return sorted(set(rels))
+    return sorted(set(rels)), problems
 
 
-def _read_text(path: Path) -> Optional[str]:
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return None
+def _decode(data: bytes) -> Optional[str]:
+    """Text of a file, or None when it is binary. UTF-16 and UTF-8 files with a BOM are text."""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", "replace")
     if b"\0" in data[:8192]:
         return None
-    return data.decode("utf-8", "replace")
+    return data.decode("utf-8-sig", "replace")
+
+
+def _read(books_dir: Path, rel: str) -> Tuple[Optional[str], bytes, Optional[Problem]]:
+    """(text, raw bytes, problem). Exactly one of text and problem is set."""
+    try:
+        data = (books_dir / rel).read_bytes()
+    except FileNotFoundError:
+        return None, b"", Problem(rel, 1, "missing file")
+    except OSError as e:
+        return None, b"", Problem(rel, 1, f"unreadable file ({e.strerror or type(e).__name__})")
+    text = _decode(data)
+    if text is None:
+        return None, data, Problem(rel, 1, "binary file; the books hold text only")
+    return text, data, None
 
 
 def load(books_dir: Path, base: Optional[str] = None) -> Books:
     books = Books(dir=books_dir, base=base)
-    for rel in _text_files(books_dir):
-        text = _read_text(books_dir / rel)
-        if text is not None:
+    rels, problems = _text_files(books_dir)
+    books.load_problems.extend(problems)
+    for rel in rels:
+        if not (books_dir / rel).is_file():
+            continue  # listed by git but deleted from disk
+        text, _, problem = _read(books_dir, rel)
+        if problem:
+            books.load_problems.append(problem)
+        else:
             books.texts[rel] = text
 
-    ledger = _read_text(books_dir / LEDGER)
-    if ledger is None:
-        books.load_problems.append(Problem(LEDGER, 1, "missing file"))
+    ledger, books.ledger_bytes, problem = _read(books_dir, LEDGER)
+    if problem:
+        books.load_problems.append(problem)
     else:
         reader = csv.reader(io.StringIO(ledger, newline=""))
         while True:
@@ -428,6 +479,9 @@ def load(books_dir: Path, base: Optional[str] = None) -> Books:
             start, end = before + 1, reader.line_num
             if books.header is None:
                 books.header = record
+            elif end != start:
+                books.load_problems.append(
+                    Problem(LEDGER, start, "row spans more than one line (embedded newline or unclosed quote)"))
             elif len(record) != len(SCHEMA):
                 books.load_problems.append(
                     Problem(LEDGER, start, f"row has {len(record)} columns, expected {len(SCHEMA)}"))
@@ -435,16 +489,20 @@ def load(books_dir: Path, base: Optional[str] = None) -> Books:
                 books.rows.append(Row(start, end, dict(zip(SCHEMA, record))))
 
     for name in YAML_KEYS:
-        text = _read_text(books_dir / name)
-        if text is None:
-            books.yaml[name] = None
-            books.load_problems.append(Problem(name, 1, "missing file"))
+        text, _, problem = _read(books_dir, name)
+        if problem:
+            books.load_problems.append(problem)
             continue
         try:
-            books.yaml[name] = parse_yaml(text)
+            doc = parse_yaml(text)
         except YamlError as e:
-            books.yaml[name] = None
-            books.load_problems.append(Problem(name, e.line, e.message if e.message.startswith("unsupported YAML") else f"unsupported YAML: {e.message}"))
+            msg = e.message if e.message.startswith("unsupported YAML") else f"unsupported YAML: {e.message}"
+            books.load_problems.append(Problem(name, e.line, msg))
+            continue
+        if doc is None:
+            books.load_problems.append(Problem(name, 1, "empty file"))
+            continue
+        books.yaml[name] = doc  # only files that parsed to something are here
     return books
 
 
@@ -481,11 +539,12 @@ def _decimal(s: str) -> bool:
         return False
 
 
-def project_keys(books: Books) -> Optional[frozenset]:
+def project_keys(books: Books) -> frozenset:
+    """Project names; empty when projects.yaml is unusable, so the project rule never switches off."""
     doc = books.yaml.get("projects.yaml")
     if isinstance(doc, dict) and isinstance(doc.get("projects"), dict):
         return frozenset(doc["projects"])
-    return None
+    return frozenset()
 
 
 def check_rows(books: Books) -> Iterator[Problem]:
@@ -519,15 +578,15 @@ def check_rows(books: Books) -> Iterator[Problem]:
             yield bad("api_equivalent_cost is not empty and not a decimal number")
         if not c["evidence"].strip():
             yield bad("evidence is empty")
-        if projects is not None and c["project"] != "unassigned" and c["project"] not in projects:
+        if c["project"] != "unassigned" and c["project"] not in projects:
             yield bad(f"project '{c['project']}' is not a key in projects.yaml and not 'unassigned'")
 
 
 def check_yaml(books: Books) -> Iterator[Problem]:
     for name, keys in YAML_KEYS.items():
-        doc = books.yaml.get(name)
-        if doc is None:
-            continue  # unreadable or missing: load already reported it
+        if name not in books.yaml:
+            continue  # load already reported it
+        doc = books.yaml[name]
         if not isinstance(doc, dict):
             yield Problem(name, 1, "top level must be a mapping")
             continue
@@ -549,39 +608,53 @@ def _luhn(digits: str) -> bool:
     return total % 10 == 0
 
 
+# Separators allowed between digit groups: space, dot, hyphen, no-break space, Unicode hyphens and dashes.
+_SEP = "[ .\\- ‐-―]"
 _CARD_RUN = re.compile(r"(?<!\d)\d{13,19}(?!\d)")
-_CARD_GROUPED = [
-    re.compile(r"(?<!\d)\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?:\1\d{1,3})?(?!\d)"),
-    re.compile(r"(?<!\d)\d{4}([ -])\d{6}\1\d{5}(?!\d)"),
-]
-_ACCOUNT = [
-    re.compile(r"(?<!\d)\d{12}(?!\d)"),
-    re.compile(r"(?<![\d#])(?<!\d-)\d{4}-\d{4}-\d{4}(?!\d|-\d)"),
-]
+_CARD_4444 = re.compile(r"(?<!\d)\d{4}{S}\d{4}{S}\d{4}{S}\d{4}(?:{S}\d{1,3})?(?!\d)".replace("{S}", _SEP))
+_CARD_465 = re.compile(r"(?<!\d)\d{4}{S}\d{6}{S}\d{5}(?!\d)".replace("{S}", _SEP))
+_ACCOUNT_RUN = re.compile(r"(?<![\d.])\d{12}(?!\d)")
+_ACCOUNT_GROUPED = re.compile(r"(?<!\d)(?<!\d[ -])\d{4}([ -])\d{4}\1\d{4}(?!\d|[ -]\d{4})")
 _SECRETS = [
-    ("Anthropic API key", re.compile(r"(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}")),
-    ("API key (sk-)", re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}")),
-    ("AWS access key ID", re.compile(r"(?<![A-Za-z0-9])AKIA[A-Z0-9]{16}(?![A-Za-z0-9])")),
-    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_])ghp_[A-Za-z0-9]{36}(?![A-Za-z0-9])")),
+    ("Anthropic API key", re.compile(r"(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("API key (sk-)", re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}")),
+    ("Stripe key", re.compile(r"(?<![A-Za-z0-9])sk_(?:live|test)_[A-Za-z0-9]{20,}")),
+    ("AWS access key ID", re.compile(r"(?<![A-Za-z0-9])A(?:KIA|SIA)[A-Z0-9]{16}(?![A-Za-z0-9])")),
+    ("GitHub token", re.compile(r"(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36,}")),
     ("GitHub fine-grained token", re.compile(r"(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{22,}")),
-    ("Slack token", re.compile(r"(?<![A-Za-z0-9])xox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("Slack token", re.compile(r"(?<![A-Za-z0-9])xox[abeprs]-[A-Za-z0-9-]{10,}")),
     ("Google API key", re.compile(r"(?<![A-Za-z0-9_-])AIza[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])")),
 ]
+
+
+def _account_ids(text: str) -> bool:
+    if _ACCOUNT_RUN.search(text):
+        return True
+    for m in _ACCOUNT_GROUPED.finditer(text):
+        start = m.start()
+        if start > 0 and text[start - 1] == "#":
+            # "#1234-5678-9012" is a receipt number unless the text just before says account
+            if not re.search(r"account|acct", text[max(0, start - 21):start - 1], re.I):
+                continue
+        return True
+    return False
 
 
 def scan_line(text: str, account_text: Optional[str] = None) -> List[str]:
     """Return what kinds of forbidden content `text` holds. `account_text` is the part of the
     line the 12-digit rule applies to (default: all of it). Never returns the matched text."""
     found: List[str] = []
-    seen_spans = set()
-    for pat in [_CARD_RUN] + _CARD_GROUPED:
+    for pat in (_CARD_RUN, _CARD_4444, _CARD_465):
         for m in pat.finditer(text):
             digits = re.sub(r"\D", "", m.group(0))
-            if 13 <= len(digits) <= 19 and _luhn(digits) and m.span() not in seen_spans:
-                seen_spans.add(m.span())
-                found.append(f"looks like a card number (Luhn-valid, {len(digits)} digits)")
-    target = text if account_text is None else account_text
-    if any(p.search(target) for p in _ACCOUNT):
+            # a 4-4-4-4 group may be followed by a CVV, expiry or amount: try the first 16 digits too
+            for candidate in ([digits[:16], digits] if pat is _CARD_4444 else [digits]):
+                if 13 <= len(candidate) <= 19 and _luhn(candidate):
+                    msg = f"looks like a card number (Luhn-valid, {len(candidate)} digits)"
+                    if msg not in found:
+                        found.append(msg)
+                    break
+    if _account_ids(text if account_text is None else account_text):
         found.append("looks like a 12-digit cloud account ID")
     for label, pat in _SECRETS:
         if pat.search(text):
@@ -592,9 +665,20 @@ def scan_line(text: str, account_text: Optional[str] = None) -> List[str]:
     return found
 
 
+def _ledger_account_text(line: str) -> Optional[str]:
+    """For a ledger line that parses as a row, the line without its evidence cell."""
+    try:
+        cells = next(csv.reader([line]))
+    except (csv.Error, StopIteration):
+        return None
+    return ",".join(cells[:-1]) if len(cells) == len(SCHEMA) else None
+
+
 def check_forbidden(books: Books) -> Iterator[Problem]:
     rows_by_line = {r.line: r for r in books.rows}
     for rel, text in books.texts.items():
+        for kind in scan_line(rel):
+            yield Problem(rel, 1, f"forbidden content in file name: {kind}")
         for n, line in enumerate(text.split("\n"), 1):
             account_text = None
             if rel == LEDGER and n in rows_by_line:
@@ -604,9 +688,19 @@ def check_forbidden(books: Books) -> Iterator[Problem]:
                 yield Problem(rel, n, f"forbidden content: {kind}")
 
 
-def _lines(text: str) -> List[str]:
-    parts = text.split("\n")
-    if parts and parts[-1] == "":
+def _base_problem(books: Books) -> Optional[Problem]:
+    ref = books.base
+    try:
+        if _git(books.dir, "rev-parse", "--verify", "--quiet", ref + "^{commit}").returncode != 0:
+            return Problem(LEDGER, 1, f"cannot check against {ref}: not a commit here (is this a git repo, and is the ref fetched?)")
+    except OSError as e:
+        return Problem(LEDGER, 1, f"cannot check against {ref}: git could not run ({e})")
+    return None
+
+
+def _lines(data: bytes) -> List[bytes]:
+    parts = data.split(b"\n")
+    if parts and parts[-1] == b"":
         parts.pop()
     return parts
 
@@ -615,30 +709,74 @@ def check_append_only(books: Books) -> Iterator[Problem]:
     ref = books.base
     if ref is None:
         return
-    try:
-        if _git(books.dir, "rev-parse", "--verify", "--quiet", ref + "^{commit}").returncode != 0:
-            yield Problem(LEDGER, 1, f"cannot check against {ref}: not a commit here (is this a git repo, and is the ref fetched?)")
-            return
-        listed = _git(books.dir, "ls-tree", "--name-only", ref, "--", LEDGER)
-        if listed.returncode != 0:
-            yield Problem(LEDGER, 1, f"cannot check against {ref}: git ls-tree failed")
-            return
-        if not listed.stdout.strip():
-            return  # the ledger did not exist at the base
-        shown = _git(books.dir, "show", f"{ref}:./{LEDGER}")
-    except OSError as e:
-        yield Problem(LEDGER, 1, f"cannot check against {ref}: git could not run ({e})")
+    problem = _base_problem(books)
+    if problem:
+        yield problem
         return
+    listed = _git(books.dir, "ls-tree", "--name-only", ref, "--", LEDGER)
+    if listed.returncode != 0:
+        yield Problem(LEDGER, 1, f"cannot check against {ref}: git ls-tree failed")
+        return
+    if not listed.stdout.strip():
+        return  # the ledger did not exist at the base
+    shown = _git(books.dir, "show", f"{ref}:./{LEDGER}")
     if shown.returncode != 0:
         yield Problem(LEDGER, 1, f"cannot check against {ref}: git show failed")
         return
-    old = _lines(shown.stdout.decode("utf-8", "replace"))
-    new = _lines(books.texts.get(LEDGER, ""))
+    old, new = _lines(shown.stdout), _lines(books.ledger_bytes)
     for i, line in enumerate(old):
         if i >= len(new):
             yield Problem(LEDGER, i + 1, f"removed since {ref}")
         elif new[i] != line:
             yield Problem(LEDGER, i + 1, f"changed since {ref}")
+
+
+_HUNK = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def check_history(books: Books) -> Iterator[Problem]:
+    """Scan every line added in base..HEAD, so a secret committed and then removed still fails."""
+    ref = books.base
+    if ref is None:
+        return
+    problem = _base_problem(books)
+    if problem:
+        yield problem
+        return
+    log = _git(books.dir, "-c", "core.quotepath=off", "log", "-p", "-U0", "--no-color",
+               "--format=commit:%H", f"{ref}..HEAD", "--")
+    if log.returncode != 0:
+        yield Problem(LEDGER, 1, f"cannot scan history since {ref}: git log failed")
+        return
+    sha, path, new_line, old_left, new_left = "", "", 0, 0, 0
+    for raw in log.stdout.decode("utf-8", "replace").split("\n"):
+        if old_left or new_left:
+            if raw.startswith("+"):
+                new_left -= 1
+                account_text = _ledger_account_text(raw[1:]) if path == LEDGER else None
+                for kind in scan_line(raw[1:], account_text):
+                    yield Problem(path, new_line, f"forbidden content in commit {sha[:7]}: {kind}")
+                new_line += 1
+                continue
+            if raw.startswith("-"):
+                old_left -= 1
+                continue
+            if raw.startswith("\\"):
+                continue
+        if raw.startswith("commit:"):
+            sha = raw[len("commit:"):]
+        elif raw.startswith("+++ "):
+            path = raw[6:] if raw.startswith("+++ b/") else ""
+        elif raw.startswith("Binary files "):
+            m = re.search(r" and b/(.*) differ$", raw)
+            if m:
+                yield Problem(m.group(1), 1, f"binary file changed in commit {sha[:7]}; the books hold text only")
+        else:
+            m = _HUNK.match(raw)
+            if m:
+                old_left = int(m.group(1)) if m.group(1) is not None else 1
+                new_line = int(m.group(2))
+                new_left = int(m.group(3)) if m.group(3) is not None else 1
 
 
 CHECKS: Tuple[Tuple[str, Check], ...] = (
@@ -648,6 +786,7 @@ CHECKS: Tuple[Tuple[str, Check], ...] = (
     ("yaml", check_yaml),
     ("forbidden", check_forbidden),
     ("append-only", check_append_only),
+    ("history", check_history),
 )
 
 
