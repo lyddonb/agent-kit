@@ -1,0 +1,13 @@
+# Fixture books. Invented names only.
+version: 1
+projects:
+  shared:
+    state: active
+    description: Tools used across all projects
+    resources: [acme:pro-plan, example-ai:credits]
+  widget:
+    state: proposed   # trailing comment
+    resources: [acme:widget-site]
+  gizmo:            {state: proposed, resources: [acme:gizmo, "acme:with # hash"], last_config_change: 2026-01-01}
+unassigned:
+  - acme: metered usage; projects not yet listed

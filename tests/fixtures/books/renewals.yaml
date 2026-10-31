@@ -1,0 +1,6 @@
+version: 1
+renewals:
+  - {vendor: Acme Cloud, plan: Pro, amount_usd: 20.00, cadence: monthly, next: 2026-02-05}
+  - {vendor: Example AI, plan: unknown, amount_usd: null, cadence: unknown, next: null}
+watch:
+  - {vendor: Acme Cloud, item: "Price change notice", tags: [a, [b, c]]}

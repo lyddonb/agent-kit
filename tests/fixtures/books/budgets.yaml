@@ -1,0 +1,11 @@
+version: 1
+monthly_envelope:
+  usd: 100
+  status: proposed
+  basis: >-
+    Invented run-rate of about $50 a month.
+    Room left for one unknown.
+alerts:
+  envelope_warning_pct: 80   # share of the envelope
+  new_metered_line: true
+per_project: {}
