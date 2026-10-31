@@ -30,6 +30,7 @@ Rules that always apply:
 - Never guess an amount. Leave `billed_cost` empty with `status: unknown` and add a question with your best guess.
 - Append to the ledger; never rewrite a past row. A correction is a new row with `charge_type: adjustment`.
 - Keep two numbers apart: **cash cost** (money that left the account) and **API-equivalent cost** (what the tokens would cost at metered API prices). On flat subscriptions they differ a lot; a product built on metered APIs turns the second into the first.
+- Numbers come only from `books.py summary BOOKS_DIR --month YYYY-MM --json`, and ledger writes only from `books.py append BOOKS_DIR ROWS_CSV`. Never add, average, total or round amounts by hand or in prose, and never write the ledger CSV by hand. Quote each number exactly as summary prints it. Run the script as `python3 <cfo-books skill dir>/scripts/books.py`; `cfo-books` is a sibling skill in this plugin, so look for its directory next to this skill's directory.
 <!-- END GENERATED: snippet:books -->
 
 ## Weekly run
@@ -38,16 +39,27 @@ Rules that always apply:
    - Email: receipts, invoices, payment notices and vendor notices (pricing, terms, billing changes) from every vendor in the books, and any new vendor that looks like a software or cloud charge. Read amounts from the email body. If only an attached PDF has it, record the row as `unknown` and say so.
    - Connected providers: projects, deployments and billing charges from whatever is reachable (Vercel, Google Cloud, AWS, Anthropic, Cursor).
    - The `inbox/` folder.
-2. **Record**: append new charges to the ledger (dedupe by evidence), add newly discovered resources to `projects.yaml` as `proposed`, update `renewals.yaml`.
-3. **Check**:
-   - Month-to-date spend against the envelope; flag past the warning share.
+2. **Record**:
+   - Collect the new charges as rows in a scratch CSV outside the books (or in a git-ignored path), with the ledger columns that apply and an `evidence` on every row. Then run `books.py append BOOKS_DIR scratch.csv`. It skips rows whose evidence is already in the ledger and refuses the whole append if any check fails. If it refuses, fix the new rows, or turn the problem into a question. Never edit past rows, and never write the ledger CSV by hand.
+   - Add newly discovered resources to `projects.yaml` as `proposed`, and update `renewals.yaml`.
+3. **Check**, taking every number from `books.py summary BOOKS_DIR --month <current month> --json` (and the previous month's when comparing):
+   - Month-to-date cash against the envelope (`envelope`); flag `over_warning`.
    - Metered lines seen for the first time, and price or terms notices.
-   - Renewals in the next 30 days, yearly ones especially.
-   - Waste: projects or resources with cost but no deploys, commits or traffic in 60 days; overlapping tools; usage growing faster than the project's activity. Each with a recommendation (keep, shrink, pause, retire), the monthly saving, and what retiring would break.
-   - Whether the envelope still fits: if three months of actuals plus planned work differ from it by more than 20%, propose a new figure.
-4. **Write** `briefs/YYYY-MM-DD.md` and update `questions.md` (move answered questions down with the date).
-5. **Commit** the books on a branch or directly, as the books' README says, with the brief's headline as the message.
-6. **Send** the user a short message: the headline, up to five decisions (each a yes or no with the saving or cost), and the open questions with best guesses. Link the brief.
+   - Renewals in the next 30 days (`renewals`), yearly ones especially.
+   - Waste: projects or resources with cost but no deploys, commits or traffic in 60 days; overlapping tools; usage growing faster than the project's activity. Each with a recommendation (keep, shrink, pause, retire), the monthly saving, and what retiring would break. Cost figures come from summary's `by_project` and `monthly_equivalent` lines.
+   - Whether the envelope still fits: if summary shows `over_envelope`, or its run-rate (`monthly_equivalent.total`) is above the envelope, say so in the brief and ask whether to change the envelope. Don't propose a new figure from your own arithmetic.
+4. **Write** `briefs/YYYY-MM-DD.md` from `briefs/TEMPLATE.md` in the books. If the template is missing, use these sections in this order:
+   - **Headline**: one line, month-to-date cash against the envelope with its percentage, as summary prints them.
+   - **Decisions**: at most five, each a yes or no with its monthly effect.
+   - **Changes since last week**: compare with the figures stated in the previous brief, and list the ledger rows added this run. Don't compute new differences.
+   - **Renewals**: the next 30 days.
+   - **Waste**.
+   - **Questions**: the open ones, each with a best guess.
+
+   Every number in the brief comes from summary output, quoted exactly.
+5. **Update `questions.md`.** Ids are stable: `Q7` is always Q7, and a new question takes the next unused number across Open and Answered. A question is `- **Q<n> (YYYY-MM-DD) Title.** question text with a best guess`. When the user has answered (an `Answer:` line under it, or a reply in chat), move it from `## Open` to `## Answered` in this form: `- **Q6 (2026-10-31) Title.** question text **Answered 2026-11-02:** the answer.` Never renumber and never delete a question.
+6. **Check and commit.** Run `books.py check BOOKS_DIR --base origin/main` and fix every problem it prints. Then commit the books on a branch or directly, as the books' README says, with the brief's headline as the message.
+7. **Send** the user a short message: the headline, up to five decisions (each a yes or no with the saving or cost), and the open questions with best guesses. Take every number from summary. Link the brief.
 
 If the books aren't reachable in this run, still collect and check, and put the rows you would have added at the end of the message so nothing is lost.
 

@@ -1,0 +1,4 @@
+charge_date,period_start,period_end,provider,service,charge_type,billed_cost,currency,api_equivalent_cost,project,status,source,evidence
+2026-01-05,2026-01-05,2026-02-04,Acme Cloud,Pro plan,subscription,20.00,USD,,shared,verified,gmail-receipt,Acme receipt #1000-2000-3000
+2026-01-10,2026-01-10,,Example AI,Credits,prepaid,10.50,USD,12.25,widget,verified,gmail-receipt,Example AI receipt #5550001
+2026-02-01,2026-01-01,2026-01-31,Acme Cloud,Metered usage,usage,,USD,,unassigned,unknown,gmail-invoice,Acme invoice 99887 (amount is in the PDF; not yet read)
