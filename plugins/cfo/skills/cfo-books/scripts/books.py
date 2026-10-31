@@ -3,10 +3,14 @@
 
 Usage:
     python3 books.py check BOOKS_DIR [--base REF]
+    python3 books.py append BOOKS_DIR ROWS_CSV
+    python3 books.py summary BOOKS_DIR --month YYYY-MM [--as-of YYYY-MM-DD] [--json]
 
-Prints one `path:line: message` line per problem (path relative to BOOKS_DIR), then
+`check` prints one `path:line: message` line per problem (path relative to BOOKS_DIR), then
 `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when there are problems,
-2 on bad usage. Standard library only; runs on Python 3.9.
+2 on bad usage. `append` adds rows to the ledger only if the whole result passes every check.
+`summary` reports one month, and only for books that pass the checks. Standard library only;
+runs on Python 3.9.
 
 Shape: `Books` is loaded once (CSV rows with line numbers, parsed YAML, text of every
 tracked file). Each entry in `CHECKS` takes a `Books` and yields `Problem`s. A new check is a
@@ -17,12 +21,16 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
-from datetime import date
-from decimal import Decimal, InvalidOperation
+from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
@@ -449,7 +457,9 @@ def _read(books_dir: Path, rel: str) -> Tuple[Optional[str], bytes, Optional[Pro
     return text, data, None
 
 
-def load(books_dir: Path, base: Optional[str] = None) -> Books:
+def load(books_dir: Path, base: Optional[str] = None, ledger_override: Optional[bytes] = None) -> Books:
+    """Load the books. `ledger_override` replaces the ledger's bytes, so a candidate ledger can be
+    checked in memory before anything is written."""
     books = Books(dir=books_dir, base=base)
     rels, problems = _text_files(books_dir)
     books.load_problems.extend(problems)
@@ -462,7 +472,14 @@ def load(books_dir: Path, base: Optional[str] = None) -> Books:
         else:
             books.texts[rel] = text
 
-    ledger, books.ledger_bytes, problem = _read(books_dir, LEDGER)
+    if ledger_override is None:
+        ledger, books.ledger_bytes, problem = _read(books_dir, LEDGER)
+    else:
+        books.ledger_bytes = ledger_override
+        ledger = _decode(ledger_override)
+        problem = Problem(LEDGER, 1, "binary file; the books hold text only") if ledger is None else None
+        if ledger is not None:
+            books.texts[LEDGER] = ledger
     if problem:
         books.load_problems.append(problem)
     else:
@@ -794,6 +811,342 @@ def run_checks(books: Books) -> List[Problem]:
     problems = [p for _, check in CHECKS for p in check(books)]
     return sorted(set(problems), key=lambda p: (p.path, p.line, p.message))
 
+# ---------------------------------------------------------------------------
+# append
+# ---------------------------------------------------------------------------
+
+class UsageError(Exception):
+    pass
+
+
+def _read_new_rows(path: Path) -> List[Dict[str, str]]:
+    """Rows of ROWS_CSV as full SCHEMA dicts; columns not in the file stay empty."""
+    try:
+        text = path.read_bytes().decode("utf-8-sig")
+    except (OSError, UnicodeDecodeError) as e:
+        raise UsageError(f"cannot read {path}: {getattr(e, 'strerror', None) or type(e).__name__}")
+    reader = csv.reader(io.StringIO(text, newline=""))
+    try:
+        header = next(reader, None)
+        if header is None:
+            raise UsageError(f"{path} is empty; it needs a header row with at least 'evidence'")
+        header = [h.strip() for h in header]
+        unknown = [h for h in header if h not in SCHEMA]
+        if unknown:
+            raise UsageError("unknown column(s) in the rows file: " + ", ".join(repr(h) for h in unknown)
+                             + "; allowed: " + ", ".join(SCHEMA))
+        if len(set(header)) != len(header):
+            raise UsageError("duplicate column in the rows file header")
+        if "evidence" not in header:
+            raise UsageError("the rows file needs an 'evidence' column")
+        out: List[Dict[str, str]] = []
+        for record in reader:
+            if not record:
+                continue
+            if len(record) != len(header):
+                raise UsageError(f"{path} line {reader.line_num}: {len(record)} values, header has {len(header)}")
+            cells = {k: "" for k in SCHEMA}
+            cells.update(zip(header, record))
+            cells["evidence"] = cells["evidence"].strip()
+            out.append(cells)
+    except csv.Error as e:
+        raise UsageError(f"unreadable CSV in {path}: {e}")
+    return out
+
+
+def _write_atomic(path: Path, data: bytes) -> None:
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".charges-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        shutil.copymode(str(path), tmp)
+        os.replace(tmp, str(path))
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def cmd_append(args: argparse.Namespace) -> int:
+    books_dir = Path(args.books_dir)
+    if not books_dir.is_dir():
+        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    try:
+        incoming = _read_new_rows(Path(args.rows_csv))
+    except UsageError as e:
+        print(f"books.py: {e}", file=sys.stderr)
+        return 2
+
+    books = load(books_dir)
+    before = run_checks(books)  # the books must be clean before and after
+    if before:
+        for p in before:
+            print(p)
+        print("refused, ledger unchanged")
+        return 1
+
+    seen = {r.cells["evidence"].strip() for r in books.rows}
+    fresh: List[Dict[str, str]] = []
+    skipped = 0
+    for cells in incoming:
+        if cells["evidence"] in seen:
+            skipped += 1
+        else:
+            seen.add(cells["evidence"])
+            fresh.append(cells)
+    if not fresh:
+        print(f"added 0, skipped {skipped} (evidence already in the ledger)")
+        return 0
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    for cells in fresh:
+        writer.writerow([cells[k] for k in SCHEMA])
+    old = books.ledger_bytes
+    candidate = old + (b"" if not old or old.endswith(b"\n") else b"\n") + buf.getvalue().encode("utf-8")
+
+    problems = run_checks(load(books_dir, ledger_override=candidate))
+    if problems:
+        for p in problems:
+            print(p)
+        print("refused, ledger unchanged")
+        return 1
+    _write_atomic(books_dir / LEDGER, candidate)
+    print(f"added {len(fresh)}, skipped {skipped} (evidence already in the ledger)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# summary
+# ---------------------------------------------------------------------------
+
+CENT = Decimal("0.01")
+MONTH_DAYS = Decimal("30.4375")
+RENEWAL_WINDOW_DAYS = 30
+
+
+def _q(d: Decimal) -> Decimal:
+    q = d.quantize(CENT, rounding=ROUND_HALF_UP)
+    return Decimal("0.00") if q == 0 else q  # no "-0.00"
+
+
+def _m(d: Decimal) -> str:
+    return str(_q(d))
+
+
+def _yaml_decimal(v: Any) -> Optional[Decimal]:
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return Decimal(str(v))
+    if isinstance(v, str) and _decimal(v.strip()):
+        return Decimal(v.strip())
+    return None
+
+
+def _add(totals: Dict[str, Decimal], key: str, amount: Decimal) -> None:
+    totals[key] = totals.get(key, Decimal(0)) + amount
+
+
+def _money_map(totals: Dict[str, Decimal]) -> Dict[str, str]:
+    return {k: _m(totals[k]) for k in sorted(totals)}
+
+
+def _month_bounds(month: str) -> Tuple[date, date]:
+    start = date(int(month[:4]), int(month[5:7]), 1)
+    nxt = date(start.year + (start.month == 12), start.month % 12 + 1, 1)
+    return start, nxt - timedelta(days=1)
+
+
+def _envelope(books: Books, spent: Decimal) -> Optional[Dict[str, Any]]:
+    budgets = books.yaml.get("budgets.yaml")
+    env = budgets.get("monthly_envelope") if isinstance(budgets, dict) else None
+    usd = _yaml_decimal(env.get("usd")) if isinstance(env, dict) else None
+    if usd is None:
+        return None
+    alerts = budgets.get("alerts")
+    warn = alerts.get("envelope_warning_pct") if isinstance(alerts, dict) else None
+    warn = warn if isinstance(warn, (int, float)) and not isinstance(warn, bool) else None
+    pct = spent / usd * 100 if usd > 0 else None
+    return {
+        "usd": _m(usd), "status": env.get("status"), "spent": _m(spent),
+        "pct": None if pct is None else str(pct.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)),
+        "warning_pct": warn,
+        "over_warning": bool(pct is not None and warn is not None and pct > Decimal(str(warn))),
+        "over_envelope": spent > usd,
+    }
+
+
+def _monthly_equivalent(books: Books, first: date, last: date) -> Dict[str, Any]:
+    """Run-rate for the month. A subscription renewed in the month has two rows covering it;
+    only the latest row per (provider, service) counts, so a monthly plan is not counted twice."""
+    latest: Dict[Tuple[str, str], Row] = {}
+    for r in books.rows:
+        c = r.cells
+        if c["charge_type"] != "subscription" or c["status"] != "verified":
+            continue
+        start = date.fromisoformat(c["period_start"])
+        end = date.fromisoformat(c["period_end"]) if c["period_end"] else None
+        if start > last or (end is not None and end < first):
+            continue
+        key = (c["provider"], c["service"])
+        rank = (c["period_start"], r.line)
+        if key not in latest or rank > (latest[key].cells["period_start"], latest[key].line):
+            latest[key] = r
+    total = Decimal(0)
+    lines: List[Dict[str, Any]] = []
+    for key in sorted(latest):
+        c = latest[key].cells
+        cost = Decimal(c["billed_cost"])
+        months = 1
+        if c["period_end"]:
+            days = (date.fromisoformat(c["period_end"]) - date.fromisoformat(c["period_start"])).days + 1
+            months = max(1, int((Decimal(days) / MONTH_DAYS).quantize(Decimal(1), rounding=ROUND_HALF_UP)))
+        monthly = cost / months
+        total += monthly
+        if months >= 2:
+            lines.append({"provider": c["provider"], "service": c["service"], "billed_cost": _m(cost),
+                          "period_start": c["period_start"], "period_end": c["period_end"],
+                          "months": months, "monthly": _m(monthly)})
+    return {"total": _m(total), "lines": lines}
+
+
+def _renewals(books: Books, as_of: date) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    doc = books.yaml.get("renewals.yaml")
+    entries = doc.get("renewals") if isinstance(doc, dict) else None
+    due: List[Tuple[date, Dict[str, Any]]] = []
+    undated: List[Dict[str, Any]] = []
+    for e in entries if isinstance(entries, list) else []:
+        if not isinstance(e, dict):
+            continue
+        nxt = e.get("next")
+        if not (isinstance(nxt, str) and _is_date(nxt)):  # null, or a value we cannot read as a date
+            undated.append({"vendor": e.get("vendor"), "plan": e.get("plan")})
+            continue
+        days = (date.fromisoformat(nxt) - as_of).days
+        if 0 <= days <= RENEWAL_WINDOW_DAYS:
+            amount = _yaml_decimal(e.get("amount_usd"))
+            due.append((date.fromisoformat(nxt), {
+                "vendor": e.get("vendor"), "plan": e.get("plan"),
+                "amount_usd": None if amount is None else _m(amount),
+                "cadence": e.get("cadence"), "next": nxt, "days": days}))
+    due.sort(key=lambda t: t[0])
+    return [d for _, d in due], undated
+
+
+def summarize(books: Books, month: str, as_of: date) -> Dict[str, Any]:
+    first, last = _month_bounds(month)
+    cash_total = Decimal(0)
+    by_provider: Dict[str, Decimal] = {}
+    by_project: Dict[str, Decimal] = {}
+    api_total = Decimal(0)
+    api_by_project: Dict[str, Decimal] = {}
+    cash_rows = 0
+    unknown: List[Dict[str, Any]] = []
+    for r in books.rows:
+        c = r.cells
+        in_month = c["charge_date"].startswith(month)
+        if c["status"] == "unknown":
+            unknown.append({"line": r.line, "charge_date": c["charge_date"], "provider": c["provider"],
+                            "service": c["service"], "evidence": c["evidence"]})
+        elif in_month and c["status"] == "verified" and c["charge_type"] != "usage-equivalent":
+            amount = Decimal(c["billed_cost"])
+            cash_total += amount
+            cash_rows += 1
+            _add(by_provider, c["provider"], amount)
+            _add(by_project, c["project"], amount)
+        if in_month and c["api_equivalent_cost"] != "":
+            api = Decimal(c["api_equivalent_cost"])
+            api_total += api
+            _add(api_by_project, c["project"], api)
+    renewals, undated = _renewals(books, as_of)
+    return {
+        "month": month, "as_of": as_of.isoformat(), "currency": "USD",
+        "cash": {"total": _m(cash_total), "by_provider": _money_map(by_provider),
+                 "by_project": _money_map(by_project), "rows": cash_rows},
+        "envelope": _envelope(books, cash_total),
+        "monthly_equivalent": _monthly_equivalent(books, first, last),
+        "renewals": renewals,
+        "renewals_undated": undated,
+        "unknown": unknown,
+        "api_equivalent": {"total": _m(api_total), "by_project": _money_map(api_by_project)},
+    }
+
+
+def render_summary(s: Dict[str, Any]) -> str:
+    out: List[str] = []
+    cash = s["cash"]
+    out.append(f"Cash for {s['month']}: ${cash['total']} ({cash['rows']} verified rows)")
+    out.append("  By provider:")
+    out.extend(f"    {k}: ${v}" for k, v in cash["by_provider"].items())
+    out.append("  By project:")
+    out.extend(f"    {k}: ${v}" for k, v in cash["by_project"].items())
+    out.append("")
+    e = s["envelope"]
+    if e is None:
+        out.append("Envelope: none set in budgets.yaml")
+    else:
+        pct = "n/a" if e["pct"] is None else e["pct"] + "%"
+        warn = "no warning level set" if e["warning_pct"] is None else f"warning at {e['warning_pct']}%"
+        flags = (", OVER WARNING" if e["over_warning"] else "") + (", OVER ENVELOPE" if e["over_envelope"] else "")
+        out.append(f"Envelope: ${e['spent']} of ${e['usd']} ({pct}), {warn}, status {e['status']}{flags}")
+    out.append("")
+    me = s["monthly_equivalent"]
+    out.append(f"Monthly equivalent (run-rate): ${me['total']} a month")
+    for ln in me["lines"]:
+        out.append(f"  {ln['provider']} {ln['service']}: ${ln['billed_cost']} over {ln['months']} months"
+                   f" = ${ln['monthly']} a month ({ln['period_start']} to {ln['period_end']})")
+    out.append("")
+    out.append(f"Renewals in the next {RENEWAL_WINDOW_DAYS} days (as of {s['as_of']}):")
+    if not s["renewals"]:
+        out.append("  none")
+    for r in s["renewals"]:
+        amount = "unknown amount" if r["amount_usd"] is None else f"${r['amount_usd']}"
+        out.append(f"  {r['next']} (in {r['days']} days): {r['vendor']} {r['plan']}, {amount}, {r['cadence']}")
+    for r in s["renewals_undated"]:
+        out.append(f"  no date: {r['vendor']} {r['plan']}")
+    out.append("")
+    out.append("Unknown amounts (open until resolved):")
+    if not s["unknown"]:
+        out.append("  none")
+    for u in s["unknown"]:
+        out.append(f"  ledger line {u['line']}: {u['charge_date']} {u['provider']} {u['service']} ({u['evidence']})")
+    out.append("")
+    api = s["api_equivalent"]
+    out.append(f"API-equivalent for {s['month']} (not cash): ${api['total']}")
+    out.extend(f"  {k}: ${v}" for k, v in api["by_project"].items())
+    return "\n".join(out)
+
+
+def cmd_summary(args: argparse.Namespace) -> int:
+    books_dir = Path(args.books_dir)
+    if not books_dir.is_dir():
+        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", args.month):
+        print(f"books.py: --month must look like 2026-10, got {args.month!r}", file=sys.stderr)
+        return 2
+    if args.as_of is None:
+        as_of = date.today()
+    elif _is_date(args.as_of):
+        as_of = date.fromisoformat(args.as_of)
+    else:
+        print(f"books.py: --as-of must look like 2026-10-31, got {args.as_of!r}", file=sys.stderr)
+        return 2
+    books = load(books_dir)
+    problems = run_checks(books)
+    if problems:
+        for p in problems:
+            print(p)
+        print(f"{len(problems)} problems; no summary from unchecked books")
+        return 1
+    result = summarize(books, args.month, as_of)
+    print(json.dumps(result, indent=2) if args.json else render_summary(result))
+    return 0
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -822,6 +1175,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     check.add_argument("books_dir", metavar="BOOKS_DIR")
     check.add_argument("--base", metavar="REF", help="fail if a ledger line at REF changed or was removed")
     check.set_defaults(func=cmd_check)
+    append = sub.add_parser("append", help="add ledger rows that are not already there, if the result passes check")
+    append.add_argument("books_dir", metavar="BOOKS_DIR")
+    append.add_argument("rows_csv", metavar="ROWS_CSV")
+    append.set_defaults(func=cmd_append)
+    summary = sub.add_parser("summary", help="report one month: cash, envelope, run-rate, renewals, unknowns")
+    summary.add_argument("books_dir", metavar="BOOKS_DIR")
+    summary.add_argument("--month", required=True, metavar="YYYY-MM")
+    summary.add_argument("--as-of", metavar="YYYY-MM-DD", help="today by default; fixes the renewals window")
+    summary.add_argument("--json", action="store_true")
+    summary.set_defaults(func=cmd_summary)
     args = parser.parse_args(argv)
     return args.func(args)
 
