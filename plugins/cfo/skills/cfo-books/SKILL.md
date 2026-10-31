@@ -30,6 +30,7 @@ Rules that always apply:
 - Never guess an amount. Leave `billed_cost` empty with `status: unknown` and add a question with your best guess.
 - Append to the ledger; never rewrite a past row. A correction is a new row with `charge_type: adjustment`.
 - Keep two numbers apart: **cash cost** (money that left the account) and **API-equivalent cost** (what the tokens would cost at metered API prices). On flat subscriptions they differ a lot; a product built on metered APIs turns the second into the first.
+- Numbers come only from `books.py summary BOOKS_DIR --month YYYY-MM --json`, and ledger writes only from `books.py append BOOKS_DIR ROWS_CSV`. Never add, average, total or round amounts by hand or in prose, and never write the ledger CSV by hand. Quote each number exactly as summary prints it. Run the script as `python3 <cfo-books skill dir>/scripts/books.py`; `cfo-books` is a sibling skill in this plugin, so look for its directory next to this skill's directory.
 <!-- END GENERATED: snippet:books -->
 
 ## Run it
@@ -48,6 +49,7 @@ Use `--base origin/main` (or any ref) on a branch or PR. Leave it off for a quic
 |---|---|
 | `header does not match the schema` | The first ledger line must be the 13 columns above, in order. |
 | a row field message | `charge_date` and `period_start` need `YYYY-MM-DD`; `period_end` is empty or a date on or after `period_start`; `charge_type`, `status` and `currency` take known values; `billed_cost` is empty exactly when `status` is `unknown`; `evidence` is never empty; `project` is a key in `projects.yaml` or `unassigned`. |
+| `questions.md` problem | Each question is `- **Q<n> (YYYY-MM-DD) <title>.** text`, under `## Open` or `## Answered`. Ids are unique across both sections. An answered one carries `**Answered YYYY-MM-DD:**`. An `Answer:` line under an Open question is fine; it means answered, not yet moved. |
 | `missing top-level key` or `unsupported YAML` | The YAML files use a small subset (block maps, lists, flow maps, quoted strings, `>-`). Rewrite the named line in that style. |
 | `forbidden content` | A card number (Luhn-valid, 13 to 19 digits), a 12-digit account ID, or a secret-shaped token. The message gives the kind, never the value. Remove it from the file. If it is already committed, tell the user, because history needs cleaning. A 12-digit receipt number is fine in the `evidence` column. |
 | `changed since REF` or `removed since REF` | A ledger line that exists at REF was edited or deleted. Restore it and add an `adjustment` row instead. |
