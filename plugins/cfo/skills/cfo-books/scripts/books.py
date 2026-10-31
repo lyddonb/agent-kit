@@ -926,24 +926,19 @@ def _write_atomic(path: Path, data: bytes) -> None:
         raise
 
 
-def cmd_append(args: argparse.Namespace) -> int:
-    books_dir = Path(args.books_dir)
-    if not books_dir.is_dir():
-        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
-        return 2
-    try:
-        incoming = _read_new_rows(Path(args.rows_csv))
-    except UsageError as e:
-        print(f"books.py: {e}", file=sys.stderr)
-        return 2
-
+def append_cells(books_dir: Path, incoming: List[Dict[str, str]],
+                 write: bool = True) -> Tuple[int, List[Dict[str, str]], int]:
+    """The one path that adds rows to the ledger: skip evidence already there, run the full check on
+    the ledger as it would be after the append, then write atomically. Returns (exit code, rows
+    added or that would be added, rows skipped). Prints the problems and "refused" itself.
+    `write=False` runs every step except the write."""
     books = load(books_dir)
     before = run_checks(books)  # the books must be clean before and after
     if before:
         for p in before:
             print(p)
         print("refused, ledger unchanged")
-        return 1
+        return 1, [], 0
 
     seen = {r.cells["evidence"].strip() for r in books.rows}
     fresh: List[Dict[str, str]] = []
@@ -955,8 +950,7 @@ def cmd_append(args: argparse.Namespace) -> int:
             seen.add(cells["evidence"])
             fresh.append(cells)
     if not fresh:
-        print(f"added 0, skipped {skipped} (evidence already in the ledger)")
-        return 0
+        return 0, [], skipped
 
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
@@ -970,10 +964,26 @@ def cmd_append(args: argparse.Namespace) -> int:
         for p in problems:
             print(p)
         print("refused, ledger unchanged")
-        return 1
-    _write_atomic(books_dir / LEDGER, candidate)
-    print(f"added {len(fresh)}, skipped {skipped} (evidence already in the ledger)")
-    return 0
+        return 1, [], skipped
+    if write:
+        _write_atomic(books_dir / LEDGER, candidate)
+    return 0, fresh, skipped
+
+
+def cmd_append(args: argparse.Namespace) -> int:
+    books_dir = Path(args.books_dir)
+    if not books_dir.is_dir():
+        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    try:
+        incoming = _read_new_rows(Path(args.rows_csv))
+    except UsageError as e:
+        print(f"books.py: {e}", file=sys.stderr)
+        return 2
+    code, fresh, skipped = append_cells(books_dir, incoming)
+    if code == 0:
+        print(f"added {len(fresh)}, skipped {skipped} (evidence already in the ledger)")
+    return code
 
 
 # ---------------------------------------------------------------------------
