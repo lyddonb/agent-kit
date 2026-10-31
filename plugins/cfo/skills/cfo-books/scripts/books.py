@@ -796,6 +796,62 @@ def check_history(books: Books) -> Iterator[Problem]:
                 new_left = int(m.group(3)) if m.group(3) is not None else 1
 
 
+QUESTIONS = "questions.md"
+_QUESTION = re.compile(r"- \*\*Q(\d+) \((\d{4}-\d{2}-\d{2})\) [^*]*[^*\s]\.\*\*(?: |$)")
+_ANSWERED = re.compile(r"\*\*Answered (\d{4}-\d{2}-\d{2}):\*\*")
+
+
+def _valid_date(text: str) -> bool:
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def check_questions(books: Books) -> Iterator[Problem]:
+    text = books.texts.get(QUESTIONS)
+    if text is None:
+        yield Problem(QUESTIONS, 1, "missing; the CFO keeps its open and answered questions here")
+        return
+    lines = text.splitlines()
+    headings = {ln.strip(): n for n, ln in enumerate(lines, 1) if ln.startswith("## ")}
+    for name in ("## Open", "## Answered"):
+        if name not in headings:
+            yield Problem(QUESTIONS, 1, f"missing heading '{name}'")
+    section: Optional[str] = None
+    seen: Dict[str, int] = {}
+    bullets: List[Tuple[int, str, str]] = []  # (line, section, text incl. continuation lines)
+    for n, ln in enumerate(lines, 1):
+        if ln.startswith("## "):
+            section = ln.strip()[3:]
+        elif ln.startswith("- **Q"):
+            bullets.append((n, section or "", ln))
+        elif bullets and ln.startswith((" ", "\t")) and ln.strip():
+            first = bullets[-1]
+            bullets[-1] = (first[0], first[1], first[2] + " " + ln.strip())
+    for n, sec, bullet in bullets:
+        m = _QUESTION.match(bullet)
+        if not m:
+            yield Problem(QUESTIONS, n, "question must start '- **Q<n> (YYYY-MM-DD) <title>.**' then the question text")
+            continue
+        if not _valid_date(m.group(2)):
+            yield Problem(QUESTIONS, n, f"{m.group(2)} is not a real date")
+        qid = "Q" + m.group(1)
+        if qid in seen:
+            yield Problem(QUESTIONS, n, f"{qid} is already used on line {seen[qid]}; ids are unique across Open and Answered")
+        else:
+            seen[qid] = n
+        if sec == "Answered":
+            a = _ANSWERED.search(bullet)
+            if not a:
+                yield Problem(QUESTIONS, n, f"{qid} is under Answered but has no '**Answered YYYY-MM-DD:**'")
+            elif not _valid_date(a.group(1)):
+                yield Problem(QUESTIONS, n, f"{a.group(1)} is not a real date")
+        elif sec != "Open":
+            yield Problem(QUESTIONS, n, f"{qid} is not under '## Open' or '## Answered'")
+
+
 CHECKS: Tuple[Tuple[str, Check], ...] = (
     ("load", check_load),
     ("header", check_header),
@@ -804,6 +860,7 @@ CHECKS: Tuple[Tuple[str, Check], ...] = (
     ("forbidden", check_forbidden),
     ("append-only", check_append_only),
     ("history", check_history),
+    ("questions", check_questions),
 )
 
 

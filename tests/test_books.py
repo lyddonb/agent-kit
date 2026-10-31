@@ -34,6 +34,10 @@ class Case(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+    def write_q(self, text):
+        # junk to probe the content checks, followed by the headings the questions check needs
+        self.write("questions.md", text + "\n## Open\n\n## Answered\n")
+
     def append_row(self, **overrides):
         cells = dict(zip(FIELDS, GOOD_ROW.split(",")))
         cells.update(overrides)
@@ -257,19 +261,19 @@ class AccountIdTest(Case):
         self.assertClean()
 
     def test_12_digits_elsewhere_flagged(self):
-        self.write("questions.md", "ok\nAccount 123456789012 is ours\n")
+        self.write_q("ok\nAccount 123456789012 is ours\n")
         self.assertFlags("questions.md", 2, "account ID")
 
     def test_dashed_without_hash_flagged(self):
-        self.write("questions.md", "Account 1234-5678-9012 here\n")
+        self.write_q("Account 1234-5678-9012 here\n")
         self.assertFlags("questions.md", 1, "account ID")
 
     def test_dashed_with_hash_not_flagged(self):
-        self.write("questions.md", "Receipt #1234-5678-9012 here\n")
+        self.write_q("Receipt #1234-5678-9012 here\n")
         self.assertClean()
 
     def test_longer_runs_not_flagged_as_account(self):
-        self.write("questions.md", "ticket 1234567890123 and 12345678901\n")
+        self.write_q("ticket 1234567890123 and 12345678901\n")
         self.assertClean()
 
 
@@ -290,7 +294,7 @@ class SecretTest(Case):
     def test_each_prefix_flagged_at_full_length(self):
         for label, token in self.planted().items():
             with self.subTest(label):
-                self.write("questions.md", f"x\nkey {token} end\n")
+                self.write_q(f"x\nkey {token} end\n")
                 self.assertFlags("questions.md", 2, "secret")
                 self.assertFalse(any(token in p for p in self.problems()))
 
@@ -298,15 +302,15 @@ class SecretTest(Case):
         for token in ("AKIA" + "ABCDEFGHIJKLMNO", "ghp_" + self.BODY[:35], "xoxb-12345", "sk-short",
                       "AIza" + self.BODY[:34]):
             with self.subTest(token):
-                self.write("questions.md", f"key {token} end\n")
+                self.write_q(f"key {token} end\n")
                 self.assertClean()
 
     def test_bare_prefix_in_prose_not_flagged(self):
-        self.write("questions.md", "A key starting with sk-ant- or AKIA, ghp_, github_pat_, xoxb- or AIza.\n")
+        self.write_q("A key starting with sk-ant- or AKIA, ghp_, github_pat_, xoxb- or AIza.\n")
         self.assertClean()
 
     def test_word_boundary(self):
-        self.write("questions.md", "the task-" + "a" * 30 + " thing\n")
+        self.write_q("the task-" + "a" * 30 + " thing\n")
         self.assertClean()
 
 
@@ -450,7 +454,7 @@ class HistoryTest(Case):
         self.assertClean()  # no --base, no history scan
 
     def test_clean_history_is_fine(self):
-        self.commit_text("questions.md", "fine\n")
+        self.commit_text("questions.md", "fine\n\n## Open\n\n## Answered\n")
         self.assertClean("HEAD~1")
 
     def test_empty_range_is_fine(self):
@@ -505,11 +509,11 @@ class YamlStrictTest(unittest.TestCase):
 
 class AccountHardeningTest(Case):
     def flagged(self, text, kind="account ID"):
-        self.write("questions.md", text + "\n")
+        self.write_q(text + "\n")
         self.assertFlags("questions.md", 1, kind)
 
     def clean(self, text):
-        self.write("questions.md", text + "\n")
+        self.write_q(text + "\n")
         self.assertClean()
 
     def test_space_grouped(self):
@@ -554,7 +558,7 @@ class CliTest(Case):
         self.assertEqual((r.returncode, r.stdout), (0, "ok, 3 rows, 0 problems\n"))
 
     def test_problems_sorted_with_count(self):
-        self.write("questions.md", "4242424242424242\n")
+        self.write_q("4242424242424242\n")
         line = self.append_row(status="maybe")
         r = self.run_cli("check", str(self.dir))
         out = r.stdout.splitlines()
