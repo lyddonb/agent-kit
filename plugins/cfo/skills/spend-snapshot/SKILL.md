@@ -30,7 +30,7 @@ Rules that always apply:
 - Never guess an amount. Leave `billed_cost` empty with `status: unknown` and add a question with your best guess.
 - Append to the ledger; never rewrite a past row. A correction is a new row with `charge_type: adjustment`.
 - Keep two numbers apart: **cash cost** (money that left the account) and **API-equivalent cost** (what the tokens would cost at metered API prices). On flat subscriptions they differ a lot; a product built on metered APIs turns the second into the first.
-- Numbers come only from `books.py summary BOOKS_DIR --month YYYY-MM --json`, and ledger writes only from `books.py append BOOKS_DIR ROWS_CSV`. Never add, average, total or round amounts by hand or in prose, and never write the ledger CSV by hand. Quote each number exactly as summary prints it. Run the script as `python3 <cfo-books skill dir>/scripts/books.py`; `cfo-books` is a sibling skill in this plugin, so look for its directory next to this skill's directory.
+- Numbers come only from `books.py summary BOOKS_DIR --month YYYY-MM --json`, and ledger writes only from `books.py append BOOKS_DIR ROWS_CSV`. Never add, average, total or round amounts by hand or in prose, and never write the ledger CSV by hand. Quote each number exactly as summary prints it. Run the script with `uv run --python 3.12 <cfo-books skill dir>/scripts/books.py` (or with any Python 3.10 or later if uv is not installed); `cfo-books` is a sibling skill in this plugin, so look for its directory next to this skill's directory.
 <!-- END GENERATED: snippet:books -->
 
 ## Steps

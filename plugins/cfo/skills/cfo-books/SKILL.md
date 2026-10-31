@@ -30,16 +30,16 @@ Rules that always apply:
 - Never guess an amount. Leave `billed_cost` empty with `status: unknown` and add a question with your best guess.
 - Append to the ledger; never rewrite a past row. A correction is a new row with `charge_type: adjustment`.
 - Keep two numbers apart: **cash cost** (money that left the account) and **API-equivalent cost** (what the tokens would cost at metered API prices). On flat subscriptions they differ a lot; a product built on metered APIs turns the second into the first.
-- Numbers come only from `books.py summary BOOKS_DIR --month YYYY-MM --json`, and ledger writes only from `books.py append BOOKS_DIR ROWS_CSV`. Never add, average, total or round amounts by hand or in prose, and never write the ledger CSV by hand. Quote each number exactly as summary prints it. Run the script as `python3 <cfo-books skill dir>/scripts/books.py`; `cfo-books` is a sibling skill in this plugin, so look for its directory next to this skill's directory.
+- Numbers come only from `books.py summary BOOKS_DIR --month YYYY-MM --json`, and ledger writes only from `books.py append BOOKS_DIR ROWS_CSV`. Never add, average, total or round amounts by hand or in prose, and never write the ledger CSV by hand. Quote each number exactly as summary prints it. Run the script with `uv run --python 3.12 <cfo-books skill dir>/scripts/books.py` (or with any Python 3.10 or later if uv is not installed); `cfo-books` is a sibling skill in this plugin, so look for its directory next to this skill's directory.
 <!-- END GENERATED: snippet:books -->
 
 ## Run it
 
 ```sh
-python3 <skill dir>/scripts/books.py check BOOKS_DIR [--base REF]
+uv run --python 3.12 <skill dir>/scripts/books.py check BOOKS_DIR [--base REF]
 ```
 
-It needs only Python 3.9 or later. Each problem prints as `path:line: message`, with the path relative to `BOOKS_DIR`. The last line is `ok, N rows, 0 problems` (exit 0) or `N problems` (exit 1). A missing directory or bad arguments exit 2.
+It needs Python 3.10 or later and the standard library only. Run it through uv; any Python 3.10+ works if uv is not installed. Each problem prints as `path:line: message`, with the path relative to `BOOKS_DIR`. The last line is `ok, N rows, 0 problems` (exit 0) or `N problems` (exit 1). A missing directory or bad arguments exit 2.
 
 Stale pricing prints `path:line: warning: ...` lines and a trailing `, 1 warning`; warnings never change the exit code.
 
@@ -59,7 +59,7 @@ Use `--base origin/main` (or any ref) on a branch or PR. Leave it off for a quic
 ## Append rows
 
 ```sh
-python3 <skill dir>/scripts/books.py append BOOKS_DIR ROWS_CSV
+uv run --python 3.12 <skill dir>/scripts/books.py append BOOKS_DIR ROWS_CSV
 ```
 
 `ROWS_CSV` has a header with any of the 13 ledger columns in any order, and at least `evidence`. A column you leave out stays empty; nothing is filled in for you. An unknown column is an error (exit 2).
@@ -69,7 +69,7 @@ A row whose `evidence` is already in the ledger, or repeats an earlier row in `R
 ## Summarize a month
 
 ```sh
-python3 <skill dir>/scripts/books.py summary BOOKS_DIR --month YYYY-MM [--as-of YYYY-MM-DD] [--json]
+uv run --python 3.12 <skill dir>/scripts/books.py summary BOOKS_DIR --month YYYY-MM [--as-of YYYY-MM-DD] [--json]
 ```
 
 It runs the checks first and prints the problems (exit 1) instead of numbers if the books are not clean. `--as-of` defaults to today and sets the renewals window, so briefs and tests are repeatable. Text output has sections in this order: Cash, Envelope, Monthly equivalent, Renewals, Unknown amounts, API-equivalent.
@@ -98,10 +98,10 @@ api_equivalent: total, by_project{}
 ## Price Claude Code usage
 
 ```sh
-python3 <skill dir>/scripts/books.py claude-code BOOKS_DIR --since YYYY-MM-DD [--until YYYY-MM-DD] [--logs DIR] [--dry-run] [--json]
+uv run --python 3.12 <skill dir>/scripts/books.py claude-code BOOKS_DIR --since YYYY-MM-DD [--until YYYY-MM-DD] [--logs DIR] [--dry-run] [--json]
 ```
 
-Runs only on the machine that holds the Claude Code session logs (`~/.claude/projects`, read recursively), so never in the scheduled cloud run. Python 3.9, standard library only. Run `--dry-run` first.
+Runs only on the machine that holds the Claude Code session logs (`~/.claude/projects`, read recursively), so never in the scheduled cloud run. Python 3.10 or later, standard library only, run through uv. Run `--dry-run` first.
 
 - It reads token counts, model, timestamp and working directory from assistant lines and nothing else. No prompt, message or tool text is read, printed or stored.
 - Whole ISO weeks only (Monday to Sunday, UTC). `--since` rounds down to its Monday. A week is written only once its Sunday is before `--until` (today by default), so a week is never partial.

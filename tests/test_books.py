@@ -15,7 +15,6 @@ FIXTURE = ROOT / "tests/fixtures/books"
 
 spec = importlib.util.spec_from_file_location("books", SCRIPT)
 books = importlib.util.module_from_spec(spec)
-sys.modules["books"] = books  # dataclasses look the module up by name
 spec.loader.exec_module(books)
 
 GOOD_ROW = "2026-03-01,2026-03-01,2026-03-31,Acme Cloud,Pro plan,subscription,20.00,USD,,shared,verified,gmail-receipt,Acme receipt #1000-2000-3001"
