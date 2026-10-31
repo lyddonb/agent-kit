@@ -1,0 +1,9 @@
+{
+  "source": "https://example.test/pricing",
+  "as_of": "2026-10-01",
+  "unit": "USD per million tokens",
+  "models": {
+    "model-a": {"input": "10", "output": "20", "cache_write_5m": "12.5", "cache_write_1h": "20", "cache_read": "1", "fast_multiplier": "2"},
+    "model-b": {"input": "2", "output": "8", "cache_write_5m": "2.5", "cache_write_1h": "4", "cache_read": "0.2"}
+  }
+}

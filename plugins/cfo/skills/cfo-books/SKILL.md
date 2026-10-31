@@ -7,7 +7,7 @@ metadata:
   version: "0.1.0"
 ---
 
-# CFO books: check, append, summary
+# CFO books: check, append, summary, claude-code
 
 Run the checker before you commit anything to the books. The other cfo skills do this before they commit.
 
@@ -39,6 +39,8 @@ python3 <skill dir>/scripts/books.py check BOOKS_DIR [--base REF]
 ```
 
 It needs only Python 3.9 or later. Each problem prints as `path:line: message`, with the path relative to `BOOKS_DIR`. The last line is `ok, N rows, 0 problems` (exit 0) or `N problems` (exit 1). A missing directory or bad arguments exit 2.
+
+Stale pricing prints `path:line: warning: ...` lines and a trailing `, 1 warning`; warnings never change the exit code.
 
 Use `--base origin/main` (or any ref) on a branch or PR. Leave it off for a quick local check.
 
@@ -90,3 +92,19 @@ renewals_undated[{vendor, plan}]
 unknown[{line, charge_date, provider, service, evidence}]
 api_equivalent: total, by_project{}
 ```
+
+## Price Claude Code usage
+
+```sh
+python3 <skill dir>/scripts/books.py claude-code BOOKS_DIR --since YYYY-MM-DD [--until YYYY-MM-DD] [--logs DIR] [--dry-run] [--json]
+```
+
+Runs only on the machine that holds the Claude Code session logs (`~/.claude/projects`, read recursively), so never in the scheduled cloud run. Python 3.9, standard library only. Run `--dry-run` first.
+
+- It reads token counts, model, timestamp and working directory from assistant lines and nothing else. No prompt, message or tool text is read, printed or stored.
+- Whole ISO weeks only (Monday to Sunday, UTC). `--since` rounds down to its Monday. A week is written only once its Sunday is before `--until` (today by default), so a week is never partial.
+- One `usage-equivalent` row per project per week: `billed_cost` 0, `api_equivalent_cost` priced from `scripts/pricing.json`, evidence `claude-code:2026-W43:project`. Rows go through the same path as `append`, so a rerun adds nothing and the full check runs first.
+- A session's working directory maps to the project whose `paths:` entry (in `projects.yaml`, `~` allowed) is its longest directory prefix; no match is `unassigned`. Add `paths: [~/code/x]` to a project to claim its sessions.
+- A model missing from `pricing.json` is never guessed. The output lists its tokens as unpriced and leaves its cost out of every total. Add it to the table with the price from the source URL.
+- The output states the weeks, messages counted after dedupe, duplicates dropped, unpriced models, message speeds and the pricing date. Fast-mode messages get a model's `fast_multiplier` when the table has one; otherwise they are priced at standard rates and counted.
+- `pricing.json` carries its `source` and `as_of`. `check` warns when `as_of` is more than 90 days old. Refresh the table from the source, then update `as_of`.
