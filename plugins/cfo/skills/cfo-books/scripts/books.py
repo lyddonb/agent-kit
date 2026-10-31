@@ -2,21 +2,27 @@
 """Check the CFO's books (the private repo that holds the ledger, projects, budgets and renewals).
 
 Usage:
-    python3 books.py check BOOKS_DIR [--base REF]
-    python3 books.py append BOOKS_DIR ROWS_CSV
-    python3 books.py summary BOOKS_DIR --month YYYY-MM [--as-of YYYY-MM-DD] [--json]
+    uv run --python 3.12 books.py check BOOKS_DIR [--base REF]
+    uv run --python 3.12 books.py append BOOKS_DIR ROWS_CSV
+    uv run --python 3.12 books.py summary BOOKS_DIR --month YYYY-MM [--as-of YYYY-MM-DD] [--json]
 
 `check` prints one `path:line: message` line per problem (path relative to BOOKS_DIR), then
 `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when there are problems,
 2 on bad usage. `append` adds rows to the ledger only if the whole result passes every check.
 `summary` reports one month, and only for books that pass the checks. Standard library only;
-runs on Python 3.9.
+needs Python 3.10 or later (run it through uv).
 
 Shape: `Books` is loaded once (CSV rows with line numbers, parsed YAML, text of every
 tracked file). Each entry in `CHECKS` takes a `Books` and yields `Problem`s. A new check is a
 new entry in that registry.
 """
-from __future__ import annotations
+import sys
+
+if sys.version_info < (3, 10):
+    sys.stderr.write(
+        f"books.py needs Python 3.10 or later (this is {sys.version_info[0]}.{sys.version_info[1]}). "
+        "Run it with: uv run --python 3.12 <path to books.py> ...\n")
+    raise SystemExit(2)
 
 import argparse
 import csv
@@ -26,13 +32,13 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any
 
 SCHEMA = ("charge_date", "period_start", "period_end", "provider", "service", "charge_type",
           "billed_cost", "currency", "api_equivalent_cost", "project", "status", "source",
@@ -63,19 +69,19 @@ class Problem:
 class Row:
     line: int
     end_line: int
-    cells: Dict[str, str]
+    cells: dict[str, str]
 
 
 @dataclass
 class Books:
     dir: Path
-    base: Optional[str]
-    header: Optional[List[str]] = None
-    rows: List[Row] = field(default_factory=list)
-    yaml: Dict[str, Any] = field(default_factory=dict)  # file name -> parsed value; absent if load reported it
+    base: str | None
+    header: list[str] | None = None
+    rows: list[Row] = field(default_factory=list)
+    yaml: dict[str, Any] = field(default_factory=dict)  # file name -> parsed value; absent if load reported it
     ledger_bytes: bytes = b""
-    texts: Dict[str, str] = field(default_factory=dict)  # relative path -> text of each text file
-    load_problems: List[Problem] = field(default_factory=list)
+    texts: dict[str, str] = field(default_factory=dict)  # relative path -> text of each text file
+    load_problems: list[Problem] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -131,10 +137,10 @@ def _plain(text: str, n: int) -> Any:
     return text
 
 
-def _quoted(text: str, start: int, n: int) -> Tuple[str, int]:
+def _quoted(text: str, start: int, n: int) -> tuple[str, int]:
     """Parse a quoted string at text[start]; return (value, index after the closing quote)."""
     q = text[start]
-    out: List[str] = []
+    out: list[str] = []
     i = start + 1
     while i < len(text):
         ch = text[i]
@@ -183,9 +189,9 @@ class _Flow:
             self.i += 1
         return _plain(self.s[start:self.i].strip(), self.n)
 
-    def sequence(self) -> List[Any]:
+    def sequence(self) -> list[Any]:
         self.i += 1
-        out: List[Any] = []
+        out: list[Any] = []
         while True:
             self.ws()
             if self.i >= len(self.s):
@@ -211,9 +217,9 @@ class _Flow:
         elif self.s[self.i] != closer:
             raise YamlError(self.n, f"unsupported YAML: expected ',' or '{closer}' in a flow collection")
 
-    def mapping(self) -> Dict[str, Any]:
+    def mapping(self) -> dict[str, Any]:
         self.i += 1
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         while True:
             self.ws()
             if self.i >= len(self.s):
@@ -261,7 +267,7 @@ def _inline(text: str, n: int) -> Any:
     return _plain(text, n)
 
 
-def _split_key(text: str) -> Optional[Tuple[str, str]]:
+def _split_key(text: str) -> tuple[str, str] | None:
     """Split `key: rest` (rest may be empty). None when the text is not a mapping entry."""
     if text[:1] in ("\"", "'"):
         try:
@@ -285,7 +291,7 @@ def _is_seq(text: str) -> bool:
 class _Yaml:
     def __init__(self, text: str):
         self.raw = text.splitlines()
-        self.entries: List[Tuple[int, int, str]] = []  # (line number, indent, stripped content)
+        self.entries: list[tuple[int, int, str]] = []  # (line number, indent, stripped content)
         for n, line in enumerate(self.raw, 1):
             content = _strip_comment(line).rstrip()
             if not content.strip():
@@ -314,8 +320,8 @@ class _Yaml:
     def peek_deeper(self, indent: int) -> bool:
         return self.pos < len(self.entries) and self.entries[self.pos][1] > indent
 
-    def map(self, indent: int) -> Dict[str, Any]:
-        out: Dict[str, Any] = {}
+    def map(self, indent: int) -> dict[str, Any]:
+        out: dict[str, Any] = {}
         while self.pos < len(self.entries):
             n, ind, text = self.entries[self.pos]
             if ind != indent or _is_seq(text):
@@ -342,8 +348,8 @@ class _Yaml:
         self.reject_leftover(indent)
         return out
 
-    def seq(self, indent: int) -> List[Any]:
-        out: List[Any] = []
+    def seq(self, indent: int) -> list[Any]:
+        out: list[Any] = []
         while self.pos < len(self.entries):
             n, ind, text = self.entries[self.pos]
             if ind != indent or not _is_seq(text):
@@ -373,7 +379,7 @@ class _Yaml:
                 raise YamlError(n, "unsupported YAML: list item and mapping key at the same level")
 
     def block_scalar(self, n: int, key_indent: int, style: str) -> str:
-        content: List[str] = []
+        content: list[str] = []
         first_indent = None
         last = n
         blank_seen = False
@@ -412,9 +418,9 @@ def _git(books_dir: Path, *args: str) -> "subprocess.CompletedProcess[bytes]":
     return subprocess.run(["git", "-C", str(books_dir)] + list(args), capture_output=True)
 
 
-def _text_files(books_dir: Path) -> Tuple[List[str], List[Problem]]:
-    rels: List[str] = []
-    problems: List[Problem] = []
+def _text_files(books_dir: Path) -> tuple[list[str], list[Problem]]:
+    rels: list[str] = []
+    problems: list[Problem] = []
     try:
         inside = _git(books_dir, "rev-parse", "--is-inside-work-tree")
     except OSError:
@@ -434,7 +440,7 @@ def _text_files(books_dir: Path) -> Tuple[List[str], List[Problem]]:
     return sorted(set(rels)), problems
 
 
-def _decode(data: bytes) -> Optional[str]:
+def _decode(data: bytes) -> str | None:
     """Text of a file, or None when it is binary. UTF-16 and UTF-8 files with a BOM are text."""
     if data.startswith((b"\xff\xfe", b"\xfe\xff")):
         return data.decode("utf-16", "replace")
@@ -443,7 +449,7 @@ def _decode(data: bytes) -> Optional[str]:
     return data.decode("utf-8-sig", "replace")
 
 
-def _read(books_dir: Path, rel: str) -> Tuple[Optional[str], bytes, Optional[Problem]]:
+def _read(books_dir: Path, rel: str) -> tuple[str | None, bytes, Problem | None]:
     """(text, raw bytes, problem). Exactly one of text and problem is set."""
     try:
         data = (books_dir / rel).read_bytes()
@@ -457,7 +463,7 @@ def _read(books_dir: Path, rel: str) -> Tuple[Optional[str], bytes, Optional[Pro
     return text, data, None
 
 
-def load(books_dir: Path, base: Optional[str] = None, ledger_override: Optional[bytes] = None) -> Books:
+def load(books_dir: Path, base: str | None = None, ledger_override: bytes | None = None) -> Books:
     """Load the books. `ledger_override` replaces the ledger's bytes, so a candidate ledger can be
     checked in memory before anything is written."""
     books = Books(dir=books_dir, base=base)
@@ -662,10 +668,10 @@ def _account_ids(text: str) -> bool:
     return False
 
 
-def scan_line(text: str, account_text: Optional[str] = None) -> List[str]:
+def scan_line(text: str, account_text: str | None = None) -> list[str]:
     """Return what kinds of forbidden content `text` holds. `account_text` is the part of the
     line the 12-digit rule applies to (default: all of it). Never returns the matched text."""
-    found: List[str] = []
+    found: list[str] = []
     for pat in (_CARD_RUN, _CARD_4444, _CARD_465):
         for m in pat.finditer(text):
             digits = re.sub(r"\D", "", m.group(0))
@@ -687,7 +693,7 @@ def scan_line(text: str, account_text: Optional[str] = None) -> List[str]:
     return found
 
 
-def _ledger_account_text(line: str) -> Optional[str]:
+def _ledger_account_text(line: str) -> str | None:
     """For a ledger line that parses as a row, the line without its evidence cell."""
     try:
         cells = next(csv.reader([line]))
@@ -710,7 +716,7 @@ def check_forbidden(books: Books) -> Iterator[Problem]:
                 yield Problem(rel, n, f"forbidden content: {kind}")
 
 
-def _base_problem(books: Books) -> Optional[Problem]:
+def _base_problem(books: Books) -> Problem | None:
     ref = books.base
     try:
         if _git(books.dir, "rev-parse", "--verify", "--quiet", ref + "^{commit}").returncode != 0:
@@ -720,7 +726,7 @@ def _base_problem(books: Books) -> Optional[Problem]:
     return None
 
 
-def _lines(data: bytes) -> List[bytes]:
+def _lines(data: bytes) -> list[bytes]:
     parts = data.split(b"\n")
     if parts and parts[-1] == b"":
         parts.pop()
@@ -824,9 +830,9 @@ def check_questions(books: Books) -> Iterator[Problem]:
     for name in ("## Open", "## Answered"):
         if name not in headings:
             yield Problem(QUESTIONS, 1, f"missing heading '{name}'")
-    section: Optional[str] = None
-    seen: Dict[str, int] = {}
-    bullets: List[Tuple[int, str, str]] = []  # (line, section, text incl. continuation lines)
+    section: str | None = None
+    seen: dict[str, int] = {}
+    bullets: list[tuple[int, str, str]] = []  # (line, section, text incl. continuation lines)
     for n, ln in enumerate(lines, 1):
         if ln.startswith("## "):
             section = ln.strip()[3:]
@@ -857,7 +863,7 @@ def check_questions(books: Books) -> Iterator[Problem]:
             yield Problem(QUESTIONS, n, f"{qid} is not under '## Open' or '## Answered'")
 
 
-CHECKS: Tuple[Tuple[str, Check], ...] = (
+CHECKS: tuple[tuple[str, Check], ...] = (
     ("load", check_load),
     ("header", check_header),
     ("rows", check_rows),
@@ -901,17 +907,17 @@ def warn_pricing_age(books: Books, today: date) -> Iterator[Warn]:
 
 
 WarnCheck = Callable[[Books, date], Iterable[Warn]]
-WARNINGS: Tuple[Tuple[str, WarnCheck], ...] = (
+WARNINGS: tuple[tuple[str, WarnCheck], ...] = (
     ("pricing-age", warn_pricing_age),
 )
 
 
-def run_warnings(books: Books, today: date) -> List[Warn]:
+def run_warnings(books: Books, today: date) -> list[Warn]:
     return sorted({w for _, check in WARNINGS for w in check(books, today)},
                   key=lambda w: (w.path, w.line, w.message))
 
 
-def run_checks(books: Books) -> List[Problem]:
+def run_checks(books: Books) -> list[Problem]:
     problems = [p for _, check in CHECKS for p in check(books)]
     return sorted(set(problems), key=lambda p: (p.path, p.line, p.message))
 
@@ -923,7 +929,7 @@ class UsageError(Exception):
     pass
 
 
-def _read_new_rows(path: Path) -> List[Dict[str, str]]:
+def _read_new_rows(path: Path) -> list[dict[str, str]]:
     """Rows of ROWS_CSV as full SCHEMA dicts; columns not in the file stay empty."""
     try:
         text = path.read_bytes().decode("utf-8-sig")
@@ -943,7 +949,7 @@ def _read_new_rows(path: Path) -> List[Dict[str, str]]:
             raise UsageError("duplicate column in the rows file header")
         if "evidence" not in header:
             raise UsageError("the rows file needs an 'evidence' column")
-        out: List[Dict[str, str]] = []
+        out: list[dict[str, str]] = []
         for record in reader:
             if not record:
                 continue
@@ -973,8 +979,8 @@ def _write_atomic(path: Path, data: bytes) -> None:
         raise
 
 
-def append_cells(books_dir: Path, incoming: List[Dict[str, str]],
-                 write: bool = True) -> Tuple[int, List[Dict[str, str]], int]:
+def append_cells(books_dir: Path, incoming: list[dict[str, str]],
+                 write: bool = True) -> tuple[int, list[dict[str, str]], int]:
     """The one path that adds rows to the ledger: skip evidence already there, run the full check on
     the ledger as it would be after the append, then write atomically. Returns (exit code, rows
     added or that would be added, rows skipped). Prints the problems and "refused" itself.
@@ -988,7 +994,7 @@ def append_cells(books_dir: Path, incoming: List[Dict[str, str]],
         return 1, [], 0
 
     seen = {r.cells["evidence"].strip() for r in books.rows}
-    fresh: List[Dict[str, str]] = []
+    fresh: list[dict[str, str]] = []
     skipped = 0
     for cells in incoming:
         if cells["evidence"] in seen:
@@ -1051,7 +1057,7 @@ def _m(d: Decimal) -> str:
     return str(_q(d))
 
 
-def _yaml_decimal(v: Any) -> Optional[Decimal]:
+def _yaml_decimal(v: Any) -> Decimal | None:
     if isinstance(v, bool) or v is None:
         return None
     if isinstance(v, (int, float)):
@@ -1061,21 +1067,21 @@ def _yaml_decimal(v: Any) -> Optional[Decimal]:
     return None
 
 
-def _add(totals: Dict[str, Decimal], key: str, amount: Decimal) -> None:
+def _add(totals: dict[str, Decimal], key: str, amount: Decimal) -> None:
     totals[key] = totals.get(key, Decimal(0)) + amount
 
 
-def _money_map(totals: Dict[str, Decimal]) -> Dict[str, str]:
+def _money_map(totals: dict[str, Decimal]) -> dict[str, str]:
     return {k: _m(totals[k]) for k in sorted(totals)}
 
 
-def _month_bounds(month: str) -> Tuple[date, date]:
+def _month_bounds(month: str) -> tuple[date, date]:
     start = date(int(month[:4]), int(month[5:7]), 1)
     nxt = date(start.year + (start.month == 12), start.month % 12 + 1, 1)
     return start, nxt - timedelta(days=1)
 
 
-def _envelope(books: Books, spent: Decimal) -> Optional[Dict[str, Any]]:
+def _envelope(books: Books, spent: Decimal) -> dict[str, Any] | None:
     budgets = books.yaml.get("budgets.yaml")
     env = budgets.get("monthly_envelope") if isinstance(budgets, dict) else None
     usd = _yaml_decimal(env.get("usd")) if isinstance(env, dict) else None
@@ -1094,10 +1100,10 @@ def _envelope(books: Books, spent: Decimal) -> Optional[Dict[str, Any]]:
     }
 
 
-def _monthly_equivalent(books: Books, first: date, last: date) -> Dict[str, Any]:
+def _monthly_equivalent(books: Books, first: date, last: date) -> dict[str, Any]:
     """Run-rate for the month. A subscription renewed in the month has two rows covering it;
     only the latest row per (provider, service) counts, so a monthly plan is not counted twice."""
-    latest: Dict[Tuple[str, str], Row] = {}
+    latest: dict[tuple[str, str], Row] = {}
     for r in books.rows:
         c = r.cells
         if c["charge_type"] != "subscription" or c["status"] != "verified":
@@ -1111,7 +1117,7 @@ def _monthly_equivalent(books: Books, first: date, last: date) -> Dict[str, Any]
         if key not in latest or rank > (latest[key].cells["period_start"], latest[key].line):
             latest[key] = r
     total = Decimal(0)
-    lines: List[Dict[str, Any]] = []
+    lines: list[dict[str, Any]] = []
     for key in sorted(latest):
         c = latest[key].cells
         cost = Decimal(c["billed_cost"])
@@ -1128,11 +1134,11 @@ def _monthly_equivalent(books: Books, first: date, last: date) -> Dict[str, Any]
     return {"total": _m(total), "lines": lines}
 
 
-def _renewals(books: Books, as_of: date) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def _renewals(books: Books, as_of: date) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     doc = books.yaml.get("renewals.yaml")
     entries = doc.get("renewals") if isinstance(doc, dict) else None
-    due: List[Tuple[date, Dict[str, Any]]] = []
-    undated: List[Dict[str, Any]] = []
+    due: list[tuple[date, dict[str, Any]]] = []
+    undated: list[dict[str, Any]] = []
     for e in entries if isinstance(entries, list) else []:
         if not isinstance(e, dict):
             continue
@@ -1151,15 +1157,15 @@ def _renewals(books: Books, as_of: date) -> Tuple[List[Dict[str, Any]], List[Dic
     return [d for _, d in due], undated
 
 
-def summarize(books: Books, month: str, as_of: date) -> Dict[str, Any]:
+def summarize(books: Books, month: str, as_of: date) -> dict[str, Any]:
     first, last = _month_bounds(month)
     cash_total = Decimal(0)
-    by_provider: Dict[str, Decimal] = {}
-    by_project: Dict[str, Decimal] = {}
+    by_provider: dict[str, Decimal] = {}
+    by_project: dict[str, Decimal] = {}
     api_total = Decimal(0)
-    api_by_project: Dict[str, Decimal] = {}
+    api_by_project: dict[str, Decimal] = {}
     cash_rows = 0
-    unknown: List[Dict[str, Any]] = []
+    unknown: list[dict[str, Any]] = []
     for r in books.rows:
         c = r.cells
         in_month = c["charge_date"].startswith(month)
@@ -1190,8 +1196,8 @@ def summarize(books: Books, month: str, as_of: date) -> Dict[str, Any]:
     }
 
 
-def render_summary(s: Dict[str, Any]) -> str:
-    out: List[str] = []
+def render_summary(s: dict[str, Any]) -> str:
+    out: list[str] = []
     cash = s["cash"]
     out.append(f"Cash for {s['month']}: ${cash['total']} ({cash['rows']} verified rows)")
     out.append("  By provider:")
@@ -1276,15 +1282,15 @@ UNASSIGNED = "unassigned"
 class Pricing:
     source: str
     as_of: str
-    models: Dict[str, Dict[str, Decimal]]  # model id -> kind -> USD per million tokens
-    fast_multiplier: Dict[str, Decimal]    # only models with a documented fast-mode price
+    models: dict[str, dict[str, Decimal]]  # model id -> kind -> USD per million tokens
+    fast_multiplier: dict[str, Decimal]    # only models with a documented fast-mode price
 
 
 def load_pricing(path: Path) -> Pricing:
     try:
         doc = json.loads(path.read_text())
-        models: Dict[str, Dict[str, Decimal]] = {}
-        fast: Dict[str, Decimal] = {}
+        models: dict[str, dict[str, Decimal]] = {}
+        fast: dict[str, Decimal] = {}
         for model, entry in doc["models"].items():
             models[model] = {k: Decimal(str(entry[k])) for k in PRICE_KINDS}
             if "fast_multiplier" in entry:
@@ -1308,7 +1314,7 @@ class Tokens:
         for k in PRICE_KINDS:
             setattr(self, k, getattr(self, k) + getattr(other, k))
 
-    def as_dict(self) -> Dict[str, int]:
+    def as_dict(self) -> dict[str, int]:
         return {k: getattr(self, k) for k in PRICE_KINDS}
 
 
@@ -1325,7 +1331,7 @@ def _int(v: Any) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
 
 
-def _message(d: Any) -> Optional[Tuple[Tuple[str, Optional[str]], Message]]:
+def _message(d: Any) -> tuple[tuple[str, str | None], Message] | None:
     """The few fields the pricing needs, or None for a line that is not a priced assistant message.
     Nothing else in the line is read, so no prompt or tool text can leave this function."""
     msg = d.get("message") if isinstance(d, dict) else None
@@ -1354,11 +1360,11 @@ def _message(d: Any) -> Optional[Tuple[Tuple[str, Optional[str]], Message]]:
     return (mid, request), Message(model, when.date(), cwd, speed, tokens)
 
 
-def read_logs(logs: Path) -> Tuple[List[Message], int]:
+def read_logs(logs: Path) -> tuple[list[Message], int]:
     """Unique messages under `logs` and the number of duplicate lines dropped. The same message is
     written on several lines; of a repeated (message id, request id) the line with the most output
     tokens wins, because a streamed message's early lines are partial."""
-    unique: Dict[Tuple[str, Optional[str]], Message] = {}
+    unique: dict[tuple[str, str | None], Message] = {}
     duplicates = 0
     for path in sorted(logs.glob("**/*.jsonl")):
         try:
@@ -1383,18 +1389,18 @@ def read_logs(logs: Path) -> Tuple[List[Message], int]:
     return list(unique.values()), duplicates
 
 
-def project_paths(books: Books) -> List[Tuple[str, str]]:
+def project_paths(books: Books) -> list[tuple[str, str]]:
     """(directory, project) pairs from the `paths:` lists in projects.yaml, longest directory first."""
     doc = books.yaml.get("projects.yaml")
     projects = doc.get("projects") if isinstance(doc, dict) else None
-    pairs: List[Tuple[str, str]] = []
+    pairs: list[tuple[str, str]] = []
     for name, entry in (projects.items() if isinstance(projects, dict) else []):
         for p in entry.get("paths") or [] if isinstance(entry, dict) else []:
             pairs.append((os.path.normpath(os.path.expanduser(p)), name))
     return sorted(pairs, key=lambda t: (-len(t[0]), t[1]))
 
 
-def project_for(cwd: str, pairs: List[Tuple[str, str]]) -> str:
+def project_for(cwd: str, pairs: list[tuple[str, str]]) -> str:
     cwd = os.path.normpath(cwd) if cwd else ""
     for path, name in pairs:
         if cwd == path or cwd.startswith(path.rstrip("/") + "/"):
@@ -1419,13 +1425,13 @@ def _week(monday: date) -> str:
     return f"{iso[0]}-W{iso[1]:02d}"
 
 
-def price_weeks(messages: List[Message], pricing: Pricing, pairs: List[Tuple[str, str]],
-                first: date, until: date) -> Dict[str, Any]:
+def price_weeks(messages: list[Message], pricing: Pricing, pairs: list[tuple[str, str]],
+                first: date, until: date) -> dict[str, Any]:
     """Cost per (week, project) for whole weeks that start on or after `first` and end before `until`."""
-    cells: Dict[Tuple[date, str], Dict[str, Any]] = {}
-    unpriced: Dict[str, Tokens] = {}
+    cells: dict[tuple[date, str], dict[str, Any]] = {}
+    unpriced: dict[str, Tokens] = {}
     counted = outside = 0
-    speeds: Dict[str, int] = {}
+    speeds: dict[str, int] = {}
     fast_at_standard = 0
     for m in messages:
         monday = _monday(m.day)
@@ -1446,7 +1452,7 @@ def price_weeks(messages: List[Message], pricing: Pricing, pairs: List[Tuple[str
             "speeds": speeds, "nonstandard_at_standard_price": fast_at_standard}
 
 
-def claude_code_rows(cells: Dict[Tuple[date, str], Dict[str, Any]]) -> List[Dict[str, str]]:
+def claude_code_rows(cells: dict[tuple[date, str], dict[str, Any]]) -> list[dict[str, str]]:
     rows = []
     for (monday, project), cell in sorted(cells.items()):
         sunday = monday + timedelta(days=6)
@@ -1517,7 +1523,7 @@ def cmd_claude_code(args: argparse.Namespace) -> int:
     return 0
 
 
-def render_claude_code(s: Dict[str, Any]) -> str:
+def render_claude_code(s: dict[str, Any]) -> str:
     out = [f"Claude Code API-equivalent cost (not cash), pricing as of {s['pricing_as_of']}",
            "Weeks covered: " + (", ".join(s["weeks"]) if s["weeks"] else "none (no complete week with priced usage)")]
     for t in s["totals"]:
@@ -1579,7 +1585,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="books.py", description="Work with the CFO's books.")
     sub = parser.add_subparsers(dest="command", required=True)
     check = sub.add_parser("check", help="validate the books")

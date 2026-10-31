@@ -1,7 +1,6 @@
 """Tests for the `questions` check in books.py: the shape of questions.md."""
 import importlib.util
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +11,6 @@ FIXTURE = ROOT / "tests/fixtures/books"
 
 spec = importlib.util.spec_from_file_location("books", SCRIPT)
 books = importlib.util.module_from_spec(spec)
-sys.modules["books"] = books
 spec.loader.exec_module(books)
 
 GOOD = """# Open questions
