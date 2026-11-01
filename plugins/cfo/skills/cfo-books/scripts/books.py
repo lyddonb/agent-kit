@@ -1157,6 +1157,10 @@ def _renewals(books: Books, as_of: date) -> tuple[list[dict[str, Any]], list[dic
     return [d for _, d in due], undated
 
 
+# Evidence written by `claude-code`; the week sorts as text because it is zero-padded.
+CLAUDE_CODE_EVIDENCE = re.compile(r"claude-code:(\d{4}-W\d{2}):")
+
+
 def summarize(books: Books, month: str, as_of: date) -> dict[str, Any]:
     first, last = _month_bounds(month)
     cash_total = Decimal(0)
@@ -1166,8 +1170,12 @@ def summarize(books: Books, month: str, as_of: date) -> dict[str, Any]:
     api_by_project: dict[str, Decimal] = {}
     cash_rows = 0
     unknown: list[dict[str, Any]] = []
+    latest_cc_week: str | None = None
     for r in books.rows:
         c = r.cells
+        cc = CLAUDE_CODE_EVIDENCE.match(c["evidence"])
+        if cc and (latest_cc_week is None or cc.group(1) > latest_cc_week):
+            latest_cc_week = cc.group(1)
         in_month = c["charge_date"].startswith(month)
         if c["status"] == "unknown":
             unknown.append({"line": r.line, "charge_date": c["charge_date"], "provider": c["provider"],
@@ -1192,7 +1200,8 @@ def summarize(books: Books, month: str, as_of: date) -> dict[str, Any]:
         "renewals": renewals,
         "renewals_undated": undated,
         "unknown": unknown,
-        "api_equivalent": {"total": _m(api_total), "by_project": _money_map(api_by_project)},
+        "api_equivalent": {"total": _m(api_total), "by_project": _money_map(api_by_project),
+                           "claude_code_latest_week": latest_cc_week},
     }
 
 
@@ -1238,6 +1247,7 @@ def render_summary(s: dict[str, Any]) -> str:
     api = s["api_equivalent"]
     out.append(f"API-equivalent for {s['month']} (not cash): ${api['total']}")
     out.extend(f"  {k}: ${v}" for k, v in api["by_project"].items())
+    out.append(f"  latest Claude Code week in the ledger: {api['claude_code_latest_week'] or 'none'}")
     return "\n".join(out)
 
 
@@ -1470,7 +1480,7 @@ def cmd_claude_code(args: argparse.Namespace) -> int:
     if not books_dir.is_dir():
         print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
         return 2
-    until = date.today() if args.until is None else None
+    until = datetime.now(timezone.utc).date() if args.until is None else None  # weeks are UTC weeks
     for flag, value in (("--since", args.since), ("--until", args.until)):
         if value is not None and not _is_date(value):
             print(f"books.py: {flag} must look like 2026-10-19, got {value!r}", file=sys.stderr)
@@ -1498,7 +1508,12 @@ def cmd_claude_code(args: argparse.Namespace) -> int:
 
     messages, duplicates = read_logs(logs)
     result = price_weeks(messages, pricing, project_paths(books), first, until)
-    rows = claude_code_rows(result["cells"])
+    # A week is written whole by one run. Re-pricing a recorded week after a `paths:` change would
+    # add rows under new project keys and count the week twice, so recorded weeks are skipped.
+    recorded = {m.group(1) for r in books.rows if (m := CLAUDE_CODE_EVIDENCE.match(r.cells["evidence"]))}
+    rows = [r for r in claude_code_rows(result["cells"])
+            if CLAUDE_CODE_EVIDENCE.match(r["evidence"]).group(1) not in recorded]
+    week_skipped = len(claude_code_rows(result["cells"])) - len(rows)
     code, fresh, skipped = append_cells(books_dir, rows, write=not args.dry_run)
     if code != 0:
         return code
@@ -1514,7 +1529,7 @@ def cmd_claude_code(args: argparse.Namespace) -> int:
         "totals": [{"week": _week(monday), "project": project, "tokens": cell["tokens"].as_dict(),
                     "api_equivalent_cost": str(_q(cell["cost"]))}
                    for (monday, project), cell in sorted(result["cells"].items())],
-        "rows_added": len(fresh), "rows_skipped": skipped, "rows": fresh,
+        "rows_added": len(fresh), "rows_skipped": skipped + week_skipped, "rows": fresh,
     }
     if args.json:
         print(json.dumps(summary, indent=2))
@@ -1543,7 +1558,7 @@ def render_claude_code(s: dict[str, Any]) -> str:
     out.append(f"Speed of counted messages: {speeds}; non-standard speed priced at standard rates:"
                f" {s['nonstandard_speed_priced_at_standard']}")
     verb = "would add" if s["dry_run"] else "added"
-    out.append(f"Rows {verb}: {s['rows_added']}, skipped: {s['rows_skipped']} (evidence already in the ledger)")
+    out.append(f"Rows {verb}: {s['rows_added']}, skipped: {s['rows_skipped']} (week or evidence already in the ledger)")
     if s["dry_run"] and s["rows"]:
         buf = io.StringIO()
         w = csv.writer(buf, lineterminator="\n")

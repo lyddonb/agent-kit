@@ -726,7 +726,15 @@ class SummaryTest(Case):
         self.assertEqual(s["api_equivalent"]["total"], "111.25")
 
     def test_api_equivalent_is_separate_and_by_project(self):
-        self.assertEqual(self.summary()["api_equivalent"], {"total": "12.25", "by_project": {"widget": "12.25"}})
+        self.assertEqual(self.summary()["api_equivalent"], {"total": "12.25", "by_project": {"widget": "12.25"},
+                                                            "claude_code_latest_week": None})
+
+    def test_latest_claude_code_week_spans_all_months(self):
+        for week in ("2025-W52", "2026-W03", "2025-W50"):
+            self.append_row(charge_date="2026-01-20", charge_type="usage-equivalent", billed_cost="0",
+                            api_equivalent_cost="1.00", source="claude-code-logs",
+                            evidence=f"claude-code:{week}:widget")
+        self.assertEqual(self.summary(month="2026-03")["api_equivalent"]["claude_code_latest_week"], "2026-W03")
 
     def test_envelope_percentage(self):
         env = self.summary()["envelope"]
