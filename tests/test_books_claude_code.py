@@ -149,6 +149,15 @@ class RowsTest(Case):
         self.assertIn("Rows would add: 3", out)
         self.assertIn("claude-code:2026-W43:alpha", out)
 
+    def test_recorded_week_is_not_repriced_after_a_paths_change(self):
+        self.cc()
+        before = self.ledger()
+        (self.dir / "projects.yaml").write_text(PROJECTS.replace("    state: proposed\n  gizmo:",
+                                                                 "    state: proposed\n    paths: [/work]\n  gizmo:", 1))
+        out = self.cc()
+        self.assertEqual(self.ledger(), before, "a remapped week must not be added again under new project keys")
+        self.assertEqual(out["rows_added"], 0)
+
     def test_rows_have_the_schema_values(self):
         self.cc()
         rows = {r.cells["project"]: r.cells for r in books.load(self.dir).rows if r.cells["source"] == "claude-code-logs"}

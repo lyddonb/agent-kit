@@ -80,7 +80,7 @@ Rules behind the numbers:
 - **Envelope** compares cash with `budgets.yaml`. `over_warning` means past `envelope_warning_pct`; exactly at it is not over. `null` when no envelope is set.
 - **Renewals** are `renewals.yaml` entries due 0 to 30 days after `--as-of`. Entries without a date go to `renewals_undated`.
 - **Unknown** lists every `unknown` row in the whole ledger, with its line number, until it is resolved.
-- **API-equivalent** sums `api_equivalent_cost` for the month and is never added to cash.
+- **API-equivalent** sums `api_equivalent_cost` for the month and is never added to cash. `claude_code_latest_week` is the newest week of `claude-code` rows anywhere in the ledger, so a brief can say how old the Claude Code numbers are.
 
 `--json` money values are strings with two decimals (exact, no floats). Other skills read these keys:
 
@@ -92,7 +92,7 @@ monthly_equivalent: total, lines[{provider, service, billed_cost, period_start, 
 renewals[{vendor, plan, amount_usd, cadence, next, days}]
 renewals_undated[{vendor, plan}]
 unknown[{line, charge_date, provider, service, evidence}]
-api_equivalent: total, by_project{}
+api_equivalent: total, by_project{}, claude_code_latest_week   (e.g. "2026-W43", or null)
 ```
 
 ## Price Claude Code usage
@@ -104,9 +104,34 @@ uv run --python 3.12 <skill dir>/scripts/books.py claude-code BOOKS_DIR --since 
 Runs only on the machine that holds the Claude Code session logs (`~/.claude/projects`, read recursively), so never in the scheduled cloud run. Python 3.10 or later, standard library only, run through uv. Run `--dry-run` first.
 
 - It reads token counts, model, timestamp and working directory from assistant lines and nothing else. No prompt, message or tool text is read, printed or stored.
-- Whole ISO weeks only (Monday to Sunday, UTC). `--since` rounds down to its Monday. A week is written only once its Sunday is before `--until` (today by default), so a week is never partial.
+- Whole ISO weeks only (Monday to Sunday, UTC). `--since` rounds down to its Monday. A week is written only once its Sunday is before `--until` (today in UTC by default), so a week is never partial. Run on a Sunday, the newest week is the one that ended a week earlier.
+- A week that already has any `claude-code` row is skipped, so a later `paths:` change never counts a week twice under new project names. To re-split a recorded week, add `adjustment` rows.
 - One `usage-equivalent` row per project per week: `billed_cost` 0, `api_equivalent_cost` priced from `scripts/pricing.json`, evidence `claude-code:2026-W43:project`. Rows go through the same path as `append`, so a rerun adds nothing and the full check runs first.
 - A session's working directory maps to the project whose `paths:` entry (in `projects.yaml`, `~` allowed) is its longest directory prefix; no match is `unassigned`. Add `paths: [~/code/x]` to a project to claim its sessions.
 - A model missing from `pricing.json` is never guessed. The output lists its tokens as unpriced and leaves its cost out of every total. Add it to the table with the price from the source URL.
 - The output states the weeks, messages counted after dedupe, duplicates dropped, unpriced models, message speeds and the pricing date. Fast-mode messages get a model's `fast_multiplier` when the table has one; otherwise they are priced at standard rates and counted.
 - `pricing.json` carries its `source` and `as_of`. `check` warns when `as_of` is more than 90 days old. Refresh the table from the source, then update `as_of`.
+
+## Weekly Mac job for Claude Code usage
+
+The scheduled cloud brief can't read the Mac's logs, so `scripts/weekly-claude-code.sh` runs `claude-code` on the Mac and hands the rows to the weekly brief PR:
+
+```sh
+<skill dir>/scripts/weekly-claude-code.sh --repo OWNER/BOOKS [--dry-run]
+```
+
+1. It clones the books into a temp directory, so your working copy is never touched.
+2. If a PR from a `cfo/brief-` or `claude/cfo-brief-` branch is open, it adds a commit to the oldest one's branch. Otherwise it uses `cfo/brief-<next Sunday>` (the Sunday after, if today's brief is already on `main`): it builds on that branch if it exists unmerged, else creates it from `main`, and opens the PR. The cloud run adds its commit to an open brief PR, so the week still ends in one PR. Dates are America/Denver (`CFO_TZ`).
+3. It prices whole weeks from the first Monday at least two days inside Claude Code's log retention (`cleanupPeriodDays` in `~/.claude/settings.json`, default 30; it refuses a value under 9). Older logs may be partly deleted, and a partial week would be written as a verified total. A value set only in managed or local settings is not read.
+4. It commits only `ledger/charges.csv`, runs `check --base origin/main` first, and never pushes to `main`, merges or force-pushes. Nothing new means no commit and no PR. If the push is rejected because the cloud run pushed first, it refetches and retries once. Pushes authenticate through `gh`.
+5. A failure exits non-zero and shows one macOS notification.
+
+Run it every Sunday with launchd. `--print-plist` writes a launch agent for Sundays at 06:00 local time with this script's path. A Mac that is asleep then runs it on wake; a Mac that is off skips it, and the next run picks up the missed week while its logs are still kept.
+
+```sh
+<skill dir>/scripts/weekly-claude-code.sh --repo OWNER/BOOKS --print-plist > ~/Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist
+launchctl kickstart gui/$(id -u)/dev.agent-kit.cfo-claude-code   # optional: run once now
+```
+
+The log is `~/Library/Logs/cfo-claude-code.log` (a few lines a week, never rotated). It needs `git`, `gh` (logged in) and `uv` on the plist's `PATH`. Raise `cleanupPeriodDays` (for example to 120) so a month away from the Mac loses no weeks.
