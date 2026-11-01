@@ -8,11 +8,13 @@
 # force-pushes.
 #
 # Usage:
-#   weekly-claude-code.sh --repo OWNER/NAME [--dry-run]
-#   weekly-claude-code.sh --repo OWNER/NAME --print-plist   # launchd agent with this script's paths
+#   weekly-claude-code.sh --install | --uninstall | --status | --run-now   # manage the launchd agent
+#   weekly-claude-code.sh [--repo OWNER/NAME] [--dry-run]                  # what the agent runs
+#   weekly-claude-code.sh [--repo OWNER/NAME] --print-plist
+# --repo defaults to the GitHub remote of the books ($CFO_BOOKS, else ~/code/finances).
 #
 # Needs git, gh (logged in) and uv. Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
-# CFO_LOGS (Claude Code logs dir), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver).
+# CFO_LOGS (Claude Code logs dir), CFO_CLAUDE_SETTINGS (settings file --install edits), CFO_JOB_PATH (the agent's PATH), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver).
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -24,16 +26,88 @@ REPO=""
 DRY_RUN=0
 PRINT_PLIST=0
 
-usage() { sed -n '11,13p' "$SELF" | sed 's/^# \{0,3\}//' >&2; exit 2; }
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+LOGFILE="$HOME/Library/Logs/cfo-claude-code.log"
+JOB_PATH=${CFO_JOB_PATH:-/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/usr/bin:/bin}
+DOMAIN="gui/$(id -u)"
+ACTION=run
+
+usage() { sed -n '/^# Usage:/,/^# --repo/p' "$SELF" | sed 's/^# \{0,3\}//' >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) REPO=${2:-}; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --print-plist) PRINT_PLIST=1; shift ;;
+    --install) ACTION=install; shift ;;
+    --uninstall) ACTION=uninstall; shift ;;
+    --status) ACTION=status; shift ;;
+    --run-now) ACTION=run-now; shift ;;
     *) usage ;;
   esac
 done
-[[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || usage
+if [ -z "$REPO" ] && [ "$ACTION" != uninstall ] && [ "$ACTION" != status ] && [ "$ACTION" != run-now ]; then
+  BOOKS_DIR=${CFO_BOOKS:-$HOME/code/finances}
+  url=$(git -C "$BOOKS_DIR" remote get-url origin 2>/dev/null) \
+    || { echo "No --repo given and no git remote in $BOOKS_DIR. Pass --repo OWNER/NAME." >&2; exit 2; }
+  REPO=$(printf '%s' "$url" | sed -E 's#^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)##; s#\.git$##')
+fi
+case "$ACTION" in uninstall|status|run-now) ;; *)
+  [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "Not a GitHub OWNER/NAME: $REPO" >&2; usage; } ;;
+esac
+
+case "$ACTION" in
+  install)
+    for tool in git gh uv; do
+      PATH=$JOB_PATH command -v "$tool" >/dev/null || { echo "$tool not found on the job's PATH ($JOB_PATH)" >&2; exit 1; }
+    done
+    gh auth status >/dev/null 2>&1 || { echo "gh is not logged in. Run: gh auth login" >&2; exit 1; }
+    mkdir -p "$(dirname "$PLIST")" "$(dirname "$LOGFILE")"
+    bash "$SELF" --repo "$REPO" --print-plist > "$PLIST.tmp"
+    plutil -lint -s "$PLIST.tmp" && mv "$PLIST.tmp" "$PLIST"
+    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    launchctl bootstrap "$DOMAIN" "$PLIST"
+    # Weeks older than Claude Code's log retention can't be priced, so keep logs four months.
+    if [ -n "${CFO_PYTHON:-}" ]; then IPY=("$CFO_PYTHON"); else IPY=(uv run --no-project -q --python 3.12 python); fi
+    "${IPY[@]}" -I - "${CFO_CLAUDE_SETTINGS:-$HOME/.claude/settings.json}" <<'PYEOF'
+import json, os, shutil, sys
+path = sys.argv[1]
+settings = json.load(open(path)) if os.path.exists(path) else {}
+current = settings.get("cleanupPeriodDays", 30)
+if isinstance(current, int) and current >= 120:
+    print(f"Claude Code keeps logs {current} days; left as is.")
+else:
+    if os.path.exists(path):
+        shutil.copy2(path, path + ".bak")
+    settings["cleanupPeriodDays"] = 120
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(settings, f, indent=2)
+        f.write("\n")
+    print(f"Claude Code now keeps logs 120 days (was {current}); backup at {path}.bak" if os.path.exists(path + ".bak")
+          else "Claude Code now keeps logs 120 days.")
+PYEOF
+    echo "Installed: Claude Code usage goes to $REPO's brief PR every Sunday at 06:00."
+    echo "Log: $LOGFILE   Check it: --status   Run it now: --run-now   Remove it: --uninstall"
+    exit 0 ;;
+  uninstall)
+    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    rm -f "$PLIST"
+    echo "Removed the launch agent. Claude Code log retention is left as it is."
+    exit 0 ;;
+  status)
+    if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+      echo "Installed ($PLIST)."
+      launchctl print "$DOMAIN/$LABEL" | grep -E '^\s*(state|last exit code|runs) =' | sed 's/^[[:space:]]*/  /'
+    else
+      echo "Not installed. Install it with --install (or make install in the books)."
+    fi
+    if [ -f "$LOGFILE" ]; then echo "Last log lines ($LOGFILE):"; tail -n 8 "$LOGFILE" | sed 's/^/  /'; fi
+    exit 0 ;;
+  run-now)
+    launchctl kickstart "$DOMAIN/$LABEL" || { echo "Not installed. Install it with --install (or make install in the books)." >&2; exit 1; }
+    echo "Started. Follow it with: tail -f $LOGFILE"
+    exit 0 ;;
+esac
 
 if [ "$PRINT_PLIST" = 1 ]; then
   cat <<EOF
@@ -48,9 +122,9 @@ if [ "$PRINT_PLIST" = 1 ]; then
   <key>StartCalendarInterval</key>
   <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/usr/bin:/bin</string></dict>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/cfo-claude-code.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/cfo-claude-code.log</string>
+  <dict><key>PATH</key><string>$JOB_PATH</string></dict>
+  <key>StandardOutPath</key><string>$LOGFILE</string>
+  <key>StandardErrorPath</key><string>$LOGFILE</string>
 </dict>
 </plist>
 EOF
