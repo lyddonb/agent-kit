@@ -126,12 +126,12 @@ The scheduled cloud brief can't read the Mac's logs, so `scripts/weekly-claude-c
 4. It commits only `ledger/charges.csv`, runs `check --base origin/main` first, and never pushes to `main`, merges or force-pushes. Nothing new means no commit and no PR. If the push is rejected because the cloud run pushed first, it refetches and retries once. Pushes authenticate through `gh`.
 5. A failure exits non-zero and shows one macOS notification.
 
-Run it every Sunday with launchd. `--print-plist` writes a launch agent for Sundays at 06:00 local time with this script's path. A Mac that is asleep then runs it on wake; a Mac that is off skips it, and the next run picks up the missed week while its logs are still kept.
+Install it once; it then runs every Sunday at 06:00 local time:
 
 ```sh
-<skill dir>/scripts/weekly-claude-code.sh --repo OWNER/BOOKS --print-plist > ~/Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist
-launchctl kickstart gui/$(id -u)/dev.agent-kit.cfo-claude-code   # optional: run once now
+<skill dir>/scripts/weekly-claude-code.sh --install     # also: --status, --run-now, --uninstall
 ```
 
-The log is `~/Library/Logs/cfo-claude-code.log` (a few lines a week, never rotated). It needs `git`, `gh` (logged in) and `uv` on the plist's `PATH`. Raise `cleanupPeriodDays` (for example to 120) so a month away from the Mac loses no weeks.
+`--install` checks that `git`, `gh` (logged in) and `uv` are reachable, writes the launch agent, loads it, and raises Claude Code's `cleanupPeriodDays` to 120 if it is lower (the old settings file is kept as `settings.json.bak`). Rerun it after moving agent-kit. The books repo comes from the books' GitHub remote (`CFO_BOOKS`, else `~/code/finances`); pass `--repo OWNER/NAME` to override. A books repo can wrap these in a Makefile (`make install`, `make status`, `make run`, `make uninstall`).
+
+A Mac that is asleep at 06:00 runs the job on wake; a Mac that is off skips it, and the next run picks up the missed week while its logs are still kept. The log is `~/Library/Logs/cfo-claude-code.log` (a few lines a week, never rotated).

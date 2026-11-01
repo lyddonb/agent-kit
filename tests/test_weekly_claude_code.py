@@ -20,7 +20,9 @@ import json, os, sys
 args = sys.argv[1:]
 with open(os.environ["STUB_CALLS"], "a") as f:
     f.write(json.dumps(args) + "\n")
-if args[:2] == ["api", "repos/owner/books/pulls?state=open&per_page=100"]:
+if args[:2] == ["auth", "status"]:
+    pass
+elif args[:2] == ["api", "repos/owner/books/pulls?state=open&per_page=100"]:
     print(open(os.environ["STUB_PULLS"]).read())
 elif args[:2] == ["api", "repos/owner/books/pulls"] and "-f" in args:
     print("https://example.invalid/owner/books/pull/9")
@@ -29,6 +31,10 @@ else:
 """
 
 TZ = "America/Denver"
+
+STUB_RECORDER = """#!/bin/sh
+printf '%s %s\\n' "$(basename "$0")" "$*" >> "$STUB_NOTES"
+"""
 
 STUB_OSASCRIPT = """#!/bin/sh
 printf '%s\\n' "$*" >> "$STUB_NOTES"
@@ -265,6 +271,32 @@ class WeeklyJob(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("retrying once", r.stdout)
         self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", self.ledger("cfo/brief-2026-01-04"))
+
+    def test_install_status_uninstall(self):
+        import plistlib
+        bin_dir = self.tmp / "bin"
+        for tool in ("launchctl", "plutil", "uv"):
+            (bin_dir / tool).write_text(STUB_RECORDER)
+            (bin_dir / tool).chmod(0o755)
+        books_dir = self.tmp / "books-checkout"
+        self.git(self.tmp, "clone", "-q", str(self.tmp / "origin.git"), str(books_dir))
+        self.git(books_dir, "remote", "set-url", "origin", "git@github.com:owner/books.git")
+        settings = self.home / ".claude/settings.json"
+        settings.write_text('{"model": "opus", "cleanupPeriodDays": 30}')
+        self.env.update(CFO_BOOKS=str(books_dir), CFO_JOB_PATH=f"{bin_dir}:/usr/bin:/bin")
+        r = subprocess.run(["bash", str(SCRIPT), "--install"], env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        plist = plistlib.loads((self.home / "Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist").read_bytes())
+        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO], "repo from the books' remote")
+        self.assertEqual(json.loads(settings.read_text()), {"model": "opus", "cleanupPeriodDays": 120})
+        self.assertEqual(json.loads(Path(str(settings) + ".bak").read_text())["cleanupPeriodDays"], 30)
+        self.assertIn("launchctl bootstrap gui/", self.notes.read_text())
+        r = subprocess.run(["bash", str(SCRIPT), "--install"], env=self.env, capture_output=True, text=True)
+        self.assertIn("left as is", r.stdout)
+        r = subprocess.run(["bash", str(SCRIPT), "--uninstall"], env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse((self.home / "Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist").exists())
+        self.assertIn("launchctl bootout gui/", self.notes.read_text())
 
     def test_plist_is_valid_and_points_at_this_script(self):
         r = self.run_job("--print-plist")
