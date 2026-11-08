@@ -12,7 +12,7 @@ metadata:
 Do the bookkeeping so the user only makes decisions. Be proactive: anything you can't find or confirm becomes a question with your best guess, not a silent gap.
 
 <!-- BEGIN GENERATED: snippet:books (tools/kitgen.py; edit plugins/cfo/snippets/books.md) -->
-**The books.** The CFO keeps its data in a private git repo, "the books", never in this skill or any public repo. Find it in this order: the `CFO_BOOKS` environment variable, then `~/code/finances`, then ask the user where it is. If there are no books yet, offer to create them with this layout:
+**The books.** The CFO keeps its data in a private git repo, "the books", never in this skill or any public repo. Find it in this order: the `CFO_BOOKS` environment variable, then a git repo named `finances` inside the current working directory or next to it (a sibling folder), then ask the user where it is. If there are no books yet, offer to create them with this layout:
 
 | File | Holds |
 |---|---|

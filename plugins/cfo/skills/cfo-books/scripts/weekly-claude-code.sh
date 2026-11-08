@@ -11,7 +11,7 @@
 #   weekly-claude-code.sh --install | --uninstall | --status | --run-now   # manage the launchd agent
 #   weekly-claude-code.sh [--repo OWNER/NAME] [--dry-run]                  # what the agent runs
 #   weekly-claude-code.sh [--repo OWNER/NAME] --print-plist
-# --repo defaults to the GitHub remote of the books ($CFO_BOOKS, else ~/code/finances).
+# --repo defaults to the GitHub remote of the books checkout in $CFO_BOOKS.
 #
 # Needs git, gh (logged in) and uv. Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
 # CFO_LOGS (Claude Code logs dir), CFO_CLAUDE_SETTINGS (settings file --install edits), CFO_JOB_PATH (the agent's PATH), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver).
@@ -46,7 +46,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$REPO" ] && [ "$ACTION" != uninstall ] && [ "$ACTION" != status ] && [ "$ACTION" != run-now ]; then
-  BOOKS_DIR=${CFO_BOOKS:-$HOME/code/finances}
+  [ -n "${CFO_BOOKS:-}" ] || { echo "No --repo given and CFO_BOOKS isn't set. Pass --repo OWNER/NAME, or set CFO_BOOKS to the books checkout." >&2; exit 2; }
+  BOOKS_DIR=$CFO_BOOKS
   url=$(git -C "$BOOKS_DIR" remote get-url origin 2>/dev/null) \
     || { echo "No --repo given and no git remote in $BOOKS_DIR. Pass --repo OWNER/NAME." >&2; exit 2; }
   REPO=$(printf '%s' "$url" | sed -E 's#^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)##; s#\.git$##')

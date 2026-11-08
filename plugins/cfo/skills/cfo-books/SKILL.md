@@ -12,7 +12,7 @@ metadata:
 Run the checker before you commit anything to the books. The other cfo skills do this before they commit.
 
 <!-- BEGIN GENERATED: snippet:books (tools/kitgen.py; edit plugins/cfo/snippets/books.md) -->
-**The books.** The CFO keeps its data in a private git repo, "the books", never in this skill or any public repo. Find it in this order: the `CFO_BOOKS` environment variable, then `~/code/finances`, then ask the user where it is. If there are no books yet, offer to create them with this layout:
+**The books.** The CFO keeps its data in a private git repo, "the books", never in this skill or any public repo. Find it in this order: the `CFO_BOOKS` environment variable, then a git repo named `finances` inside the current working directory or next to it (a sibling folder), then ask the user where it is. If there are no books yet, offer to create them with this layout:
 
 | File | Holds |
 |---|---|
@@ -132,6 +132,6 @@ Install it once; it then runs every Sunday at 06:00 local time:
 <skill dir>/scripts/weekly-claude-code.sh --install     # also: --status, --run-now, --uninstall
 ```
 
-`--install` checks that `git`, `gh` (logged in) and `uv` are reachable, writes the launch agent, loads it, and raises Claude Code's `cleanupPeriodDays` to 120 if it is lower (the old settings file is kept as `settings.json.bak`). Rerun it after moving agent-kit. The books repo comes from the books' GitHub remote (`CFO_BOOKS`, else `~/code/finances`); pass `--repo OWNER/NAME` to override. A books repo can wrap these in a Makefile (`make install`, `make status`, `make run`, `make uninstall`).
+`--install` checks that `git`, `gh` (logged in) and `uv` are reachable, writes the launch agent, loads it, and raises Claude Code's `cleanupPeriodDays` to 120 if it is lower (the old settings file is kept as `settings.json.bak`). Rerun it after moving agent-kit. The books repo comes from the GitHub remote of the checkout in `CFO_BOOKS`; pass `--repo OWNER/NAME` instead when `CFO_BOOKS` isn't set. A books repo can wrap these in a Makefile (`make install`, `make status`, `make run`, `make uninstall`).
 
 A Mac that is asleep at 06:00 runs the job on wake; a Mac that is off skips it, and the next run picks up the missed week while its logs are still kept. The log is `~/Library/Logs/cfo-claude-code.log` (a few lines a week, never rotated).
