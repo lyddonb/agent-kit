@@ -244,6 +244,13 @@ class WeeklyJob(unittest.TestCase):
         self.assertIn("FAILED", r.stderr)
         self.assertEqual(len(self.notes.read_text().splitlines()), 1, r.stderr)
 
+    def test_without_repo_or_books_it_names_both_fixes(self):
+        env = {k: v for k, v in self.env.items() if k != "CFO_BOOKS"}
+        r = subprocess.run(["bash", str(SCRIPT), "--print-plist"], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("CFO_BOOKS isn't set", r.stderr, "no home-folder guess: the books location must be explicit")
+        self.assertIn("--repo", r.stderr)
+
     def test_unmerged_branch_without_a_pr_is_reused_and_gets_its_pr(self):
         branch = f"cfo/brief-{this_sunday().isoformat()}"
         seed = self.tmp / "orphan"
