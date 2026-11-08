@@ -93,6 +93,9 @@ def check_skill(skill_md: Path, r: Report):
         r.err(where, f"description is {len(desc)} chars (max 1024)")
     elif len(desc) < 40:
         r.warn(where, "description is very short; say what it does AND when to use it")
+    if isinstance(desc, str) and ("<" in desc or ">" in desc):
+        # claude.ai's marketplace sync rejects XML-like tags and stores the text with them stripped.
+        r.err(where, "description contains '<' or '>'; claude.ai strips them. Write verify-APP, not verify-<app>")
 
     comp = fm.get("compatibility")
     if comp is not None and (not isinstance(comp, str) or not 1 <= len(comp) <= 500):
