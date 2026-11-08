@@ -1,6 +1,6 @@
 ---
 name: create-verification-skill
-description: Generate a project-local verify-<app> skill that launches the real app, drives it like a user through a control CLI, captures evidence, and keeps a feature map. Any stack or surface. Use for /create-verification-skill, "make a control skill for this repo", or when a project has no scripted way to prove behavior.
+description: Generate a project-local verify-APP skill (for example verify-curator) that launches the real app, drives it like a user through a control CLI, captures evidence, and keeps a feature map. Any stack or surface. Use for /create-verification-skill, "make a control skill for this repo", or when a project has no scripted way to prove behavior.
 license: MIT
 metadata:
   author: lyddonb
