@@ -1,0 +1,14 @@
+# Project profile for agentfiles (https://github.com/lyddonb/agentfiles).
+# From this repo: agentfiles sync --project. Add `.agentfiles/` to .gitignore.
+
+description: {{product}} - {{one line}}.
+extends: [{{the user's engineering profile, for example builder}}]
+
+targets: [{{tools this project uses, for example claude-code, codex, cursor}}]
+
+skills:
+  # Project-only skills the profile doesn't already bring, for example:
+  # - anthropic-skills:skills/mcp-builder
+
+exclude:
+  skills: []   # skills from the profile that don't fit this stack
