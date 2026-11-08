@@ -129,8 +129,10 @@ skills alone. `docs/CATALOG.md` labels them "client-specific".
 
 ## Versioning and releases
 
-- Bump `version` in `kit.yaml` (per plugin, or in `defaults`) when behavior changes.
-  Claude Code pins users to the manifest version until it changes.
+- Bump the plugin's `version` in `kit.yaml` whenever any file under `plugins/<name>/` changes,
+  then `make gen`. Claude Code re-fetches an installed plugin only when its version changes, so
+  an unbumped change never reaches marketplace installs. CI enforces this on every PR
+  (`make versions`); run it locally before pushing.
 - Tag releases as `vX.Y.Z` for whole-repo releases. Users can pin with
   `codex plugin marketplace add lyddonb/agent-kit --ref vX.Y.Z` or
   `pi install git:github.com/lyddonb/agent-kit@vX.Y.Z`.

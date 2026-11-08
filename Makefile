@@ -7,12 +7,13 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: help gen check validate claude-validate unit test all
+.PHONY: help gen check validate versions claude-validate unit test all
 
 help:
 	@echo "make gen              regenerate manifests, marketplaces, package.json, docs/CATALOG.md from kit.yaml"
 	@echo "make check            fail if generated files are stale (what CI runs)"
 	@echo "make validate         portability lint for skills and plugins"
+	@echo "make versions         fail if a plugin changed since BASE (default origin/main) without a version bump"
 	@echo "make claude-validate  run 'claude plugin validate --strict' on every plugin and the marketplace"
 	@echo "make unit             unit tests for the scripts skills ship"
 	@echo "make all              gen + validate + claude-validate"
@@ -25,6 +26,10 @@ check:
 
 validate:
 	$(PYTHON) tools/validate.py
+
+BASE ?= origin/main
+versions:
+	$(PYTHON) tools/check_versions.py --base $(BASE)
 
 claude-validate:
 	@command -v claude >/dev/null || { echo "claude CLI not found; skipping"; exit 0; }
