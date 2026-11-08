@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # versions compares against the PR's base branch
 
       - uses: actions/setup-python@v5
         with:
@@ -26,6 +28,10 @@ jobs:
 
       - name: Portability lint
         run: python3 tools/validate.py
+
+      - name: Changed plugins bump their version
+        if: github.event_name == 'pull_request'
+        run: make versions BASE=origin/${{ github.base_ref }}
 
       - name: Script unit tests
         run: make unit
