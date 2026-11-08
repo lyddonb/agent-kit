@@ -72,7 +72,7 @@ Design rationale: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Working on this repo
 
 ```bash
-pip install pyyaml          # the only dependency
+# With uv installed, make runs Python 3.12 + PyYAML for you. Otherwise: Python 3.10+ and pip install pyyaml
 make gen                    # regenerate after editing kit.yaml or adding a skill
 make validate               # Agent Skills spec + portability lint
 make claude-validate        # `claude plugin validate --strict` (needs the claude CLI)

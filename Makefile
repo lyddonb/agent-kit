@@ -1,4 +1,11 @@
+# With uv, every target runs on Python 3.12 with PyYAML, the same as CI, whatever the system
+# python3 is (macOS ships 3.9, which the cfo scripts refuse). Without uv, python3 is used as is.
+UV := $(shell command -v uv 2>/dev/null)
+ifdef UV
+PYTHON ?= uv run --no-project --quiet --python 3.12 --with pyyaml python
+else
 PYTHON ?= python3
+endif
 
 .PHONY: help gen check validate claude-validate unit test all
 
