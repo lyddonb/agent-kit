@@ -21,7 +21,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 
 ## Non-negotiables
 
-- **Any code:** name the data shape first, and choose its organizing structure (state machine, typed model, table or registry, reducer) per the `model-the-domain` principle.
+- **Any code:** name the data shape first, and choose its organizing structure (state machine, typed model, table or registry, reducer) per the `model-the-domain` principle. When the code has a lifecycle, or you touch one held in flags, run **state-machines**.
 - **Nontrivial change, architecture question, or "are we sure?":** run the **how** skill on the affected code first. For why it's built that way, run **why**.
 - **A "which approach" or "what should this do" question you are about to ask:** if the answer is a fact you could observe by running something (behavior, timing, layout, output, performance), don't ask. Settle it with the Prototype playbook. Ask the human only for product or preference calls that no experiment can settle.
 - **Done means proven:** run the **verify-work** skill before you say a task is done. "It compiles" and "tests pass" are not proof of behavior. Verification is infrastructure: when a project has no `verify-<app>` skill, offer **create-verification-skill**.
@@ -45,6 +45,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | A project has no scripted way to drive the app | **create-verification-skill**, then **maintain-verification-skill** daily |
 | Starting a product, or adopting an existing repo into this workflow | **scaffold-product** |
 | Designing before code | **architect** (uses **arena**) |
+| Lifecycle or status logic spread across flags; "find the implicit state machines" | **state-machines** |
 | Several attempts at one artifact, judged | **arena** |
 | Parallel lanes: coverage, fuzzing, perf samples, live checks | **swarm** |
 | Docs, READMEs, plans, PR bodies | **technical-writing**, then **unslop** |
