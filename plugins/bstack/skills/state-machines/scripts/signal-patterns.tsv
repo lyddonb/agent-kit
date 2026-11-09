@@ -1,0 +1,12 @@
+flag	\b(is|has|was|did|should|can)[A-Z][A-Za-z0-9]*\b
+flag	\b(is|has|was|did)_[a-z][a-z0-9_]*\b
+flag	\b(loading|pending|submitting|fetching|saving|busy|done|ready|cancell?ed|aborted|mounted)\b[[:space:]]*[:=][[:space:]]*(true|false|True|False)\b
+flag-setter	\bset(Is|Has)?(@W@|Data|Status|Phase|Step|Mode)\b
+mutable-flag	\b(useRef|ref)\((true|false|null)\)
+mutable-flag	\b(mountedRef|isMounted|cancelled|canceled|aborted|inFlight|inflight)\b
+status-compare	\b(status|state|phase|stage|step|mode|kind)\b[]'"]*[[:space:]]*(===?|!==?)[[:space:]]*['"]
+status-field	\b(status|phase|stage|lifecycle|workflow_state)[[:space:]]*[:=][^=]
+phase-timestamp	\b(started|completed|finished|cancell?ed|deleted|archived|locked|paid|sent|failed|expired|claimed)_?[Aa]t\b
+retry-timer	\b(retry|retries|attempts?|backoff|setTimeout|setInterval|debounce|poll(ing)?)\b
+effect-chain	\b(useEffect|useLayoutEffect|watchEffect|watch|observe|subscribe)\(
+storage-write	\b(localStorage|sessionStorage)\.(setItem|removeItem)\b|\bset(Item|Cookie)\(
