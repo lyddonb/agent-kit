@@ -2,10 +2,13 @@
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
 docs/CATALOG.md
+docs/CHANGELOG.md
 docs/PRINCIPLES.md
 package.json
 plugins/bstack/.claude-plugin/plugin.json
 plugins/bstack/plugin.json
+plugins/bstack/skills/beau-help/references/catalog.md
+plugins/bstack/skills/beau-help/references/changes.json
 plugins/cfo/.claude-plugin/plugin.json
 plugins/cfo/plugin.json
 plugins/eng-leadership/.claude-plugin/plugin.json

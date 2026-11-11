@@ -1,0 +1,173 @@
+{
+  "entries": [
+    {
+      "id": "bstack@0.7.0",
+      "date": "2026-11-10",
+      "plugin": "bstack",
+      "version": "0.7.0",
+      "changes": [
+        "New `beau-help` skill lists every agent-kit skill and playbook, with how to call each one in your tool.",
+        "`beau-help new` shows what changed since you last looked. In Claude Code it also appears once at session start after an update."
+      ],
+      "try": "beau-help verify"
+    },
+    {
+      "id": "bstack@0.6.0",
+      "date": "2026-11-10",
+      "plugin": "bstack",
+      "version": "0.6.0",
+      "changes": [
+        "beau-mode restates your goal first and carries it into every subagent brief, PR and final reply. It stops when the evidence rules out the change you asked for.",
+        "interrogate keeps only findings an adversary proves with a command it ran; the lead reruns each one.",
+        "create-verification-skill counts an app as ready only when it works from an empty data directory, and never weakens a journey to make it pass.",
+        "Multi-phase plans run one full swarm at the code-ready head and one verifier for rebases.",
+        "reflect never edits a skill inside a plugin cache."
+      ]
+    },
+    {
+      "id": "principles@0.2.0",
+      "date": "2026-11-10",
+      "plugin": "principles",
+      "version": "0.2.0",
+      "changes": [
+        "test-behavior-not-implementation, fix-root-causes, attack-the-premise and make-operations-idempotent now explain the idea instead of banning specific mechanisms.",
+        "explain-the-number asks you to decide what result would change your mind before you measure."
+      ]
+    },
+    {
+      "id": "bstack@0.5.0",
+      "date": "2026-11-10",
+      "plugin": "bstack",
+      "version": "0.5.0",
+      "changes": [
+        "New create-formal-verification-skill and maintain-formal-verification-skill model-check or prove the code where bugs cost most (races, retries, state machines, parsers)."
+      ],
+      "try": "model-check the retry logic in this queue"
+    },
+    {
+      "id": "essentials@0.2.0",
+      "date": "2026-11-10",
+      "plugin": "essentials",
+      "version": "0.2.0",
+      "changes": [
+        "New sharpen skill makes a task deeper instead of bigger, then rewrites the prompt."
+      ],
+      "try": "/sharpen add caching to the API"
+    },
+    {
+      "id": "bstack@0.4.0",
+      "date": "2026-11-09",
+      "plugin": "bstack",
+      "version": "0.4.0",
+      "changes": [
+        "New state-machines skill finds lifecycle logic spread across flags and makes it an explicit state machine. beau-mode routes lifecycle work to it."
+      ],
+      "try": "find the implicit state machines in this module"
+    },
+    {
+      "id": "bstack@0.3.1",
+      "date": "2026-11-07",
+      "plugin": "bstack",
+      "version": "0.3.1",
+      "changes": [
+        "beau-mode treats a task as done only when every test and CI check passes. Flaky tests get measured, root-caused and fixed, never re-run."
+      ]
+    },
+    {
+      "id": "bstack@0.3.0",
+      "date": "2026-11-07",
+      "plugin": "bstack",
+      "version": "0.3.0",
+      "changes": [
+        "New Product phase playbook moves one product phase through Specced, Planned, Building, Gated and Done.",
+        "New scaffold-product skill sets up a new product repo, or adopts an existing one, with a vision, decision log, phase specs and a verify skill."
+      ],
+      "try": "scaffold this repo for product work"
+    },
+    {
+      "id": "bstack@0.2.1",
+      "date": "2026-11-07",
+      "plugin": "bstack",
+      "version": "0.2.1",
+      "changes": [
+        "Description fixes so the skills trigger on the phrases you actually type."
+      ]
+    },
+    {
+      "id": "cfo@0.1.0",
+      "date": "2026-10-31",
+      "plugin": "cfo",
+      "version": "0.1.0",
+      "changes": [
+        "New cfo plugin keeps a private ledger of AI and cloud spend, estimates runs before they start, and writes a weekly brief. It never pays, cancels or deletes anything."
+      ],
+      "try": "estimate what this run will cost"
+    },
+    {
+      "id": "essentials@0.1.1",
+      "date": "2026-10-27",
+      "plugin": "essentials",
+      "version": "0.1.1",
+      "changes": [
+        "New grilling skill stress-tests a plan one round of questions at a time before you act on it."
+      ],
+      "try": "grill me on this migration plan"
+    },
+    {
+      "id": "bstack@0.2.0",
+      "date": "2026-10-11",
+      "plugin": "bstack",
+      "version": "0.2.0",
+      "changes": [
+        "New skills for proof and understanding: create-verification-skill, maintain-verification-skill, why, teach, recall.",
+        "New skills for design and parallel work: architect, arena, swarm, technical-writing.",
+        "New Multi-phase plan playbook turns an agreed design into small, verifiable PRs."
+      ]
+    },
+    {
+      "id": "bstack@0.1.0",
+      "date": "2026-10-11",
+      "plugin": "bstack",
+      "version": "0.1.0",
+      "changes": [
+        "First release. beau-mode routes each task to a playbook, plus how, interrogate, verify-work, show-me-your-work, figure-it-out, reflect, correct and unslop, and the beau-agent subagent."
+      ]
+    },
+    {
+      "id": "principles@0.1.0",
+      "date": "2026-10-11",
+      "plugin": "principles",
+      "version": "0.1.0",
+      "changes": [
+        "First release. Twenty-four named engineering principles in one skill, one file per principle."
+      ]
+    },
+    {
+      "id": "essentials@0.1.0",
+      "date": "2026-10-09",
+      "plugin": "essentials",
+      "version": "0.1.0",
+      "changes": [
+        "First release, with commit-message and handoff-notes."
+      ]
+    },
+    {
+      "id": "eng-leadership@0.1.0",
+      "date": "2026-10-09",
+      "plugin": "eng-leadership",
+      "version": "0.1.0",
+      "changes": [
+        "First release, with design-review and interview-kit."
+      ]
+    },
+    {
+      "id": "research-tools@0.1.0",
+      "date": "2026-10-09",
+      "plugin": "research-tools",
+      "version": "0.1.0",
+      "changes": [
+        "First release. library-docs looks up current library docs through Context7, with a fallback when the MCP server is missing."
+      ]
+    }
+  ]
+}
