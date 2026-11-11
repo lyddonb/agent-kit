@@ -11,7 +11,7 @@
     {
       "name": "essentials",
       "source": "plugins/essentials",
-      "description": "Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, and grilling a plan before you act on it."
+      "description": "Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, grilling a plan before you act on it, and sharpening a task to be deeper instead of bigger."
     },
     {
       "name": "eng-leadership",
@@ -31,7 +31,7 @@
     {
       "name": "bstack",
       "source": "plugins/bstack",
-      "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent."
+      "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent."
     },
     {
       "name": "cfo",

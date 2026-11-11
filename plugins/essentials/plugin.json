@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "essentials",
-  "version": "0.1.1",
-  "description": "Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, and grilling a plan before you act on it.",
+  "version": "0.2.0",
+  "description": "Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, grilling a plan before you act on it, and sharpening a task to be deeper instead of bigger.",
   "author": {
     "name": "Beau Lyddon",
     "url": "https://github.com/lyddonb"
@@ -15,6 +15,7 @@
     "commits",
     "handoff",
     "productivity",
-    "grilling"
+    "grilling",
+    "prompts"
   ]
 }
