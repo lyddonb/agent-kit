@@ -133,6 +133,10 @@ skills alone. `docs/CATALOG.md` labels them "client-specific".
   then `make gen`. Claude Code re-fetches an installed plugin only when its version changes, so
   an unbumped change never reaches marketplace installs. CI enforces this on every PR
   (`make versions`); run it locally before pushing.
+- Every bump needs an entry in `changes.yaml` for that plugin and version, newest first; `make gen`
+  fails without one. Write each line as what a user can now do. The entries become
+  `docs/CHANGELOG.md` and what `beau-help new` (and Claude Code's session-start notice) shows.
+  Because the `beau-help` skill ships the changelog, releasing any plugin also bumps bstack.
 - Tag releases as `vX.Y.Z` for whole-repo releases. Users can pin with
   `codex plugin marketplace add lyddonb/agent-kit --ref vX.Y.Z` or
   `pi install git:github.com/lyddonb/agent-kit@vX.Y.Z`.

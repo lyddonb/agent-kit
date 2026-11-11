@@ -6,7 +6,7 @@ Usage:
     python3 tools/kitgen.py --check    # exit 1 if generated files are stale (CI)
     python3 tools/kitgen.py --list     # print the files that would be generated
 
-Inputs:  kit.yaml + the plugins/<name>/ directories (skills/, hooks/, ...).
+Inputs:  kit.yaml, changes.yaml + the plugins/<name>/ directories (skills/, hooks/, ...).
 Outputs (all committed, so plain `git clone` / marketplace installs work):
 
     plugins/<name>/plugin.json                Agent Plugins 1.0 manifest (Codex, Cursor, Copilot, ...)
@@ -20,6 +20,9 @@ Outputs (all committed, so plain `git clone` / marketplace installs work):
     package.json                              pi package manifest
     docs/CATALOG.md                           human-readable catalog
     docs/PRINCIPLES.md                        human-readable principle index
+    docs/CHANGELOG.md                         release notes, from changes.yaml
+    plugins/bstack/skills/beau-help/references/{catalog.md,changes.json}
+                                              what beau-help reads at run time
     .generated                                list of generated files (used by --check)
 
 It also fills GENERATED blocks inside authored Markdown files, so indexes and shared
@@ -185,7 +188,7 @@ def check_acyclic(deps: dict[str, list[str]]):
         visit(name, [])
 
 
-def generate(kit: dict, principles: list[dict]) -> dict[str, str]:
+def generate(kit: dict, principles: list[dict], changes: list[dict] | None = None) -> dict[str, str]:
     files: dict[str, str] = {}
     mk = kit["marketplace"]
     defaults = kit.get("defaults", {})
@@ -360,6 +363,15 @@ def generate(kit: dict, principles: list[dict]) -> dict[str, str]:
 
     if principles:
         files["docs/PRINCIPLES.md"] = principles_doc(principles)
+
+    if changes is not None:
+        check_changes(changes, {p["name"]: str(p.get("version")) for p, _ in resolved})
+        files["docs/CHANGELOG.md"] = changelog_doc(changes)
+        if (ROOT / HELP_SKILL).is_dir():
+            files[f"{HELP_SKILL}/references/catalog.md"] = help_catalog(resolved)
+            files[f"{HELP_SKILL}/references/changes.json"] = dump_json({"entries": [
+                {"id": f"{c['plugin']}@{c['version']}", **{k: c[k] for k in CHANGE_KEYS if k in c}}
+                for c in changes]})
 
     files[".generated"] = "".join(f"{f}\n" for f in sorted(files) + [".generated"])
     return files
@@ -541,6 +553,92 @@ def fill_text(text: str, render, rel) -> tuple[str, int]:
     return "".join(out), n
 
 
+# --------------------------------------------------------------------------- changes and help
+
+HELP_SKILL = "plugins/bstack/skills/beau-help"
+CHANGE_KEYS = ("date", "plugin", "version", "changes", "try")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def _semver(v: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in v.split("."))
+
+
+def load_changes() -> list[dict]:
+    path = ROOT / "changes.yaml"
+    if not path.exists():
+        raise KitError("changes.yaml not found")
+    entries = yaml.safe_load(path.read_text()) or []
+    if not isinstance(entries, list):
+        raise KitError("changes.yaml must be a list of entries")
+    # YAML reads an unquoted 2026-11-10 as a date; the entry keeps the string.
+    return [{**e, "date": str(e.get("date", ""))} if isinstance(e, dict) else e for e in entries]
+
+
+def check_changes(changes: list[dict], current: dict[str, str]) -> None:
+    """Every plugin's current version needs an entry, and entries must be well formed."""
+    seen = set()
+    for i, c in enumerate(changes):
+        where = f"changes.yaml entry {i + 1}"
+        if not isinstance(c, dict):
+            raise KitError(f"{where}: must be a mapping")
+        unknown = set(c) - set(CHANGE_KEYS)
+        if unknown:
+            raise KitError(f"{where}: unknown keys {sorted(unknown)} (allowed: {', '.join(CHANGE_KEYS)})")
+        if not DATE_RE.match(c["date"]):
+            raise KitError(f"{where}: date {c['date']!r} must be YYYY-MM-DD")
+        if c.get("plugin") not in current:
+            raise KitError(f"{where}: plugin {c.get('plugin')!r} is not in kit.yaml")
+        version = str(c.get("version", ""))
+        if not SEMVER_RE.match(version):
+            raise KitError(f"{where}: version {version!r} must be X.Y.Z")
+        c["version"] = version
+        if _semver(version) > _semver(current[c["plugin"]]):
+            raise KitError(f"{where}: {c['plugin']} {version} is newer than kit.yaml's {current[c['plugin']]}")
+        key = (c["plugin"], version)
+        if key in seen:
+            raise KitError(f"{where}: duplicate entry for {c['plugin']} {version}")
+        seen.add(key)
+        if not c.get("changes") or not all(isinstance(s, str) and s.strip() for s in c["changes"]):
+            raise KitError(f"{where}: changes must be a non-empty list of strings")
+        if i and c["date"] > changes[i - 1]["date"]:
+            raise KitError(f"{where}: entries must be newest first ({c['date']} is after {changes[i - 1]['date']})")
+    missing = sorted(f"{p} {v}" for p, v in current.items() if (p, v) not in seen)
+    if missing:
+        raise KitError(f"changes.yaml has no entry for {', '.join(missing)}. Add one per bumped version: "
+                       f"what a user can now do, newest first.")
+
+
+def changelog_doc(changes: list[dict]) -> str:
+    lines = ["<!-- GENERATED by tools/kitgen.py from changes.yaml - do not edit -->", "# Changelog", "",
+             "What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.", ""]
+    for c in changes:
+        lines += [f"## {c['plugin']} {c['version']} ({c['date']})", ""]
+        lines += [f"- {s}" for s in c["changes"]]
+        if c.get("try"):
+            lines.append(f"- Try: `{c['try']}`")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def help_catalog(resolved: list[tuple[dict, Path]]) -> str:
+    lines = ["<!-- GENERATED by tools/kitgen.py from kit.yaml and skill frontmatter - do not edit -->",
+             "# agent-kit catalog", ""]
+    for p, pdir in resolved:
+        lines += [f"## {p['name']} {p.get('version')}", "", _cell(p["description"]), ""]
+        for s in plugin_skills(pdir):
+            lines.append(f"- `{s}`: {_cell(skill_description(pdir, s))}")
+            if (pdir / "skills" / s / "playbooks").is_dir():
+                lines += [f"  - playbook {line[2:]}" for line in gen_playbooks_index(pdir / "skills" / s).splitlines()]
+        agents = sorted(f.stem for f in (pdir / "agents").glob("*.md")) if (pdir / "agents").is_dir() else []
+        lines += [f"- subagent `{a}` (Claude Code)" for a in agents]
+        if p.get("mcp"):
+            lines.append("- MCP servers: " + ", ".join(f"`{s}`" for s in p["mcp"]))
+        lines.append("")
+    return "\n".join(lines)
+
+
 def principles_doc(principles: list[dict]) -> str:
     lines = [
         "<!-- GENERATED by tools/kitgen.py from plugins/principles/skills/principles/references - do not edit -->",
@@ -573,7 +671,7 @@ def main(argv=None) -> int:
 
     try:
         principles = load_principles()
-        files = generate(load_kit(), principles)
+        files = generate(load_kit(), principles, load_changes())
         blocks = fill_blocks(principles)
     except KitError as e:
         print(f"kitgen: error: {e}", file=sys.stderr)

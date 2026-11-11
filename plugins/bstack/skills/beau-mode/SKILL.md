@@ -54,6 +54,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | A decision trail for long or unattended work | **show-me-your-work** |
 | Work no playbook fits | **figure-it-out** |
 | Lessons from a session; a repeated mistake | **reflect**; **correct** |
+| What the kit can do, or what changed | **beau-help** |
 
 ## Principles
 
