@@ -8,7 +8,7 @@ Source files live in [`plugins/principles/skills/principles/references/`](../plu
 
 | Principle | When | Rule |
 |---|---|---|
-| [Attack the Premise](../plugins/principles/skills/principles/references/attack-the-premise.md) `attack-the-premise` | Two or more fixes that share one premise have failed the same gate. | Take a census of which actors hold the imbalance before the next fix, then question the premise instead of writing another fix that assumes it. |
+| [Attack the Premise](../plugins/principles/skills/principles/references/attack-the-premise.md) `attack-the-premise` | Two or more fixes that share one premise have failed the same gate. | Write the premise down and test it directly before you write another fix that assumes it. |
 | [Build the Lever](../plugins/principles/skills/principles/references/build-the-lever.md) `build-the-lever` | Any non-trivial work. | Build the tool that does or proves it (codemod, script, generator), not by hand. The tool is the artifact a reviewer reruns. |
 | [Exhaust the Design Space](../plugins/principles/skills/principles/references/exhaust-the-design-space.md) `exhaust-the-design-space` | A novel interaction or architectural decision with no precedent. | Build 2-3 competing prototypes and compare before committing. |
 | [Experience First](../plugins/principles/skills/principles/references/experience-first.md) `experience-first` | Product, UX, or feature-scope tradeoffs. | Choose user delight over implementation convenience. |
@@ -34,11 +34,11 @@ Source files live in [`plugins/principles/skills/principles/references/`](../plu
 
 | Principle | When | Rule |
 |---|---|---|
-| [Explain the Number](../plugins/principles/skills/principles/references/explain-the-number.md) `explain-the-number` | Before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result). | Find what limits it, and rule out that it measured something other than the work you think. |
-| [Fix Root Causes](../plugins/principles/skills/principles/references/fix-root-causes.md) `fix-root-causes` | Debugging. | Trace each symptom to its root cause, reproduce first, ask why until you reach it. |
+| [Explain the Number](../plugins/principles/skills/principles/references/explain-the-number.md) `explain-the-number` | Before you measure, and before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result). | Find what limits it, and rule out that it measured something other than the work you think. |
+| [Fix Root Causes](../plugins/principles/skills/principles/references/fix-root-causes.md) `fix-root-causes` | Debugging. | Trace each symptom back to the first place the system went wrong and fix it there. A guard is a fix only when the state it handles is legitimate. |
 | [Prove It Works](../plugins/principles/skills/principles/references/prove-it-works.md) `prove-it-works` | After a task, before declaring done. | Verify against the real artifact, not a proxy or "it compiles". |
 | [Sequence Work into Verifiable Units](../plugins/principles/skills/principles/references/sequence-verifiable-units.md) `sequence-verifiable-units` | Multi-step work (sweeps, migrations, runs of similar edits) and how you stack commits and PRs. | Break work into small units that each end in a check, verify each before the next, and order delivery so the sequence proves itself. |
-| [Test Behavior, Not Implementation](../plugins/principles/skills/principles/references/test-behavior-not-implementation.md) `test-behavior-not-implementation` | Writing, changing, or keeping a test. | Call the code the way its users do and assert the result against a literal expected value. If the test would still pass when every imported function returns `undefined`, rewrite the assertion or delete the test. |
+| [Test Behavior, Not Implementation](../plugins/principles/skills/principles/references/test-behavior-not-implementation.md) `test-behavior-not-implementation` | Writing, changing, or keeping a test. | Assert what the code's users can observe, so the test fails when that behavior breaks and keeps passing when only the internals change. |
 
 ## Delegation
 

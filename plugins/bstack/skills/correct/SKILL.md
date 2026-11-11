@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: lyddonb
   version: "0.1.0"
-  upstream: "pstack correct @ ccb5507 (MIT, Lauren Tan)"
+  upstream: "pstack correct @ ccb5507, test step updated from 246bc50 (MIT, Lauren Tan)"
 ---
 
 # Correct
@@ -22,7 +22,7 @@ Read recent commits, reverts, review comments, agent instruction files (`AGENTS.
 
 1. **Architecture** removes it: one owner per piece of state, one supported way per task, internals hidden so the wrong import fails, one source of truth instead of hand-synced lists, and old ways deleted so nobody copies them.
 2. **Types** make the bad state unwritable. If bad code still compiles, add a **lint or CI check** whose error message names the file, type or function to use instead. If the bad pattern is already common, fail only when a change adds more.
-3. **A test** of the behavior. Fix or delete any test that would still pass if every function it calls returned nothing.
+3. **A test** of the behavior. Fix or delete any test that still passes when the behavior it checks breaks, or that fails when only the internals change.
 4. **Docs or agent rules**, last, and only for judgment calls. Nothing fails when an agent skips a rule.
 
 ## 3. Fix and prove
