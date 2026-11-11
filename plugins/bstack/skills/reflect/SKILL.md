@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: lyddonb
   version: "0.1.0"
-  upstream: "pstack reflect @ ccb5507 (MIT, Lauren Tan)"
+  upstream: "pstack reflect @ ccb5507, plugin-cache rule from 246bc50 (MIT, Lauren Tan)"
 ---
 
 # Reflect
@@ -69,7 +69,7 @@ Route each edit to where it belongs:
 - **A fact or convention, not a behavior**: the knowledge base if one is available, otherwise the project's agent instructions.
 - **The skill existed but didn't trigger**: rewrite its `description` with the words the user actually used.
 
-Open a PR for skill edits rather than editing installed copies: agentfiles installs pinned copies, and edits there are lost on the next sync.
+Open a PR for skill edits rather than editing installed copies: agentfiles installs pinned copies, and edits there are lost on the next sync. Never edit a skill inside a tool's plugin cache (such as `~/.claude/plugins/cache/`); an update replaces it. For a third-party skill you don't publish, show the destination before approval, copy its folder to the project's `.agents/skills/` or `~/.agents/skills/`, and edit the copy. Never open a PR or push to someone else's repo for it.
 
 ## 6. Summarize
 

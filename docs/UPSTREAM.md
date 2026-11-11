@@ -23,6 +23,14 @@ Not ported yet (see [ROADMAP.md](../ROADMAP.md)): `automate-me`, `blast-radius`,
 and worktree-cleanup playbooks. Upstream's prompt distillation (00b14f1) is adopted only in the
 skills ported at 11713c6; the files still marked `@ ccb5507` predate it.
 
+Last reviewed through `246bc50` (2026-11-10). Adopted: interrogate's run-proven adversaries, the
+rewritten test-behavior, fix-root-causes, attack-the-premise and make-operations-idempotent
+principles, explain-the-number's decide-before-you-run step, create-verification-skill's readiness
+rules, multi-phase-plan's swarm cadence, beau-mode's goal handoff, and reflect's plugin-cache rule.
+Skipped: the cuts to six other principles (they need an eval on more than Cursor's models first),
+per-job subagent effort (Cursor model slugs), `statechart`, `ketchup-video`, and changes to playbooks
+not ported here.
+
 Ported at `246bc50`: `create-` and `maintain-formal-verification-skill` (generated skills go to
 `.agents/skills/verify-<area>/`, subagents use roles, the `/statechart` hand-off is dropped because
 `statechart` is not ported) and `sharpen` (into `essentials`, verbatim). Upstream marks all three
@@ -54,36 +62,32 @@ only what is still unreviewed.
 |---|---|
 | `plugins/bstack/skills/architect/SKILL.md` | `pstack architect @ 11713c6` |
 | `plugins/bstack/skills/arena/SKILL.md` | `pstack arena @ 11713c6` |
-| `plugins/bstack/skills/beau-mode/SKILL.md` | `pstack poteto-mode @ ccb5507, playbooks updated from 11713c6` |
+| `plugins/bstack/skills/beau-mode/SKILL.md` | `pstack poteto-mode @ ccb5507, playbooks updated from 11713c6, goal handoff from 246bc50` |
 | `plugins/bstack/skills/beau-mode/playbooks/authoring-a-skill.md` | `pstack/skills/poteto-mode/playbooks/authoring-a-skill.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/autonomous-run.md` | `pstack/skills/poteto-mode/playbooks/autonomous-run.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/bug-fix.md` | `pstack/skills/poteto-mode/playbooks/bug-fix.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/eval.md` | `pstack/skills/poteto-mode/playbooks/eval.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/feature.md` | `pstack/skills/poteto-mode/playbooks/feature.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/investigation.md` | `pstack/skills/poteto-mode/playbooks/investigation.md @ 11713c6` |
-| `plugins/bstack/skills/beau-mode/playbooks/multi-phase-plan.md` | `pstack/skills/poteto-mode/playbooks/multi-phase-plan.md @ 11713c6` |
-| `plugins/bstack/skills/beau-mode/playbooks/opening-a-pr.md` | `pstack/skills/poteto-mode/playbooks/opening-a-pr.md @ ccb5507` |
+| `plugins/bstack/skills/beau-mode/playbooks/multi-phase-plan.md` | `pstack/skills/poteto-mode/playbooks/multi-phase-plan.md @ 11713c6, swarm cadence from 246bc50` |
+| `plugins/bstack/skills/beau-mode/playbooks/opening-a-pr.md` | `pstack/skills/poteto-mode/playbooks/opening-a-pr.md @ ccb5507, goal in Why from 246bc50` |
 | `plugins/bstack/skills/beau-mode/playbooks/pause-safely.md` | `pstack/skills/poteto-mode/playbooks/pause-safely.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/perf-issue.md` | `pstack/skills/poteto-mode/playbooks/perf-issue.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/prototype.md` | `pstack/skills/poteto-mode/playbooks/prototype.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/refactoring.md` | `pstack/skills/poteto-mode/playbooks/refactoring.md @ ccb5507` |
 | `plugins/bstack/skills/beau-mode/playbooks/session-pickup.md` | `pstack/skills/poteto-mode/playbooks/session-pickup.md @ ccb5507` |
-| `plugins/bstack/skills/correct/SKILL.md` | `pstack correct @ ccb5507` |
+| `plugins/bstack/skills/correct/SKILL.md` | `pstack correct @ ccb5507, test step updated from 246bc50` |
 | `plugins/bstack/skills/create-formal-verification-skill/SKILL.md` | `pstack create-formal-verification-skill @ 246bc50` |
-| `plugins/bstack/skills/create-verification-skill/SKILL.md` | `pstack create-verification-skill @ 11713c6` |
+| `plugins/bstack/skills/create-verification-skill/SKILL.md` | `pstack create-verification-skill @ 246bc50` |
 | `plugins/bstack/skills/figure-it-out/SKILL.md` | `pstack figure-it-out @ ccb5507` |
 | `plugins/bstack/skills/how/SKILL.md` | `pstack how @ ccb5507` |
 | `plugins/bstack/skills/how/references/explainer-prompt.md` | `pstack/skills/how/references/explainer-prompt.md @ ccb5507` |
 | `plugins/bstack/skills/how/references/explorer-prompt.md` | `pstack/skills/how/references/explorer-prompt.md @ ccb5507` |
-| `plugins/bstack/skills/interrogate/SKILL.md` | `pstack interrogate @ ccb5507` |
-| `plugins/bstack/skills/interrogate/references/code-quality-review.md` | `pstack/skills/interrogate/references/code-quality-review.md @ ccb5507` |
-| `plugins/bstack/skills/interrogate/references/lead-judgment.md` | `pstack/skills/interrogate/references/lead-judgment.md @ ccb5507` |
-| `plugins/bstack/skills/interrogate/references/reviewer-prompt.md` | `pstack/skills/interrogate/references/reviewer-prompt.md @ ccb5507` |
-| `plugins/bstack/skills/interrogate/references/rubric.md` | `pstack/skills/interrogate/references/rubric.md @ ccb5507` |
+| `plugins/bstack/skills/interrogate/SKILL.md` | `pstack interrogate @ 246bc50` |
 | `plugins/bstack/skills/maintain-formal-verification-skill/SKILL.md` | `pstack maintain-formal-verification-skill @ 246bc50` |
 | `plugins/bstack/skills/maintain-verification-skill/SKILL.md` | `pstack maintain-verification-skill @ 11713c6` |
 | `plugins/bstack/skills/recall/SKILL.md` | `pstack recall @ 11713c6` |
-| `plugins/bstack/skills/reflect/SKILL.md` | `pstack reflect @ ccb5507` |
+| `plugins/bstack/skills/reflect/SKILL.md` | `pstack reflect @ ccb5507, plugin-cache rule from 246bc50` |
 | `plugins/bstack/skills/reflect/references/divergent-reviewer.md` | `pstack/skills/reflect/references/divergent-reviewer.md @ ccb5507` |
 | `plugins/bstack/skills/reflect/references/judgment-reviewer.md` | `pstack/skills/reflect/references/judgment-reviewer.md @ ccb5507` |
 | `plugins/bstack/skills/reflect/references/synthesizer.md` | `pstack/skills/reflect/references/synthesizer.md @ ccb5507` |
@@ -98,19 +102,19 @@ only what is still unreviewed.
 | `plugins/essentials/skills/grilling/SKILL.md` | `mattpocock/skills skills/productivity/grilling/SKILL.md @ 95249b0` |
 | `plugins/essentials/skills/sharpen/SKILL.md` | `pstack sharpen @ 246bc50` |
 | `plugins/principles/skills/principles/SKILL.md` | `pstack @ ccb5507` |
-| `plugins/principles/skills/principles/references/attack-the-premise.md` | `pstack/skills/principle-attack-the-premise @ ccb5507` |
+| `plugins/principles/skills/principles/references/attack-the-premise.md` | `pstack/skills/principle-attack-the-premise @ 246bc50` |
 | `plugins/principles/skills/principles/references/boundary-discipline.md` | `pstack/skills/principle-boundary-discipline @ ccb5507` |
 | `plugins/principles/skills/principles/references/build-the-lever.md` | `pstack/skills/principle-build-the-lever @ ccb5507` |
 | `plugins/principles/skills/principles/references/checklists/benchmark.md` | `pstack/skills/benchmark-checklist @ ccb5507` |
 | `plugins/principles/skills/principles/references/encode-lessons-in-structure.md` | `pstack/skills/principle-encode-lessons-in-structure @ ccb5507` |
 | `plugins/principles/skills/principles/references/exhaust-the-design-space.md` | `pstack/skills/principle-exhaust-the-design-space @ ccb5507` |
 | `plugins/principles/skills/principles/references/experience-first.md` | `pstack/skills/principle-experience-first @ ccb5507` |
-| `plugins/principles/skills/principles/references/explain-the-number.md` | `pstack/skills/principle-explain-the-number @ ccb5507` |
-| `plugins/principles/skills/principles/references/fix-root-causes.md` | `pstack/skills/principle-fix-root-causes @ ccb5507` |
+| `plugins/principles/skills/principles/references/explain-the-number.md` | `pstack/skills/principle-explain-the-number @ 246bc50` |
+| `plugins/principles/skills/principles/references/fix-root-causes.md` | `pstack/skills/principle-fix-root-causes @ 246bc50` |
 | `plugins/principles/skills/principles/references/foundational-thinking.md` | `pstack/skills/principle-foundational-thinking @ ccb5507` |
 | `plugins/principles/skills/principles/references/guard-the-context-window.md` | `pstack/skills/principle-guard-the-context-window @ ccb5507` |
 | `plugins/principles/skills/principles/references/laziness-protocol.md` | `pstack/skills/principle-laziness-protocol @ ccb5507` |
-| `plugins/principles/skills/principles/references/make-operations-idempotent.md` | `pstack/skills/principle-make-operations-idempotent @ ccb5507` |
+| `plugins/principles/skills/principles/references/make-operations-idempotent.md` | `pstack/skills/principle-make-operations-idempotent @ 246bc50` |
 | `plugins/principles/skills/principles/references/migrate-callers-then-delete-legacy-apis.md` | `pstack/skills/principle-migrate-callers-then-delete-legacy-apis @ ccb5507` |
 | `plugins/principles/skills/principles/references/minimize-reader-load.md` | `pstack/skills/principle-minimize-reader-load @ ccb5507` |
 | `plugins/principles/skills/principles/references/model-the-domain.md` | `pstack/skills/principle-model-the-domain @ ccb5507` |
@@ -121,6 +125,6 @@ only what is still unreviewed.
 | `plugins/principles/skills/principles/references/separate-before-serializing-shared-state.md` | `pstack/skills/principle-separate-before-serializing-shared-state @ ccb5507` |
 | `plugins/principles/skills/principles/references/sequence-verifiable-units.md` | `pstack/skills/principle-sequence-verifiable-units @ ccb5507` |
 | `plugins/principles/skills/principles/references/subtract-before-you-add.md` | `pstack/skills/principle-subtract-before-you-add @ ccb5507` |
-| `plugins/principles/skills/principles/references/test-behavior-not-implementation.md` | `pstack/skills/principle-test-behavior-not-implementation @ ccb5507` |
+| `plugins/principles/skills/principles/references/test-behavior-not-implementation.md` | `pstack/skills/principle-test-behavior-not-implementation @ 246bc50` |
 | `plugins/principles/skills/principles/references/type-system-discipline.md` | `pstack/skills/principle-type-system-discipline @ ccb5507` |
 <!-- END GENERATED: upstream-files -->

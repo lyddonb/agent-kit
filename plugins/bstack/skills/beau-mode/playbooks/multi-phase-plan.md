@@ -2,7 +2,7 @@
 id: multi-phase-plan
 title: Multi-phase plan
 when: "Turning an agreed design into a tactical execution plan of small, verifiable PRs: \"turn this design into a plan\", a migration, or any change too big for one PR."
-source: pstack/skills/poteto-mode/playbooks/multi-phase-plan.md @ 11713c6
+source: pstack/skills/poteto-mode/playbooks/multi-phase-plan.md @ 11713c6, swarm cadence from 246bc50
 ---
 
 # Multi-phase plan
@@ -61,7 +61,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Run the repo's lint, typecheck, and tests before pushing.
 - [ ] Run the unslop skill on the PR body and commit messages.
 - [ ] Open the PR per the Opening a PR playbook.
-- [ ] Run the live lanes and the perf probe with the swarm skill at the final head SHA. A new head gets fresh lanes.
+- [ ] Run the live lanes and the perf probe with the swarm skill once, at the code-ready head SHA. Run them all again only for new behavior, a redesign, or a large new diff. A rebase, a conflict resolution, or a minor fix gets one verifier lane at the new head. A wording-only change gets none.
 - [ ] Rebase onto current trunk before the merge-ready report.
 
 ## <Task as a verb phrase> (<PR id>)

@@ -47,12 +47,13 @@ plugins:
         url: https://mcp.context7.com/mcp
 
   - name: principles
+    version: 0.2.0
     description: Twenty-four named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and more) that steer how agents design, build and verify, plus a benchmark checklist. One skill with one file per principle.
     keywords: [principles, engineering, verification, design, rigor]
     category: development
 
   - name: bstack
-    version: 0.5.0
+    version: 0.6.0
     description: Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
     keywords: [workflow, rigor, verification, review, playbooks, planning, beau-mode]
     category: development

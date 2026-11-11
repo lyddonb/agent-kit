@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: lyddonb
   version: "0.1.0"
-  upstream: "pstack create-verification-skill @ 11713c6 (MIT, Lauren Tan)"
+  upstream: "pstack create-verification-skill @ 246bc50 (MIT, Lauren Tan)"
 ---
 
 # Create a verification skill
@@ -50,7 +50,7 @@ Put it where every tool you use will load it:
 
 Write `SKILL.md` with frontmatter (`name: verify-<app>` and a `description` naming the app, the surface, and when to use it; without frontmatter the skill never loads) and these sections. Ground each one in what you found. Leave no placeholders.
 
-- **Launch.** The exact command that starts the app for verification, and how to tell it's ready (a log line, a port answering, a prompt). Include teardown. A short-lived CLI or TUI has no server to keep alive: launch means build or install once, then start each drive in its own isolated PTY or tmux session.
+- **Launch.** The exact command that starts the app for verification, and how to tell it's ready (a log line, a prompt). Launch must reach a usable state from an empty data dir, including migrations and seed data. Ready means usable, not that a process answers: a database health check can pass while its init scripts are still running. Include teardown. A short-lived CLI or TUI has no server to keep alive: launch means build or install once, then start each drive in its own isolated PTY or tmux session.
 - **Doctor.** One read-only check that answers "is this instance worth driving?": process up, right build, port owned by this run, auth valid. Run it first, and again whenever anything looks off.
 - **Drive.** The control CLI with real selectors and commands from this repo, not examples. Prefer stable handles (ARIA roles and names, data attributes, prompt strings, route paths) over coordinates and tab order.
 - **Evidence.** What to capture and where it goes. State the proof standards: exercise the real user path, not internal setters or test-only endpoints. Capture the action and the resulting state, not only the final screen. Check side effects (files written, rows inserted, messages sent) alongside what's visible. Use mocks only where a production boundary already isolates the external system. When the safe path is a dry-run or test mode, observe what it actually skips (files, network, git refs) rather than trusting its name.
@@ -68,11 +68,11 @@ Follow the shape in [references/feature-map-example/](references/feature-map-exa
 3. `Driving it with <harness>`: starts with `Preconditions:`, then labeled bullets pairing each user action with an exact command and the observable result.
 4. `Gotchas`: traps that waste or invalidate a run.
 
-Keep implementation details out of the map. A proof that drives one convenient entry point is incomplete when the map lists others.
+If the seed data lacks a precondition a journey needs, the journey reports a failure and the reason goes in that feature's `Gotchas`. Never weaken the journey to make it pass. Keep implementation details out of the map. A proof that drives one convenient entry point is incomplete when the map lists others.
 
 ## 5. Prove the generated skill
 
-Follow its instructions end to end once: launch, doctor, drive one mapped feature, capture evidence, clean up. Then confirm the evidence still exists at the named location. A cleanup that deletes the proof fails this step. Fix what fails, and run the generated cleanup after every failed attempt so broken runs don't strand processes and ports. A skill that was never run is a draft, not a deliverable.
+Follow its instructions end to end once: launch, doctor, drive one mapped feature, capture evidence, clean up. Then confirm the evidence still exists at the named location. A cleanup that deletes the proof fails this step. Fix what fails, and run the generated cleanup after every failed attempt so broken runs don't strand processes and ports. A skill that was never run is a draft, not a deliverable. If you proved it in a stand-in for the real target (a container in place of a fresh VM, a local stack in place of a remote one), list every setup step the stand-in did that the target will not. Those steps stay unverified until a run on the real target covers them.
 
 ## 6. Hand it over
 
