@@ -42,7 +42,7 @@ Show the human the matrix, the Mermaid diagram (`--mermaid`), the confirmed find
 ## 3. Check deeper (when the risk warrants it)
 
 - One pure transition function: property tests over random event sequences, asserting every invariant after each step.
-- Several writers or processes and no single pure core (claims, locks, queues, sync, multi-agent handoffs): model it in Quint or TLA+ and let the model checker search for a sequence that breaks an invariant. Report each counterexample as a design flaw (with the change it calls for) or a modeling mistake.
+- Several writers or processes and no single pure core (claims, locks, queues, sync, multi-agent handoffs): model it in Quint or TLA+ and let the model checker search for a sequence that breaks an invariant. Report each counterexample as a design flaw (with the change it calls for) or a modeling mistake. To keep that check in the repo as a project skill the next agent reruns, use **create-formal-verification-skill**, then **maintain-formal-verification-skill** after changes that skipped it.
 
 ## 4. Make explicit
 

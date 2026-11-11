@@ -46,6 +46,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | Starting a product, or adopting an existing repo into this workflow | **scaffold-product** |
 | Designing before code | **architect** (uses **arena**) |
 | Lifecycle or status logic spread across flags; "find the implicit state machines" | **state-machines** |
+| A race, retry, invariant or parser where a bug is costly and tests can't reach it | **create-formal-verification-skill**, then **maintain-formal-verification-skill** after unchecked changes |
 | Several attempts at one artifact, judged | **arena** |
 | Parallel lanes: coverage, fuzzing, perf samples, live checks | **swarm** |
 | Docs, READMEs, plans, PR bodies | **technical-writing**, then **unslop** |

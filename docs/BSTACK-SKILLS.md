@@ -100,6 +100,24 @@ It reads only the current project's transcripts. To resume one specific session 
 | Returns | One outcome (**clean**, **changed** or **blocked**), one line per feature, at most one PR of proven fixes, and a list of product bugs it found for you to triage. It never edits product code. |
 | Example | `/maintain-verification-skill` |
 
+### create-formal-verification-skill
+
+| | |
+|---|---|
+| Use for | A promise where a bug is costly and tests rarely reach the breaking case: races, retries, multi-writer state machines, parsers, unsafe code. |
+| Needs | A verification tool the repo's developers can install (TLA+ or Quint for orderings, a code-level verifier or prover otherwise). Subagents (`code`, to follow the new skill cold). |
+| Returns | A PR with `.agents/skills/verify-<area>/` (linked into `.claude/skills/`), its model or harness, a coverage record with a sync commit, proof the check catches a scratch break, and any bugs it found as plain-word counterexamples. It doesn't change product code. |
+| Example | `/create-formal-verification-skill model-check the job claim and retry logic in worker/` |
+
+### maintain-formal-verification-skill
+
+| | |
+|---|---|
+| Use for | After merges or refactors that touched verified code without rerunning its check. |
+| Needs | A formal `verify-<area>` skill. Subagents (`explorer`, one per check, when many files changed). |
+| Returns | One outcome per check (**in sync**, **updated**, **bug** or **blocked**), what changed in the verification and why, the break that proves each updated check can still fail, and bugs with the commit that introduced them. Verification updates ship in their own PR. |
+| Example | `/maintain-formal-verification-skill is the claim model still true to the code?` |
+
 ### swarm
 
 | | |
