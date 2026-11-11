@@ -192,8 +192,8 @@ It reads only the current project's transcripts. To resume one specific session 
 | | |
 |---|---|
 | Use for | A skeptical review of a diff, branch or PR before shipping something risky or contested. Not for abstract plans. |
-| Needs | Subagents (`reviewers`, ideally two model families). |
-| Returns | Intent, one line per reviewer with its model, then **Act on**, **Consider**, **Noted**, **Dismissed** and an agreement map. It doesn't edit unless you ask. |
+| Needs | Subagents (`reviewers`, ideally two model families) and git worktrees for their repros. |
+| Returns | Intent, one line per adversary with its model, then only the findings a rerun proved (command, output, how it breaks the intent) and a count of dropped findings. Style and speculative risks don't survive. It doesn't edit unless you ask. |
 | Example | `/interrogate review this branch skeptically. no nitpicks unless it's a real bug.` |
 
 ### show-me-your-work

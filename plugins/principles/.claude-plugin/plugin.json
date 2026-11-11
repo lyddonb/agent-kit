@@ -1,6 +1,6 @@
 {
   "name": "principles",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Twenty-four named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and more) that steer how agents design, build and verify, plus a benchmark checklist. One skill with one file per principle.",
   "author": {
     "name": "Beau Lyddon",

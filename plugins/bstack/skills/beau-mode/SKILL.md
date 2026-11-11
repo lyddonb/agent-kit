@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: lyddonb
   version: "0.1.0"
-  upstream: "pstack poteto-mode @ ccb5507, playbooks updated from 11713c6 (MIT, Lauren Tan)"
+  upstream: "pstack poteto-mode @ ccb5507, playbooks updated from 11713c6, goal handoff from 246bc50 (MIT, Lauren Tan)"
 ---
 
 # Beau mode
@@ -14,7 +14,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 
 ## Start every task this way
 
-1. **Restate the task.** In one or two plain sentences, say what you think is being asked and what done looks like. When the request points at a thread, ticket or log, read all of it first. This catches a wrong reading before it costs anything, and the user can redirect.
+1. **Restate the task.** In one or two plain sentences, say the user's goal, the problem it solves, and what done looks like. If the task ships a change, name the smallest change you expect to meet the goal. When the request points at a thread, ticket or log, read all of it first. Don't wait for confirmation: this catches a wrong reading before it costs anything, and the user can redirect. If the evidence rules out the change the user asked for, show it and stop. Carry the goal forward: restate it in every subagent brief, at the top of each PR's `## Why`, and at the top of your final reply (skip that for a fully specified one-line edit).
 2. **Match a playbook.** Pick one from the list at the end. Open its file and copy its steps into your todo list word for word, before any task-specific todos. A step you skip stays in the list as `skip: <reason>`. If no playbook fits, or the work is large, cross-cutting, or will run while the human is away, use the **figure-it-out** skill instead.
 3. **Read the principles that apply.** Scan the index below. For each principle you will apply, read its full file in the **principles** skill (`references/<id>.md`). In the reply, name each principle that shaped a decision and the choice it changed. Cite only principles you read this session.
 4. **Check for team knowledge.** If the project or your tools provide a knowledge base (an MCP server, a docs folder, or a skill that holds conventions and best practices), search it for the area you are about to change before you design. Prefer its conventions over your defaults, and say which entries you used.
@@ -84,7 +84,7 @@ Read the full file before you apply one. Each line says when it applies.
 
 **Verification**
 
-- **Explain the Number** (`explain-the-number`). Before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result).
+- **Explain the Number** (`explain-the-number`). Before you measure, and before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result).
 - **Fix Root Causes** (`fix-root-causes`). Debugging.
 - **Prove It Works** (`prove-it-works`). After a task, before declaring done.
 - **Sequence Work into Verifiable Units** (`sequence-verifiable-units`). Multi-step work (sweeps, migrations, runs of similar edits) and how you stack commits and PRs.
@@ -114,7 +114,7 @@ Read the full file before you apply one. Each line says when it applies.
 
 Use subagents to keep the main thread small and to get independent judgment.
 
-- Give each subagent a precise brief: the goal, file paths, the named data shape, what done means, and what to return. Point at files instead of pasting their contents.
+- Give each subagent a precise brief: the user's goal in your own words, file paths, the named data shape, what done means, and what to return. Point at files instead of pasting their contents.
 - New work goes to a fresh subagent with consolidated scope: the original brief, every later instruction, and the previous agent's report. Reuse a running subagent only when the work needs state that lives in it (an uncommitted checkout, a running server).
 - You own every subagent's output. Read its diff or artifact yourself and write your own summary. Don't pass its claims through.
 - Agreement between two different models is a strong signal. Agreement between two runs of the same model is a weak one.
