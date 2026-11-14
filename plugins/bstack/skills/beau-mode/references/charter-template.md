@@ -9,7 +9,8 @@ estimate: {usd: 25, tokens: 3500000, wall_clock: 3h, calls: {rollouts: 0, review
 gates: [migration, delete-data, public-api, deploy, auth-permissions, new-dependency, secrets, outbound-message, license, spend]
 staffing:
   - {role: code, tool: claude-code, model: sonnet, count: 2, isolation: worktree, why: "the cursor table and the writer are disjoint files"}
-  - {role: reviewers, tool: claude-code, model: [opus, sonnet], count: 2, why: "interrogate each PR"}
+  - {role: reviewers, tool: claude-code, model: opus, count: 1, why: "interrogate each PR"}
+  - {role: reviewers, tool: cursor, model: grok-4.7-xhigh-fast, count: 1, why: "a second model family on each PR"}
 review: {lenses: [correctness, operability, maintainer], decision_review: false}
 spec_level: property-tests
 rollback: {export-cursor-migration: "expand then contract: the old column stays until PR 3 merges, so reverting PR 2 needs no data change"}
@@ -19,7 +20,8 @@ soc2: {approved_before_build: true, tested: true, independent_review: true, reco
 # Make export retries idempotent
 
 <!-- An example of a complete tier 2 charter that passes `ledger charter check`. Start a real
-one with `ledger charter new <slug> --title ... --tier N` and fill it the same way. Front matter
+one with `ledger charter new <slug> --title ... --tier N` and fill it the same way (its run_id must
+match its own folder). Front matter
 holds what the tools enforce; quote any value YAML would read as a number, date or boolean. -->
 
 ## Goal
@@ -38,11 +40,11 @@ In: the export writer, a resume cursor stored per export, and its migration. Out
 
 ## Gates and rollback
 
-`migration` fires at units 1 and 3; both wait for an answer. Rollback is reverting the PR: unit 1 adds a table nothing reads yet, and unit 3 runs only after 2 has proven itself.
+`migration` fires at units 1 and 3, and `deploy` fires for the staging check before close; each waits for an answer. Rollback is reverting the PR: unit 1 adds a table nothing reads yet, and unit 3 runs only after 2 has proven itself.
 
 ## Staffing and why
 
-Two `code` agents in worktrees take units 1 and 2 in parallel, since they touch disjoint files. Two reviewers on different models interrogate each PR.
+Two `code` agents in worktrees take units 1 and 2 in parallel, since they touch disjoint files. Two reviewers from different model families (opus in Claude Code, grok in Cursor) interrogate each PR. Units 1 and 2 don't depend on each other, so they run at once; unit 3 waits for both.
 
 ## Guardrails
 
@@ -54,7 +56,7 @@ Exports contain customer data; test fixtures are synthetic. The cursor stores ro
 
 ## Review plan
 
-interrogate with opus and sonnet on each PR; verify-work on staging with a real 60,000-row export before closing.
+interrogate with opus and grok on each PR; verify-work on staging with a real 60,000-row export before closing.
 
 ## Budget and estimate
 

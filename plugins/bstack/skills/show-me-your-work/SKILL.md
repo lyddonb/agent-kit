@@ -15,10 +15,10 @@ Keep one canonical trail so a human can audit decisions instead of re-reading a 
 <!-- BEGIN GENERATED: snippet:ledger (tools/kitgen.py; edit plugins/bstack/snippets/ledger.md) -->
 **The `ledger` CLI.** agentfiles installs it (`commands: {ledger: agent-ledger:ci/run_ledger.py}` in a profile). Elsewhere: `pip install git+https://github.com/lyddonb/agent-ledger` (standard-library Python 3.10+). Run it inside the project's git repo; a run's records live in `.audit/runs/<yyyy-mm-dd>-<slug>/` and are committed with the work. Every write is redacted before it is recorded, and `ledger verify` checks the chain.
 
-Every write names who is acting with `--actor` (spec S2):
+Every write names who is acting with `--actor` (agent-ledger spec S2):
 
-- **You:** `{"kind":"agent","id":"<agent name>@<tool>#<session prefix>","on_behalf_of":"<identity.human from the policy>","tool":"<claude-code, codex, cursor, pi or opencode>","model":"<your model>","session":"<session id>"}`. The session id is your transcript file's name without `.jsonl` (see Finding transcripts); if you can't find it, make up 8 hex characters once and reuse them all session. A subagent gets its own id and the same `on_behalf_of`.
-- **A human** (approvals, gate answers): `{"kind":"human","id":"<github login>","on_behalf_of":"<login>@github"}`. When you type in what they said, put their exact words in `data.quote` and your agent id in `data.relayed_by`.
+- **You:** `{"kind":"agent","id":"<agent name>@<tool>#<session prefix>","on_behalf_of":"<identity.human from the policy>","tool":"<claude-code, codex, cursor, pi or opencode>","model":"<your model>","session":"<session id>"}`. The session id is your transcript file's name without `.jsonl` (see Finding transcripts), when you can tell which file is yours; parallel sessions in one project make the newest file a guess. If you can't tell, or don't know your model, write `unknown`. Never put a guess in the record. A subagent gets its own id and the same `on_behalf_of`.
+- **A human** (approvals, gate answers): `{"kind":"human","id":"<github login>","on_behalf_of":"<login>@github"}`. Whenever you type in what they said, always record their exact words (`data.quote`, or `--quote` on `charter approve`) and your agent id (`data.relayed_by`, or `--relayed-by`). The CLI accepts a human entry without them, so this rule is the only thing that shows it was relayed.
 
 Never write an entry as a person who didn't say it, and never invent an approval.
 <!-- END GENERATED: snippet:ledger -->
@@ -43,11 +43,13 @@ ledger append --run <run-id> --actor '<you>' --type <type> \
 
 Record decision points, not every action: a fork chosen, a unit finished with its verification result, a pivot or revert and its trigger, a blocker. In a loop, one entry per iteration. Write entries the way you'd tell a teammate (the **unslop** rules apply). `ledger append` refuses to write to a run whose chain is broken; that is a finding to report, not something to work around.
 
+Only one agent appends to a run: the one orchestrating the work, on one branch. Subagents and parallel workers report back, and the orchestrator records what they did; two branches appending to one ledger conflict, and fixing that means rewriting history.
+
 Entries are append-only: a wrong call gets a new entry that supersedes it. Never edit or delete history; `ledger verify --base origin/main` in CI fails if merged entries change.
 
 ## Where it lives
 
-`.audit/runs/<run-id>/` in the project, committed with the work, so the PR carries its own trail and CI checks it (the `ledger-verify` Action). For a throwaway or private exploration you don't want in the repo, start the run with `--root` pointing at a scratch git repo instead. Older trails kept as `decisions.tsv` stay readable as they are.
+`.audit/runs/<run-id>/` in the project, committed with the work, so the PR carries its own trail and CI checks it (the `ledger-verify` Action). For a throwaway or private exploration you don't want in the repo, use a scratch git repo instead, and pass the same `--root <scratch repo>` on every `ledger` command for that run. Older trails kept as `decisions.tsv` stay readable as they are.
 
 ## Before handing back
 

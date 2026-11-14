@@ -24,7 +24,7 @@ Don't start the run until you can state:
 
 Present the framing and trade-offs before a multi-hour run. That one checkpoint is worth it; after it, proceed on reversible work (`never-block-on-the-human`).
 
-At tier 2 or 3 (several PRs, unattended, or a default gate in reach), the framing is a charter: follow beau-mode's **Large work item** playbook through approval, then design the workflow below as the charter's plan. Its predicate, scope, budget and gates are this phase's answers, and the human approves them by hash before the run starts.
+For tier 2 or 3 work (several PRs, or a default gate in reach), and for any run you'll do while the human is away, the framing is a charter: follow beau-mode's **Large work item** playbook through approval, then design the workflow below as the charter's plan. Its predicate, scope, budget and gates are this phase's answers, and the human approves them by hash before the run starts.
 
 ## B. Design the workflow
 

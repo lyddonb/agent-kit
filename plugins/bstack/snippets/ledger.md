@@ -1,8 +1,8 @@
 **The `ledger` CLI.** agentfiles installs it (`commands: {ledger: agent-ledger:ci/run_ledger.py}` in a profile). Elsewhere: `pip install git+https://github.com/lyddonb/agent-ledger` (standard-library Python 3.10+). Run it inside the project's git repo; a run's records live in `.audit/runs/<yyyy-mm-dd>-<slug>/` and are committed with the work. Every write is redacted before it is recorded, and `ledger verify` checks the chain.
 
-Every write names who is acting with `--actor` (spec S2):
+Every write names who is acting with `--actor` (agent-ledger spec S2):
 
-- **You:** `{"kind":"agent","id":"<agent name>@<tool>#<session prefix>","on_behalf_of":"<identity.human from the policy>","tool":"<claude-code, codex, cursor, pi or opencode>","model":"<your model>","session":"<session id>"}`. The session id is your transcript file's name without `.jsonl` (see Finding transcripts); if you can't find it, make up 8 hex characters once and reuse them all session. A subagent gets its own id and the same `on_behalf_of`.
-- **A human** (approvals, gate answers): `{"kind":"human","id":"<github login>","on_behalf_of":"<login>@github"}`. When you type in what they said, put their exact words in `data.quote` and your agent id in `data.relayed_by`.
+- **You:** `{"kind":"agent","id":"<agent name>@<tool>#<session prefix>","on_behalf_of":"<identity.human from the policy>","tool":"<claude-code, codex, cursor, pi or opencode>","model":"<your model>","session":"<session id>"}`. The session id is your transcript file's name without `.jsonl` (see Finding transcripts), when you can tell which file is yours; parallel sessions in one project make the newest file a guess. If you can't tell, or don't know your model, write `unknown`. Never put a guess in the record. A subagent gets its own id and the same `on_behalf_of`.
+- **A human** (approvals, gate answers): `{"kind":"human","id":"<github login>","on_behalf_of":"<login>@github"}`. Whenever you type in what they said, always record their exact words (`data.quote`, or `--quote` on `charter approve`) and your agent id (`data.relayed_by`, or `--relayed-by`). The CLI accepts a human entry without them, so this rule is the only thing that shows it was relayed.
 
 Never write an entry as a person who didn't say it, and never invent an approval.

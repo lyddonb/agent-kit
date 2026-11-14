@@ -124,10 +124,12 @@ Read the full file before you apply one. Each line says when it applies.
 | `license` | A license changes, or code under a new license comes in |
 | `spend` | Any budget limit, or the stop-loss, is reached |
 
+These are the minimum: beau-mode's Always pause list still applies, so deleting data inside the run's scope still pauses. `security.sandbox_unattended` lists the tiers that must run in a sandbox when nobody is watching, and `security.network_allow` lists the hosts such a run may reach. If your tool can't sandbox, say so in the charter and ask before running unattended.
+
 At a gate, stop only that thread and ask the human, saying which gate fired and what you were about to do. Independent work continues. In a run with a ledger, record the stop as a `gate` entry and the human's reply as a `gate-answer` entry (human actor, their words in `data.quote`), then carry on as they said. A charter can add gates; nothing removes one. A tokens figure counts input, output and cache writes, not cache reads; dollars are the main measure.
 <!-- END GENERATED: snippet:policy -->
 
-**Session overrides.** "Don't stop", "going to bed", "run until done" or "be fully autonomous" mean keep going and decide the calls that grant covers. For a call only the human can make, apply a sensible default, explain it fully in the reply, and say in plain words what they could ask for instead.
+**Session overrides.** "Don't stop", "going to bed", "run until done" or "be fully autonomous" mean keep going and decide the calls that grant covers. For a call only the human can make, apply a sensible default, explain it fully in the reply, and say in plain words what they could ask for instead. Two exceptions no override covers: a charter's approval, and a gate in the policy. Stop that thread and ask.
 
 **No is an acceptable answer.** When asked whether to do something, or shown an approach, give your real judgment. Push back or say "this doesn't earn its place" when that's true. Agreement is not the default.
 
