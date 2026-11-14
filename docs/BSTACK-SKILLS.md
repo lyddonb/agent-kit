@@ -201,8 +201,8 @@ It reads only the current project's transcripts. To resume one specific session 
 | | |
 |---|---|
 | Use for | Long, unattended or multi-phase work, and "catch me up on what you did". |
-| Needs | Subagents (a reviewer on a different model). |
-| Returns | A TSV decision trail (`decisions.tsv`, one row per decision with why, evidence and result) and a catch-up reply that ends with an **Attention** section from the other model. |
+| Needs | The `ledger` CLI (agentfiles installs it) and subagents (a reviewer on a different model). |
+| Returns | A hash-chained decision trail in the project's ledger (`.audit/runs/<run-id>/`, one entry per decision with why, evidence and result, checked by `ledger verify` and CI) and a catch-up reply that ends with an **Attention** section from the other model. |
 | Example | `/show-me-your-work catch me up` |
 
 ### figure-it-out
