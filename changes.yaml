@@ -9,6 +9,14 @@
 
 - date: 2026-11-15
   plugin: bstack
+  version: 0.9.0
+  changes:
+    - New `qualitydirector` skill records a unittest run as per-test time and outcome (`quality.py record`), so you can see what a repo's suite costs and which tests are slow or failing. A run that is cut short, an empty suite or a module that fails to import counts as a failure, never a green run.
+    - "`quality.py check` validates the quality books (`runs.csv` and `tests-weekly.csv`) and, with `--base REF`, fails if a past run row was edited or removed."
+  try: "record the tests in this repo with the quality director"
+
+- date: 2026-11-15
+  plugin: bstack
   version: 0.8.7
   changes:
     - "Large work item: each unit PR opens as a draft and is marked ready only once its reviews are in, so a merge can't land before its review."
