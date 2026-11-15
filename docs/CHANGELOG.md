@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.10.1 (2026-11-15)
+
+- `qualitydirector` has the weekly quality brief as numbered steps (`references/weekly-brief.md`): fetch the week's CI test records, book them, summarize, write the brief from the books' template with at most three proposals, check, and open one pull request for sign-off.
+- Try: `run the weekly quality brief`
+
 ## bstack 0.10.0 (2026-11-15)
 
 - `quality.py ingest` books the test-run artifacts CI uploads into the quality books (`runs.csv`, the new `failures.csv`, and `tests-weekly.csv`), rejecting any malformed file by name and booking the rest, and it changes nothing the second time you run it.

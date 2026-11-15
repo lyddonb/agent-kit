@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.10.1",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.10.1",
+      "changes": [
+        "`qualitydirector` has the weekly quality brief as numbered steps (`references/weekly-brief.md`): fetch the week's CI test records, book them, summarize, write the brief from the books' template with at most three proposals, check, and open one pull request for sign-off."
+      ],
+      "try": "run the weekly quality brief"
+    },
+    {
       "id": "bstack@0.10.0",
       "date": "2026-11-15",
       "plugin": "bstack",
