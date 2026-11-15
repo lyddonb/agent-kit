@@ -1,4 +1,4 @@
-"""End-to-end tests for weekly-claude-code.sh against a local bare repo and a stub `gh`."""
+"""End-to-end tests for weekly-claude-code.sh against a local bare repo and stub `gh` and `vercel`."""
 import json
 import os
 import shutil
@@ -30,6 +30,48 @@ else:
     sys.exit(f"stub gh: unexpected call {args}")
 """
 
+TEAM_ID = "team_FAKEID123"  # invented; the tests check it never leaves the request
+
+# A fake Vercel CLI. STUB_VERCEL_MODE: ok, logged-out, two-teams, api-fail or truncated (the last day
+# missing). `api` returns one FOCUS row per Pacific day between `from` and `to`, $1.25 on the first.
+STUB_VERCEL = r"""#!/usr/bin/env python3
+import datetime, json, os, sys, urllib.parse
+from zoneinfo import ZoneInfo
+args = sys.argv[1:]
+mode = os.environ.get("STUB_VERCEL_MODE", "ok")
+with open(os.environ["STUB_VERCEL_CALLS"], "a") as f:
+    f.write(json.dumps(args) + "\n")
+team = {"id": "team_FAKEID123", "slug": "s", "name": "S", "plan": "pro", "current": False}
+if args == ["whoami"]:
+    sys.exit(1 if mode == "logged-out" else 0)
+elif args == ["teams", "ls", "--json"]:
+    teams = [team, {**team, "id": "team_OTHER456"}] if mode == "two-teams" else [team]
+    print(json.dumps({"teams": teams, "pagination": {"count": len(teams), "next": None, "prev": 0}}))
+elif args[:1] == ["api"] and args[2:] == ["--method", "GET"]:
+    url = urllib.parse.urlsplit(args[1])
+    q = dict(urllib.parse.parse_qsl(url.query))
+    if url.path != "/v1/billing/charges" or q.get("teamId") != team["id"]:
+        sys.exit(f"stub vercel: unexpected request {args[1]}")
+    if mode == "api-fail":
+        sys.exit(f"Error: 500 Internal Server Error for {args[1]}")
+    pacific = ZoneInfo("America/Los_Angeles")
+    edge = lambda v: datetime.datetime.fromisoformat(v.replace("Z", "+00:00")).astimezone(pacific).date()
+    first, end = edge(q["from"]), edge(q["to"])
+    n = (end - first).days - (1 if mode == "truncated" else 0)
+    print("> Fetching billing charges")
+    for i in range(n):
+        d = first + datetime.timedelta(days=i)
+        start = datetime.datetime(d.year, d.month, d.day, tzinfo=pacific)
+        stop = start + datetime.timedelta(days=1)
+        stop = datetime.datetime(stop.year, stop.month, stop.day, tzinfo=pacific)
+        cost = "1.25" if i == 0 else "0"
+        print('{"BilledCost": %s, "ChargePeriodStart": "%s", "ChargePeriodEnd": "%s", "BillingCurrency": "USD",'
+              ' "ChargeCategory": "Usage", "ServiceName": "Fast Data Transfer", "SkuId": "fdt", "RegionId": "iad1",'
+              ' "BillingAccountId": "%s", "Tags": {}}' % (cost, start.isoformat(), stop.isoformat(), team["id"]))
+else:
+    sys.exit(f"stub vercel: unexpected call {args}")
+"""
+
 TZ = "America/Denver"
 
 STUB_RECORDER = """#!/bin/sh
@@ -56,6 +98,12 @@ def log_line(day: date, msg_id: str) -> str:
     return json.dumps({"type": "assistant", "timestamp": f"{day.isoformat()}T12:00:00.000Z", "cwd": "/work/x",
                        "requestId": msg_id, "message": {"id": msg_id, "model": "claude-sonnet-5-5",
                                                         "role": "assistant", "usage": usage}})
+
+
+def vercel_week() -> str:
+    """The week the job fetches: Monday to Monday, ending on the last Monday before yesterday (UTC)."""
+    end = datetime.now(timezone.utc).date() - timedelta(days=1)
+    return week(end - timedelta(days=end.weekday() + 7))
 
 
 def week(d: date) -> str:
@@ -86,6 +134,9 @@ class WeeklyJob(unittest.TestCase):
         (bin_dir / "gh").chmod(0o755)
         (bin_dir / "osascript").write_text(STUB_OSASCRIPT)
         (bin_dir / "osascript").chmod(0o755)
+        (bin_dir / "vercel").write_text(STUB_VERCEL.replace("/usr/bin/env python3", sys.executable))
+        (bin_dir / "vercel").chmod(0o755)
+        self.vercel_calls = self.tmp / "vercel-calls.jsonl"
         self.notes = self.tmp / "notes.txt"
         self.calls = self.tmp / "calls.jsonl"
         self.pulls = self.tmp / "pulls.json"
@@ -94,6 +145,7 @@ class WeeklyJob(unittest.TestCase):
                     "STUB_CALLS": str(self.calls), "STUB_PULLS": str(self.pulls),
                     "CFO_CLONE_URL": str(self.tmp / "origin.git"), "CFO_LOGS": str(self.tmp / "logs"),
                     "CFO_PYTHON": sys.executable, "CFO_TZ": TZ, "STUB_NOTES": str(self.notes),
+                    "STUB_VERCEL_CALLS": str(self.vercel_calls), "STUB_VERCEL_MODE": "ok",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
         seed = self.tmp / "seed"
@@ -278,6 +330,89 @@ class WeeklyJob(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("retrying once", r.stdout)
         self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", self.ledger("cfo/brief-2026-01-04"))
+
+    def vercel_api_calls(self) -> list[list[str]]:
+        if not self.vercel_calls.exists():
+            return []
+        return [c for c in map(json.loads, self.vercel_calls.read_text().splitlines()) if c[:1] == ["api"]]
+
+    def all_history(self) -> str:
+        """Every commit message and diff on every branch of origin."""
+        return self.git(self.tmp / "origin.git", "log", "-p", "--all")
+
+    def test_last_weeks_vercel_billing_is_booked_and_ids_stay_out(self):
+        r = self.run_job()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        branch = f"cfo/brief-{this_sunday().isoformat()}"
+        ledger = self.ledger(branch)
+        vrows = [line for line in ledger.splitlines() if ",vercel-focus," in line]
+        self.assertEqual(len(vrows), 1, ledger)
+        self.assertIn(",1.25,USD,,shared,", vrows[0])
+        self.assertIn(f"vercel-focus:{vercel_week()}:shared", vrows[0])
+        self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", ledger, "Claude Code rows still land")
+        self.assertIn(f"Vercel usage for {vercel_week()}", self.all_history())
+        self.assertEqual(len(self.vercel_api_calls()), 1)
+        for where, text in (("stdout", r.stdout), ("stderr", r.stderr), ("history", self.all_history()),
+                            ("gh calls", json.dumps(self.gh_calls()))):
+            self.assertNotIn("FAKEID123", text, f"team id leaked into {where}")
+
+    def test_vercel_week_runs_monday_to_monday_at_midnight_pacific(self):
+        cases = [  # UTC run date -> from, to
+            ("2026-07-12", "2026-06-29T07:00:00.000Z", "2026-07-06T07:00:00.000Z"),  # summer time
+            ("2026-01-11", "2025-12-29T08:00:00.000Z", "2026-01-05T08:00:00.000Z"),  # winter time
+            ("2026-11-08", "2026-10-26T07:00:00.000Z", "2026-11-02T08:00:00.000Z"),  # ends Sunday Nov 1
+            ("2026-03-15", "2026-03-02T08:00:00.000Z", "2026-03-09T07:00:00.000Z"),  # starts Sunday Mar 8
+            ("2026-11-09", "2026-10-26T07:00:00.000Z", "2026-11-02T08:00:00.000Z"),  # Monday: last week isn't closed
+        ]
+        for today, frm, to in cases:
+            with self.subTest(today=today):
+                self.vercel_calls.unlink(missing_ok=True)
+                self.env["CFO_UTC_TODAY"] = today
+                r = self.run_job("--dry-run")
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                [call] = self.vercel_api_calls()
+                q = dict(p.split("=", 1) for p in call[1].split("?", 1)[1].split("&"))
+                self.assertEqual((q["from"], q["to"]), (frm, to))
+                monday = date.fromisoformat(frm[:10]) + timedelta(days=1 if frm[11:13] == "07" else 0)
+                self.assertIn(f"Vercel weeks: {week(monday)} | incomplete: none", r.stdout,
+                              "the stub's 23- or 25-hour day still makes a whole week")
+        self.assertEqual(self.branches(), ["main"])
+
+    def test_vercel_missing_or_logged_out_skips_only_vercel(self):
+        for case in ("logged-out", "missing"):
+            with self.subTest(case=case):
+                if case == "missing":
+                    (self.tmp / "bin/vercel").unlink()
+                    self.env["PATH"] = f"{self.tmp / 'bin'}:/usr/bin:/bin"
+                else:
+                    self.env["STUB_VERCEL_MODE"] = case
+                r = self.run_job()
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn("skipping Vercel billing", r.stdout)
+                ledger = self.ledger(f"cfo/brief-{this_sunday().isoformat()}")
+                self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", ledger)
+                self.assertNotIn(",vercel-focus,", ledger)
+                self.assertFalse(self.notes.exists(), "a skip is logged, not notified")
+                self.assertEqual(self.vercel_api_calls(), [])
+
+    def test_vercel_problems_book_nothing_and_fail_after_claude_code(self):
+        cases = [("api-fail", "vercel api exited 1"), ("truncated", "books.py vercel exited 1"),
+                 ("two-teams", "couldn't pick the Vercel team")]
+        for mode, message in cases:
+            with self.subTest(mode=mode):
+                self.notes.unlink(missing_ok=True)
+                self.env["STUB_VERCEL_MODE"] = mode
+                r = self.run_job()
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn(message, r.stderr)
+                if mode == "truncated":
+                    self.assertIn(f"incomplete weeks: {vercel_week()}", r.stderr)
+                ledger = self.ledger(f"cfo/brief-{this_sunday().isoformat()}")
+                self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", ledger, "Claude Code rows pushed first")
+                self.assertNotIn(",vercel-focus,", ledger)
+                self.assertEqual(len(self.notes.read_text().splitlines()), 1, self.notes.read_text())
+                self.assertNotIn("FAKEID123", r.stdout + r.stderr, "the failed request's URL is redacted")
+                self.assertEqual(r.stderr.count("FAILED"), 1, r.stderr)
 
     def test_install_status_uninstall(self):
         import plistlib

@@ -3,6 +3,15 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.8.5 (2026-11-15)
+
+- beau-help's catalog lists cfo 0.3.0.
+
+## cfo 0.3.0 (2026-11-15)
+
+- The weekly Mac job (`weekly-claude-code.sh`) also imports last week's Vercel billing: it fetches the Monday-to-Monday week at midnight Pacific with the `vercel` CLI and books it with `books.py vercel`. A missing or logged-out CLI skips Vercel; a failed fetch or an incomplete week books nothing and fails the job after the Claude Code rows are pushed.
+- Try: `weekly-claude-code.sh --repo OWNER/BOOKS --dry-run`
+
 ## bstack 0.8.4 (2026-11-15)
 
 - beau-help's catalog lists cfo 0.2.1.
