@@ -368,6 +368,90 @@ class FailureTest(FetchCase):
         self.assertFalse(any("zip" in e for e in self.endpoints()))
 
 
+def big_members(*sizes: int) -> dict[str, bytes]:
+    return {f"m{i}.jsonl": b"x" * size for i, size in enumerate(sizes)}
+
+
+class UnpackedSizeCapTest(FetchCase):
+    """Item 1: what an archive unpacks to is capped per archive and per run, counted while streaming."""
+    MB = 1 << 20
+
+    def serve(self, run_id: int, *archives: dict[str, bytes]) -> dict:
+        run = run_obj(run_id)
+        arts = [artifact_obj(run_id * 100 + i, f"test-results-a{i}") for i in range(len(archives))]
+        self.artifacts(run_id, *arts)
+        for art, members in zip(arts, archives):
+            self.archive(art, members)
+        return run
+
+    def tree_files(self) -> list[str]:
+        return [str(p) for p in self.out.rglob("*") if p.is_file()]
+
+    def test_an_archive_unpacking_to_exactly_16_mb_is_fetched(self):
+        self.runs([self.serve(801, big_members(8 * self.MB, 8 * self.MB))])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len([f for f in self.tree_files() if f.endswith(".jsonl")]), 2)
+
+    def test_an_archive_unpacking_one_byte_past_16_mb_fails_its_run_and_leaves_no_files(self):
+        self.runs([self.serve(802, big_members(8 * self.MB, 8 * self.MB, 1))])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^\s+FAILED 802: .*16 MB")
+        self.assertEqual(self.tree_files(), [])
+        self.assertEqual([p for p in self.out.rglob("*.partial")], [])
+
+    def test_a_run_unpacking_to_exactly_32_mb_is_fetched_and_one_byte_more_fails_the_run(self):
+        full = big_members(8 * self.MB, 8 * self.MB)
+        self.runs([self.serve(804, full, full)])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len([f for f in self.tree_files() if f.endswith(".jsonl")]), 4)
+        shutil.rmtree(self.out)
+        self.runs([self.serve(805, full, full, {"one.jsonl": b"x"}), self.serve(806, {"ok.jsonl": recorder_text(806).encode()})])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^\s+FAILED 805: .*32 MB")
+        self.assertFalse((self.out / "agentfiles" / "805").exists(), self.tree_files())
+        self.assertTrue((self.out / "agentfiles" / "806" / "manifest.json").exists(), "the other runs are still fetched")
+
+    def test_twelve_artifacts_are_fetched_and_thirteen_fail_the_run_before_any_download(self):
+        small = {"t.jsonl": recorder_text(1).encode()}
+        self.runs([self.serve(807, *[small] * 12)])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        shutil.rmtree(self.out)
+        before = len(self.calls())
+        self.runs([self.serve(808, *[small] * 13)])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^\s+FAILED 808: .*12")
+        self.assertFalse((self.out / "agentfiles" / "808").exists())
+        self.assertFalse(any("zip" in e for e in self.endpoints()[before:]))
+
+
+class WindowAndStatusTest(FetchCase):
+    def test_a_run_that_is_not_completed_is_skipped_without_a_manifest(self):
+        pending = self.run_with_artifact(811, status="in_progress")
+        done = self.run_with_artifact(812)
+        self.runs([pending, done])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r"(?m)^\s+skipped 811: .*not completed")
+        self.assertFalse((self.out / "agentfiles" / "811").exists())
+        self.assertTrue((self.out / "agentfiles" / "812" / "manifest.json").exists())
+
+    def test_a_run_whose_head_repository_is_null_is_a_fork_and_nothing_is_downloaded(self):
+        run = self.run_with_artifact(813, head_repository=None)
+        self.runs([run])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r"(?m)^\s+skipped 813: fork")
+        self.assertIn("1 forks", out)
+        self.assertFalse((self.out / "agentfiles" / "813").exists())
+        self.assertFalse(any("8130" in e or "813/" in e for e in self.endpoints()), self.endpoints())
+
+
 class SinceTest(FetchCase):
     def listing_call(self) -> str:
         return next(e for e in self.endpoints() if "actions/runs?" in e)
@@ -377,7 +461,7 @@ class SinceTest(FetchCase):
         self.fetch()
         self.assertTrue(self.listing_call().endswith("created=%3E%3D2026-11-08"), self.listing_call())
 
-    def test_since_defaults_to_the_date_of_the_latest_started_in_the_books_for_that_repo(self):
+    def test_since_defaults_to_three_days_before_the_latest_started_in_the_books_for_that_repo(self):
         runs = ("2026-11-10T10:00:00Z,agentfiles,{s},push,ci,3.12,1,0,0,1,0,https://github.com/lyddonb/agentfiles/actions/runs/1/attempts/1\n"
                 "2026-11-12T23:59:59Z,agentfiles,{s},push,ci,3.12,1,0,0,1,0,https://github.com/lyddonb/agentfiles/actions/runs/2/attempts/1\n"
                 "2026-11-14T10:00:00Z,other,{s},push,ci,3.12,1,0,0,1,0,https://github.com/lyddonb/other/actions/runs/3/attempts/1\n").format(s="a" * 40)
@@ -385,7 +469,7 @@ class SinceTest(FetchCase):
         self.runs([])
         code, out = self.fetch()
         self.assertEqual(code, 0, out)
-        self.assertTrue(self.listing_call().endswith("created=%3E%3D2026-11-12"), self.listing_call())
+        self.assertTrue(self.listing_call().endswith("created=%3E%3D2026-11-09"), self.listing_call())
 
     def test_since_wins(self):
         self.runs([])
@@ -400,7 +484,7 @@ class SinceTest(FetchCase):
         self.put("repos/lyddonb/agent-ledger", {"default_branch": "main"})
         self.fetch()
         listings = [e for e in self.endpoints() if "actions/runs?" in e]
-        self.assertEqual([e.split("created=")[1] for e in listings], ["%3E%3D2026-11-12", "%3E%3D2026-11-08"])
+        self.assertEqual([e.split("created=")[1] for e in listings], ["%3E%3D2026-11-09", "%3E%3D2026-11-08"])
 
     def test_a_bad_since_is_a_usage_error(self):
         for bad in ("yesterday", "2026-13-01", "2026-11-1", "20261101"):

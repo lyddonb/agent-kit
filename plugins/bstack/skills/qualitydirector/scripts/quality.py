@@ -722,8 +722,11 @@ _WEEK = re.compile(r"([0-9]{4})-W([0-9]{2})")
 _RUN_LINK = re.compile(r"https://[^/\s]+/[^/\s]+/[^/\s]+/actions/runs/[0-9]+/attempts/[0-9]+")
 _COUNT = re.compile(r"0|[1-9][0-9]*")
 _GITHUB = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9._-]{0,99}")
-_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f]")  # C0 controls (ESC among them) and DEL; not newline or tab
-_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # a spreadsheet runs a cell that starts with one of these
+# C0 controls (ESC among them), DEL and the C1 controls (NEL, 8-bit CSI), but not newline or tab; the line and
+# paragraph separators; the bidirectional controls; and the zero-width characters
+_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069\u200b-\u200d\ufeff]")
+_FORMULA_FIRST = "=+-@\uff1d\uff0b\uff0d\uff20"  # a spreadsheet runs a cell whose first real character is one of these (ASCII or fullwidth)
+_FORMULA_SKIP = " \u00a0\t\n"  # characters a spreadsheet may skip before it sees that first character
 
 
 def _is_stamp(s: str) -> bool:
@@ -762,11 +765,20 @@ Rule = Callable[[dict], Iterator[str]]
 
 
 def text_problem(value: str) -> str | None:
-    """Why a text cell cannot go into a CSV the books share with a spreadsheet and a terminal."""
-    if value.startswith(_FORMULA_START):
-        return f"starts with {_show(value[0], 8)}; a spreadsheet would run it as a formula"
+    """Why a text cell cannot go into a CSV the books share with a spreadsheet and a terminal.
+
+    Rejected: a value that starts with a tab or a carriage return, or whose first character after any
+    run of space, no-break space, tab and newline is `=`, `+`, `-` or `@` or their fullwidth forms
+    (a spreadsheet would run it); any C0 control except newline and tab, DEL, any C1 control
+    (U+0080 to U+009F, NEL and 8-bit CSI among them), U+2028, U+2029, the bidirectional controls
+    (U+202A to U+202E, U+2066 to U+2069) and the zero-width characters (U+200B to U+200D, U+FEFF)
+    (a terminal would obey them or they would hide what the value says); and a value over 1000
+    characters. Newline and tab inside a value are allowed."""
+    first = value[:1] if value[:1] in ("\t", "\r") else value.lstrip(_FORMULA_SKIP)[:1]
+    if first and first in ("\t", "\r") + tuple(_FORMULA_FIRST):
+        return f"starts with {_show(first, 8)}; a spreadsheet would run it as a formula"
     if _CONTROL.search(value):
-        return "contains a control character"
+        return "contains a control character (a C0 or C1 control, a line or paragraph separator, a bidirectional control or a zero-width character)"
     if len(value) > MAX_CELL:
         return f"is longer than {MAX_CELL} characters"
     return None
@@ -940,7 +952,7 @@ def check_failures(books: Books) -> Iterator[Problem]:
 
 
 def check_failures_match_runs(books: Books) -> Iterator[Problem]:
-    """Every failure belongs to a run, and a run has exactly as many failure rows as it says failed."""
+    """Every failure belongs to a run, and a run has min(failed, MAX_FAILURE_ROWS) failure rows."""
     if any(p.path in (RUNS, FAILURES) for p in books.load_problems):
         return  # a file that did not load says so once; comparing what is left would only add noise
     runs = {(r.cells["evidence"], r.cells["python"]): r for r in books.tables[RUNS].rows}
@@ -958,8 +970,9 @@ def check_failures_match_runs(books: Books) -> Iterator[Problem]:
                 yield Problem(FAILURES, row.line, f"{name} {_show(c[name])} differs from {RUNS} line {run.line} ({_show(run.cells[name])})")
     for key, run in runs.items():
         failed = run.cells["failed"]
-        if _COUNT.fullmatch(failed) and int(failed) != counted.get(key, 0):
-            yield Problem(RUNS, run.line, f"failed is {failed} but {FAILURES} has {counted.get(key, 0)} rows for this run")
+        if _COUNT.fullmatch(failed) and min(int(failed), MAX_FAILURE_ROWS) != counted.get(key, 0):
+            yield Problem(RUNS, run.line, f"failed is {failed} but {FAILURES} has {counted.get(key, 0)} rows for this run "
+                          f"(it should have {min(int(failed), MAX_FAILURE_ROWS)})")
 
 
 def check_weekly(books: Books) -> Iterator[Problem]:
@@ -1176,6 +1189,10 @@ MAX_MANIFEST_BYTES = 64 << 10
 MAX_TEST_ROWS = 20_000  # test lines in one file
 MAX_FILES = 2000  # artifact files read by one ingest
 MAX_INGEST_BYTES = 32 << 20  # artifact bytes read by one ingest
+MAX_RUN_FILES = 100  # artifact files in one run folder
+MAX_RUN_BYTES = 32 << 20  # artifact bytes in one run folder (what fetch lets a run unpack to)
+MAX_RECORDS_PER_RUN = 8  # distinct (attempt, python) records in one run folder
+MAX_FAILURE_ROWS = 200  # failures.csv rows for one run record, the first by test id
 START_SLACK = timedelta(minutes=5)  # a run's `started` may be this much after its `updated`
 MAX_NUMBER = 1 << 53  # what any JSON consumer still holds exactly
 HEADER_KINDS = {"v": int, "repo": str, "sha": str, "event": str, "workflow": str, "python": str, "os": str,
@@ -1278,9 +1295,9 @@ class RecordedRun:
                       wall_ms=self.wall_ms, exit_code=self.verdict(), evidence=self.evidence)
 
     def failure_cells(self) -> Iterator[dict[str, str]]:
-        """The failures.csv rows, one per failing test, sorted by test id."""
+        """The failures.csv rows, one per failing test, sorted by test id: the first MAX_FAILURE_ROWS of them."""
         m, failing = self.manifest, self.failing()
-        for test_id in sorted(failing):
+        for test_id in sorted(failing)[:MAX_FAILURE_ROWS]:
             yield _cells(FAILURES_SCHEMA, started=m.started, repo=m.repo, sha=m.head_sha, python=self.python,
                          test_id=test_id, outcome=failing[test_id], evidence=self.evidence)
 
@@ -1529,49 +1546,103 @@ def _layout(root: str) -> tuple[dict[tuple[str, str], tuple[str | None, list[str
 @dataclass
 class Scanned:
     scans: list[Scan]
-    unread_files: int = 0  # artifact files beyond MAX_FILES
-    unread_bytes: int = 0  # artifact files beyond MAX_INGEST_BYTES
+    unread: list[tuple[str, str]]  # (run folder, cap) left unread because a per-ingest budget was spent
 
 
-def scan_fetched(root: str, watched: dict[str, tuple[str, str]]) -> Scanned:
-    runs, stray = _layout(root)
-    found = Scanned([Scan(rel, "rejected", reason="not inside <repo>/<run_id>/artifacts/ of a run folder") for rel in stray])
-    files_read = bytes_read = 0
-    for (repo, run_id), (manifest_path, artifacts) in runs.items():
-        if manifest_path is None:
-            for rel in artifacts:
-                if files_read >= MAX_FILES:
-                    found.unread_files += 1
-                else:
-                    files_read += 1
-                    found.scans.append(Scan(rel, "rejected", reason=f"no {MANIFEST} in its run folder"))
-            continue
+def _folder_bytes(root: str, artifacts: list[str]) -> int:
+    total = 0
+    for rel in artifacts:
         try:
-            m = read_manifest(os.path.join(root, manifest_path), repo, run_id, watched)
-        except Rejected as e:
-            note = f" ({len(artifacts)} artifact file{'s' * (len(artifacts) != 1)} not read)" if artifacts else ""
-            found.scans.append(Scan(manifest_path, "rejected", reason=str(e) + note))
-            continue
-        if not artifacts:
-            found.scans.append(Scan(manifest_path, "no artifacts"))
-        for rel in artifacts:
-            if files_read >= MAX_FILES:
-                found.unread_files += 1
-                continue
-            path = os.path.join(root, rel)
+            total += os.lstat(os.path.join(root, rel)).st_size
+        except OSError:
+            pass
+    return total
+
+
+def _peek_key(path: str, m: Manifest) -> tuple[str, str] | None:
+    """The (evidence, python) a file's first line claims for this run, or None when it does not plainly
+    claim one. Only the first line is read, and only to tell a file that is booked already from one
+    that is not, before the budgets are spent on it."""
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return None
+        with open(path, "rb") as f:
+            header = json.loads(f.readline(1 << 16))
+        evidence, python = header["evidence"], header["python"]
+        if type(evidence) is str and type(python) is str:
+            return m.evidence(_attempt_of(evidence, m)), python
+    except (OSError, ValueError, KeyError, TypeError, Rejected, RecursionError):
+        pass
+    return None
+
+
+def scan_fetched(root: str, watched: dict[str, tuple[str, str]], booked: set[tuple[str, str]] | None = None) -> Scanned:
+    """Read the run folders in order of the manifest's `started`, then run id, each under its own caps
+    (MAX_RUN_FILES, MAX_RUN_BYTES, MAX_RECORDS_PER_RUN). A folder is read whole or not at all: one that
+    the per-ingest budgets (MAX_FILES, MAX_INGEST_BYTES) cannot hold is named in `unread` and a later
+    ingest reads it. A folder whose files all claim a record that is booked already is not read and costs no budget."""
+    runs, stray = _layout(root)
+    found = Scanned([Scan(rel, "rejected", reason="not inside <repo>/<run_id>/artifacts/ of a run folder") for rel in stray], [])
+    booked = booked or set()
+    manifests: list[tuple[tuple, str, str, str | None, list[str], Manifest | None, str]] = []
+    for (repo, run_id), (manifest_path, artifacts) in runs.items():
+        m, why = None, ""
+        if manifest_path is not None:
             try:
-                size = os.lstat(path).st_size
-            except OSError:
-                size = 0
-            if bytes_read + size > MAX_INGEST_BYTES:
-                found.unread_bytes += 1
-                continue
-            files_read += 1
-            bytes_read += size
-            try:
-                found.scans.append(Scan(rel, "booked", parse_artifact(_read_file(path, MAX_ARTIFACT_BYTES), m)))
+                m = read_manifest(os.path.join(root, manifest_path), repo, run_id, watched)
             except Rejected as e:
-                found.scans.append(Scan(rel, "rejected", reason=str(e)))
+                why = str(e)
+        order = (m.started if m else "", m.run_id if m else (int(run_id) if run_id.isdigit() else 0), repo, run_id)
+        manifests.append((order, repo, run_id, manifest_path, artifacts, m, why))
+    manifests.sort(key=lambda x: x[0])
+    files_read = bytes_read = 0
+    for _, repo, run_id, manifest_path, artifacts, m, why in manifests:
+        folder = f"{repo}/{run_id}"
+        if manifest_path is not None and m is None:
+            note = f" ({len(artifacts)} artifact file{'s' * (len(artifacts) != 1)} not read)" if artifacts else ""
+            found.scans.append(Scan(manifest_path, "rejected", reason=why + note))
+            continue
+        if m is not None and not artifacts:
+            found.scans.append(Scan(manifest_path, "no artifacts"))
+            continue
+        size = _folder_bytes(root, artifacts)
+        if m is None:  # no manifest: each file is rejected unread, and the files are counted against the budget
+            if files_read + len(artifacts) > MAX_FILES:
+                found.unread.append((folder, f"{MAX_FILES}-file cap"))
+                continue
+            files_read += len(artifacts)
+            found.scans.extend(Scan(rel, "rejected", reason=f"no {MANIFEST} in its run folder") for rel in artifacts)
+            continue
+        if len(artifacts) > MAX_RUN_FILES or size > MAX_RUN_BYTES:
+            found.scans.append(Scan(manifest_path, "rejected", reason=(
+                f"run {folder} has {len(artifacts)} artifact files and {size} bytes, over the per-run caps of {MAX_RUN_FILES} files "
+                f"and {_size(MAX_RUN_BYTES)}; none of it is read or booked")))
+            continue
+        if all(_peek_key(os.path.join(root, rel), m) in booked for rel in artifacts):
+            found.scans.extend(Scan(rel, "already", reason="already booked") for rel in artifacts)
+            continue
+        if files_read + len(artifacts) > MAX_FILES:
+            found.unread.append((folder, f"{MAX_FILES}-file cap"))
+            continue
+        if bytes_read + size > MAX_INGEST_BYTES:
+            found.unread.append((folder, f"{_size(MAX_INGEST_BYTES)} cap"))
+            continue
+        files_read += len(artifacts)
+        bytes_read += size
+        mine = []
+        for rel in artifacts:
+            try:
+                mine.append(Scan(rel, "booked", parse_artifact(_read_file(os.path.join(root, rel), MAX_ARTIFACT_BYTES), m)))
+            except Rejected as e:
+                mine.append(Scan(rel, "rejected", reason=str(e)))
+        records = {s.run.key for s in mine if s.status == "booked"}
+        if len(records) > MAX_RECORDS_PER_RUN:
+            for scan in mine:
+                if scan.status == "booked":
+                    scan.status, scan.run = "rejected", None
+                    scan.reason = (f"run {folder} has {len(records)} records (distinct attempt and python), more than "
+                                   f"{MAX_RECORDS_PER_RUN}; none of it is booked")
+        found.scans.extend(mine)
     found.scans.sort(key=lambda s: s.path)
     return found
 
@@ -1709,10 +1780,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         _print_problems(problems)
         print(f"{len(problems)} problems; refusing to ingest into books that fail check")
         return 1
-    found = scan_fetched(args.fetch_dir, watch_list(books))
+    booked = {(r.evidence, r.python) for r in _typed_rows(books, RUNS, RunRow)}
+    found = scan_fetched(args.fetch_dir, watch_list(books), booked)
     scans = found.scans
     settle_duplicates(scans)
-    booked = {(r.evidence, r.python) for r in _typed_rows(books, RUNS, RunRow)}
     new = choose_new_runs(scans, booked)
     plan = plan_ingest(books, new)
     if new:
@@ -1730,7 +1801,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             print(f"quality.py: cannot write the books, they are unchanged: {e}", file=sys.stderr)
             return 1
     count = lambda status: sum(s.status == status for s in scans)
-    unread = found.unread_files + found.unread_bytes
+    unread = len(found.unread)
     totals = {"files": len(scans), "booked": len(new), "already_booked": count("already"), "duplicates": count("duplicate"),
               "no_artifacts": count("no artifacts"), "rejected": count("rejected"), "unread": unread,
               "failures": plan.failures, "weekly_rows": plan.weekly_rows}
@@ -1767,10 +1838,11 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
             print(f"no artifacts: {name}")
         else:
             print(f"rejected: {name}: {s.reason}")
-    for count, why in ((found.unread_files, f"the {MAX_FILES}-file cap"), (found.unread_bytes, f"the {_size(MAX_INGEST_BYTES)} cap")):
-        if count:
-            print(f"{count} artifact file{'s' * (count != 1)} beyond {why} {'was' if count == 1 else 'were'} not read; "
-                  "ingest again after moving the booked runs out of the fetch folder, or fetch less")
+    for folder, cap in found.unread:
+        print(f"left unread, the {cap}: {printable(folder)}")
+    if found.unread:
+        print(f"{len(found.unread)} run folder{'s' * (len(found.unread) != 1)} left unread: ingest again to book "
+              f"{'it' if len(found.unread) == 1 else 'them'}")
     print(f"{'would book' if dry_run else 'booked'} {totals['booked']} runs, {totals['failures']} failures, "
           f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
           f"{totals['duplicates']} duplicates; rejected {totals['rejected']} of {totals['files']} files")
@@ -1801,26 +1873,29 @@ def _slowest(rows: list[WeeklyRow]) -> list[dict]:
 
 
 def _flaky(repo_runs: list[RunRow], repo_failures: list[FailureRow], week: str) -> list[dict]:
-    """Tests that failed in one run and not in another of the same commit and Python.
+    """Tests that failed in one run and not in another of the same commit, Python and event.
 
     A test is listed when it has a failure row this week. Its failing side is every failure row
-    of that repo, sha, Python and test (any week); its passing side is every run in the books (any
-    week) of the same repo, sha and Python that has no failure row for the test. The books keep
+    of that repo, sha, Python, event and test (any week); its passing side is every run in the books (any
+    week) of the same repo, sha, Python and event that has no failure row for the test. The books keep
     failures only, so a run in which the test was skipped or did not exist looks the same as a
     pass, and a run that is red for some other test counts as passing this one. A commit whose
     every run failed the test is not flaky. Python is part of the key because a test that fails
-    only on 3.10 is a compatibility bug, not a flake.
+    only on 3.10 is a compatibility bug, not a flake. The event is part of it because a pull request
+    branch can point at a commit that is already on main and report a failure that main never had.
     """
-    failed_in: dict[tuple[str, str, str], set[str]] = {}
+    event_of = {(r.evidence, r.python): r.event for r in repo_runs}
+    failed_in: dict[tuple[str, str, str, str], set[str]] = {}
     for f in repo_failures:
-        failed_in.setdefault((f.test_id, f.sha, f.python), set()).add(f.evidence)
-    listed = {(f.test_id, f.sha, f.python) for f in repo_failures if week_of(f.started) == week}
+        failed_in.setdefault((f.test_id, f.sha, f.python, event_of.get((f.evidence, f.python), "")), set()).add(f.evidence)
+    listed = {(f.test_id, f.sha, f.python, event_of.get((f.evidence, f.python), ""))
+              for f in repo_failures if week_of(f.started) == week}
     out = []
     for key in sorted(listed):
-        test_id, sha, python = key
-        passed = {r.evidence for r in repo_runs if r.sha == sha and r.python == python} - failed_in[key]
+        test_id, sha, python, event = key
+        passed = {r.evidence for r in repo_runs if r.sha == sha and r.python == python and r.event == event} - failed_in[key]
         if passed:
-            out.append({"failed_evidence": sorted(failed_in[key]), "passed_evidence": sorted(passed),
+            out.append({"event": event, "failed_evidence": sorted(failed_in[key]), "passed_evidence": sorted(passed),
                         "python": python, "sha": sha, "test_id": test_id})
     return out
 
@@ -1927,9 +2002,12 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
 ARTIFACT_PREFIX = "test-results-"
 _ARTIFACT_NAME = re.compile(r"test-results-[A-Za-z0-9._-]{1,100}")
-MAX_ARTIFACTS_PER_RUN = 100
+MAX_ARTIFACTS_PER_RUN = 12
 MAX_ZIP_BYTES = 32 << 20  # one downloaded archive
 MAX_ZIP_MEMBERS = 100
+MAX_UNPACKED_BYTES = 16 << 20  # what one archive unpacks to
+MAX_RUN_UNPACKED_BYTES = 32 << 20  # what all the archives of one run unpack to
+SINCE_OVERLAP_DAYS = 3  # the default --since lists this many days before the latest booked start again
 GH_TIMEOUT_SECONDS = 300
 LOOKBACK_DAYS = 7  # how far back a repo with nothing booked yet is listed
 
@@ -1998,13 +2076,22 @@ def _safe_member(name: str) -> bool:
             and all(p not in ("", ".", "..") for p in parts))
 
 
-def extract_archive(raw: bytes, dest: str) -> int:
+class OverCap(Rejected):
+    """An archive or a run that unpacks to more than its cap: the whole run is failed."""
+
+
+def extract_archive(raw: bytes, dest: str, run_left: list[int] | None = None) -> int:
     """Unzip the *.jsonl members of an artifact into `dest`, replacing it. An archive with a member whose
-    name climbs out, is absolute, or is a link, or one that is too big, is refused whole. Returns the files written."""
+    name climbs out, is absolute, or is a link, or one that is too big, is refused whole. Bytes are counted
+    as they are written, never taken from the header, and writing stops the moment a cap is passed: one
+    member (8 MB), the archive (16 MB), and `run_left[0]`, the bytes the run may still unpack (spent here).
+    Returns the files written."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
         raise Rejected("is not a zip archive") from None
+    if run_left is None:
+        run_left = [MAX_RUN_UNPACKED_BYTES]
     with archive:
         members = [i for i in archive.infolist() if not i.filename.endswith("/")]
         if len(members) > MAX_ZIP_MEMBERS:
@@ -2016,19 +2103,26 @@ def extract_archive(raw: bytes, dest: str) -> int:
                 raise Rejected(f"has a file larger than {_size(MAX_ARTIFACT_BYTES)}")
         partial = dest + ".partial"
         shutil.rmtree(partial, ignore_errors=True)
-        written = 0
+        written = total = 0
         try:
             for info in members:
                 if not info.filename.endswith(".jsonl"):
                     continue
-                with archive.open(info) as member:
-                    data = member.read(MAX_ARTIFACT_BYTES + 1)
-                if len(data) > MAX_ARTIFACT_BYTES:
-                    raise Rejected(f"has a file larger than {_size(MAX_ARTIFACT_BYTES)}")
                 path = os.path.join(partial, *info.filename.split("/"))
                 os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, "xb") as f:
-                    f.write(data)
+                size = 0
+                with archive.open(info) as member, open(path, "xb") as f:
+                    while chunk := member.read(1 << 16):
+                        size += len(chunk)
+                        total += len(chunk)
+                        run_left[0] -= len(chunk)
+                        if size > MAX_ARTIFACT_BYTES:
+                            raise Rejected(f"has a file larger than {_size(MAX_ARTIFACT_BYTES)}")
+                        if total > MAX_UNPACKED_BYTES:
+                            raise OverCap(f"unpacks to more than {_size(MAX_UNPACKED_BYTES)}")
+                        if run_left[0] < 0:
+                            raise OverCap(f"unpacks, with the run's other artifacts, to more than {_size(MAX_RUN_UNPACKED_BYTES)}")
+                        f.write(chunk)
                 written += 1
             shutil.rmtree(dest, ignore_errors=True)
             os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -2058,8 +2152,10 @@ class FetchTally:
 
 
 def _latest_started(books: Books, repo: str) -> str | None:
+    """The day SINCE_OVERLAP_DAYS before the repo's latest booked start: a run still going or whose download
+    failed when a newer run was booked is listed again, and a run already booked is skipped."""
     stamps = [r.cells["started"] for r in books.tables[RUNS].rows if r.cells["repo"] == repo]
-    return max(stamps)[:10] if stamps else None
+    return (date.fromisoformat(max(stamps)[:10]) - timedelta(days=SINCE_OVERLAP_DAYS)).isoformat() if stamps else None
 
 
 def _booked_per_run(books: Books) -> dict[str, int]:
@@ -2121,6 +2217,9 @@ def fetch_repo(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, sinc
 def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, default_branch: str, run: dict,
               tally: FetchTally, booked: dict[str, int]) -> None:
     run_id = run["id"]
+    if run.get("status") != "completed":
+        print(f"  skipped {run_id}: not completed ({printable(str(run.get('status')))}); it is listed again next time")
+        return
     head = run.get("head_repository")
     if not isinstance(head, dict) or str(head.get("full_name") or "").lower() != github.lower():
         tally.forks += 1
@@ -2142,9 +2241,9 @@ def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, defau
     if not wanted:
         tally.empty += 1  # counted in the totals line; most runs (a docs-only change) have none
         return
-    for a in wanted[MAX_ARTIFACTS_PER_RUN:]:
-        tally.fail(str(run_id), f"artifact {printable(str(a.get('name')))} is beyond the {MAX_ARTIFACTS_PER_RUN}-artifact limit")
-    wanted = wanted[:MAX_ARTIFACTS_PER_RUN]
+    if len(wanted) > MAX_ARTIFACTS_PER_RUN:
+        tally.fail(str(run_id), f"has {len(wanted)} test-results artifacts, more than the {MAX_ARTIFACTS_PER_RUN} a run may have; nothing fetched")
+        return
     fresh = []
     for a in wanted:
         name = str(a.get("name"))
@@ -2162,7 +2261,7 @@ def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, defau
         return
     folder = os.path.join(out_dir, repo, str(run_id))
     _write_json(os.path.join(folder, MANIFEST), manifest._asdict())
-    got = 0
+    got, run_left = 0, [MAX_RUN_UNPACKED_BYTES]
     for a in fresh:
         name = a["name"]
         try:
@@ -2171,8 +2270,12 @@ def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, defau
             raw = gh.api(f"repos/{github}/actions/artifacts/{a['id']}/zip")
             if len(raw) > MAX_ZIP_BYTES:
                 raise Rejected(f"is larger than {_size(MAX_ZIP_BYTES)}")
-            extract_archive(raw, os.path.join(folder, ARTIFACTS, name))
+            extract_archive(raw, os.path.join(folder, ARTIFACTS, name), run_left)
             got += 1
+        except OverCap as e:
+            shutil.rmtree(folder, ignore_errors=True)
+            tally.fail(str(run_id), f"artifact {name} ({a['id']}) {e}; the run is not fetched")
+            return
         except (Rejected, GhError, OSError) as e:
             tally.fail(str(run_id), f"artifact {name} ({a['id']}) not fetched: {e if not isinstance(e, OSError) else e.strerror}")
     if got:
@@ -2241,7 +2344,7 @@ def main(argv: list[str] | None = None) -> int:
     fetch = sub.add_parser("fetch", help="download the test-results artifacts and GitHub's account of each watched run")
     fetch.add_argument("books_dir", metavar="BOOKS_DIR")
     fetch.add_argument("out_dir", metavar="OUT_DIR")
-    fetch.add_argument("--since", metavar="YYYY-MM-DD", help="runs created on or after this day (default: the day of "
+    fetch.add_argument("--since", metavar="YYYY-MM-DD", help="runs created on or after this day (default: 3 days before "
                        "the repo's latest started in runs.csv, else 7 days before today UTC)")
     fetch.add_argument("--repo", metavar="SLUG", help="only this watched repo")
     fetch.add_argument("--today", metavar="YYYY-MM-DD", help="the date to count the 7 days back from (for tests)")

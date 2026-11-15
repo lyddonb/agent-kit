@@ -828,7 +828,7 @@ HOSTILE = [
     "$(touch pwned) `touch pwned` ; touch pwned",
     " leading and trailing space ",
     "tab\there",
-    "café \U0001f600 ‮",
+    "café \U0001f600 ‎",
     "a" * 1000,
     "{{template}} %s %(x)s ${HOME}",
     "t.A.test_with-dash+plus@at",
@@ -1124,7 +1124,7 @@ class FindingsTest(TempCase):
         code, out = self.ingest()
         self.assertEqual(code, 1, out)
         self.assertEqual(len(csv_rows(self.books / quality.RUNS)) - 1, 2000)
-        self.assertIn("1 artifact file beyond the 2000-file cap was not read", out)
+        self.assertRegex(out, r"(?m)^left unread, the 2000-file cap: demo/2001$")
         self.assertCheckOk()
 
     def test_finding_4_artifacts_beyond_the_byte_budget_of_one_ingest_are_counted_not_read(self):
@@ -1135,7 +1135,7 @@ class FindingsTest(TempCase):
             code, out = self.ingest()
         self.assertEqual(code, 1, out)
         self.assertEqual(len(csv_rows(self.books / quality.RUNS)) - 1, 2)
-        self.assertRegex(out, r"1 artifact file beyond the .* cap was not read")
+        self.assertRegex(out, r"(?m)^left unread, the .* cap: demo/3$")
 
     def test_finding_5_a_test_id_that_a_spreadsheet_would_run_is_rejected_by_name_and_the_rest_are_booked(self):
         hostile = ['=HYPERLINK("http://evil","x")', "+1+1", "-2+3", "@SUM(A1)", "\tcmd", "a\rb", "a\x1b[2Jb", "a\x7fb",
@@ -1152,7 +1152,7 @@ class FindingsTest(TempCase):
         self.assertCheckOk()
 
     def test_finding_5_a_test_id_that_only_looks_odd_is_still_booked(self):
-        fine = ["t.A.test_a=b", "t.A-test", "a\tb", "a\nb", "t.A.test_(1+1)", " =not first"]
+        fine = ["t.A.test_a=b", "t.A-test", "a\tb", "a\nb", "t.A.test_(1+1)", "a =b"]
         rows = [{"id": i, "ms": 1, "outcome": "fail"} for i in fine]
         put_run(self.art, manifest(1), {"x": artifact_text(counted_header(rows), rows)})
         code, out = self.ingest()
@@ -1427,6 +1427,173 @@ def write_books(folder: Path, runs=(), failures=(), weekly=()) -> Path:
     return folder
 
 
+class RunCapsTest(TempCase):
+    """Round three: what a branch inside a watched repo can still cause is bounded by caps and rules."""
+
+    def put_records(self, n: int, run: int = 1, **over) -> None:
+        put_run(self.art, manifest(run, **over), {f"r{i}": artifact_text(good_header(evidence=ev(run), python=f"3.{i}"), good_rows())
+                                                 for i in range(n)})
+
+    def booked_evidence(self) -> list[str]:
+        return [r[11] for r in csv_rows(self.books / quality.RUNS)[1:]]
+
+    def test_item_2_a_run_with_more_than_8_records_is_rejected_by_name_and_books_none_of_it(self):
+        self.put_records(9)
+        put_good_run(self.art, 2)
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^rejected: demo/1/.*9 records.*more than 8")
+        self.assertEqual(self.booked_evidence(), [ev(2)])
+        self.assertCheckOk()
+
+    def test_item_2_a_run_with_8_records_is_booked(self):
+        self.put_records(8)
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(self.booked_evidence()), 8)
+
+    def test_item_2_identical_files_count_as_one_record(self):
+        put_run(self.art, manifest(1), {f"r{i}": artifact_text(good_header(evidence=ev(1)), good_rows()) for i in range(30)})
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.booked_evidence(), [ev(1)])
+
+    def failing_rows(self, n: int) -> list[dict]:
+        return [{"id": f"t.A.test_{i:04d}", "ms": 1, "outcome": "fail"} for i in range(n)] + [{"id": "t.ok", "ms": 1, "outcome": "pass"}]
+
+    def test_item_2_a_record_with_201_failures_books_the_run_with_its_true_count_and_200_failure_rows(self):
+        rows = self.failing_rows(201)
+        put_run(self.art, manifest(1), {"x": artifact_text(counted_header(rows), rows)})
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        run = csv_rows(self.books / quality.RUNS)[1]
+        self.assertEqual((run[7], run[10]), ("201", "1"))
+        failures = csv_rows(self.books / quality.FAILURES)[1:]
+        self.assertEqual([f[4] for f in failures], [f"t.A.test_{i:04d}" for i in range(200)])
+        self.assertCheckOk()
+        self.assertEqual(len(csv_rows(self.books / quality.WEEKLY)) - 1, 202)
+
+    def test_item_2_a_record_with_exactly_200_failures_books_them_all(self):
+        rows = self.failing_rows(200)
+        put_run(self.art, manifest(1), {"x": artifact_text(counted_header(rows), rows)})
+        self.assertEqual(self.ingest()[0], 0)
+        self.assertEqual(len(csv_rows(self.books / quality.FAILURES)) - 1, 200)
+        self.assertCheckOk()
+
+    def test_item_2_the_summary_counts_the_run_by_its_row_not_by_its_failure_rows(self):
+        rows = self.failing_rows(201)
+        put_run(self.art, manifest(1), {"x": artifact_text(counted_header(rows), rows)})
+        put_good_run(self.art, 2)
+        self.ingest()
+        code, out = cli("summary", self.books, "--json")
+        self.assertEqual(code, 0, out)
+        repo = json.loads(out)["repos"]["demo"]
+        self.assertEqual((repo["runs"], repo["red_runs"]), (2, 1))
+        self.assertEqual(len(repo["failed_on_main"]), 200)
+        self.assertEqual(json.loads(out)["generated_from"], {"failures": 200, "runs": 2, "weekly_rows": 204})
+
+    def test_item_2_check_wants_min_of_failed_and_200_failure_rows(self):
+        rows = self.failing_rows(201)
+        put_run(self.art, manifest(1), {"x": artifact_text(counted_header(rows), rows)})
+        self.ingest()
+        path = self.books / quality.FAILURES
+        lines = path.read_text().splitlines(keepends=True)
+        path.write_text("".join(lines[:-1]))
+        code, out = cli("check", self.books)
+        self.assertEqual(code, 1, out)
+        self.assertIn("failed is 201 but books/failures.csv has 199 rows for this run (it should have 200)", out)
+        path.write_text("".join(lines) + lines[-1].replace("test_0199", "test_0200"))
+        self.assertIn("has 201 rows", cli("check", self.books)[1])
+
+    def test_item_3_a_flood_of_identical_files_cannot_starve_a_genuine_red_run(self):
+        put_run(self.art, manifest(1, started="2026-11-12T09:00:00Z", updated="2026-11-12T09:05:00Z"),
+                {f"f{i}": artifact_text(good_header(evidence=ev(1)), good_rows()) for i in range(2000)})
+        red = [{"id": "t.A.test_a", "ms": 3, "outcome": "fail"}]
+        put_run(self.art, manifest(2), {"x": artifact_text(counted_header(red, evidence=ev(2)), red)})
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^rejected: demo/1/manifest.json: .*2000 artifact files")
+        self.assertEqual(self.booked_evidence(), [ev(2)])
+        self.assertCheckOk()
+
+    def test_item_3_the_budget_goes_to_run_folders_in_started_order_and_the_one_left_unread_is_named_and_booked_next_time(self):
+        for n in (1, 2, 3, 4):  # run 1 started last
+            started = f"2026-11-1{9 - n}T10:00:00Z"
+            put_run(self.art, manifest(n, started=started, updated=started[:-3] + "59Z"),
+                    {"x": artifact_text(good_header(evidence=ev(n)), good_rows())})
+        with unittest.mock.patch.object(quality, "MAX_FILES", 3):
+            code, out = self.ingest()
+            self.assertEqual(code, 1, out)
+            self.assertRegex(out, r"(?m)^left unread, the 3-file cap: demo/1$")
+            self.assertEqual(sorted(self.booked_evidence()), [ev(2), ev(3), ev(4)])
+            code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(self.booked_evidence()), [ev(1), ev(2), ev(3), ev(4)])
+        self.assertCheckOk()
+
+    def test_item_3_a_run_folder_is_read_whole_or_not_at_all(self):
+        put_run(self.art, manifest(1, started="2026-11-11T10:00:00Z", updated="2026-11-11T10:05:00Z"),
+                {"a": artifact_text(good_header(evidence=ev(1), python="3.11"), good_rows()),
+                 "b": artifact_text(good_header(evidence=ev(1), python="3.12"), good_rows())})
+        put_good_run(self.art, 2)
+        with unittest.mock.patch.object(quality, "MAX_FILES", 2):
+            code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertIn("left unread, the 2-file cap: demo/2", out)
+        self.assertEqual(self.booked_evidence(), [ev(1), ev(1)])
+
+    def test_item_3_a_run_folder_over_its_byte_cap_is_rejected_whole_by_name(self):
+        put_good_run(self.art, 1)
+        put_good_run(self.art, 2)
+        with unittest.mock.patch.object(quality, "MAX_RUN_BYTES", 10):
+            code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^rejected: demo/1/manifest.json: .*bytes")
+        self.assertEqual(self.booked_evidence(), [])
+
+
+class TextHygieneTest(TempCase):
+    HOSTILE = {"NEL": "a\x85b", "8-bit CSI": "a\x9b2Jb", "C1 low": "a\x80b", "C1 high": "a\x9fb", "LS": "a\u2028b", "PS": "a\u2029b",
+               "LRE": "a\u202ab", "RLO": "a\u202eb", "LRI": "a\u2066b", "PDI": "a\u2069b", "ZWSP": "a\u200bb",
+               "ZWNJ": "a\u200cb", "ZWJ": "a\u200db", "BOM": "a\ufeffb",
+               "space then =": " =1", "NBSP then +": "\u00a0+1", "newline then -": "\n-1", "tab then @": "\t@x", "space, newline then =": " \n=x",
+               "fullwidth =": "\uff1d1", "fullwidth +": "\uff0b1", "fullwidth -": "\uff0d1", "fullwidth @": "\uff20x",
+               "spaces then fullwidth": "  \uff1dx"}
+    FINE = ["a\nb", "a\tb", "a=b", "x -1", "\u00e9t\u00e9", "a\u200e b", "\u2013dash", "a\u00a0b"]
+
+    def test_item_5_ingest_rejects_each_hostile_id_by_name_and_books_the_rest(self):
+        for n, (name, bad) in enumerate(self.HOSTILE.items(), start=2):
+            rows = [{"id": bad, "ms": 1, "outcome": "fail"}]
+            put_run(self.art, manifest(n), {"x": artifact_text(counted_header(rows, evidence=ev(n)), rows)})
+        put_good_run(self.art, 1)
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.count("rejected: demo/"), len(self.HOSTILE), out)
+        self.assertEqual([r[11] for r in csv_rows(self.books / quality.RUNS)[1:]], [ev(1)])
+
+    def test_item_5_check_refuses_the_same_values_in_a_books_file(self):
+        run = run_row(1)
+        for name, bad in self.HOSTILE.items():
+            with self.subTest(name):
+                shutil.rmtree(self.books)
+                write_books(self.books, [run], [], [weekly_row(test_id=bad)])
+                code, out = cli("check", self.books)
+                self.assertEqual(code, 1, out)
+                self.assertIn("books/tests-weekly.csv:2: test_id ", out)
+
+    def test_item_5_odd_but_harmless_ids_are_still_booked(self):
+        rows = [{"id": i, "ms": 1, "outcome": "fail"} for i in self.FINE]
+        put_run(self.art, manifest(1), {"x": artifact_text(counted_header(rows), rows)})
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertCheckOk()
+
+    def test_item_5_the_docstring_names_what_is_rejected(self):
+        doc = quality.text_problem.__doc__
+        for word in ("C1", "U+2028", "bidirectional", "zero-width", "fullwidth"):
+            self.assertIn(word, doc)
+
+
 class SummaryCase(TempCase):
     def summary(self, runs=(), failures=(), weekly=(), *extra, week="2026-W46") -> dict:
         write_books(self.books, runs, failures, weekly)
@@ -1635,7 +1802,15 @@ class FlakyTest(SummaryCase):
     def test_a_failure_and_a_green_run_of_the_same_sha_is_flaky_and_lists_both_sides(self):
         red, green = run_row(1, exit_code=1), run_row(2)
         self.assertEqual(self.flaky([red, green], [failure_row(red)]), [
-            {"failed_evidence": [ev(1)], "passed_evidence": [ev(2)], "python": "3.12", "sha": SHA_A, "test_id": "t.A.test_a"}])
+            {"event": "push", "failed_evidence": [ev(1)], "passed_evidence": [ev(2)], "python": "3.12", "sha": SHA_A,
+             "test_id": "t.A.test_a"}])
+
+    def test_a_failing_pull_request_run_is_not_paired_with_the_passing_push_run_of_the_same_commit(self):
+        red, green = run_row(1, event="pull_request", exit_code=1), run_row(2, event="push")
+        self.assertEqual(self.flaky([red, green], [failure_row(red)]), [])
+        green_pr = run_row(3, event="pull_request")
+        got = self.flaky([red, green, green_pr], [failure_row(red)])
+        self.assertEqual([(g["event"], g["failed_evidence"], g["passed_evidence"]) for g in got], [("pull_request", [ev(1)], [ev(3)])])
 
     def test_only_red_runs_that_all_fail_the_test_is_not_flaky(self):
         a, b = run_row(1, exit_code=1), run_row(2, exit_code=1)
@@ -1837,12 +2012,12 @@ def oracle(artifacts, week=None) -> dict:
         this_failures = [f for f in failures if f["repo"] == repo and f["week"] == week]
         flaky = {}
         for f in this_failures:
-            key = (f["test_id"], f["sha"], f["python"])
-            flaky[key] = {"failed": {x["evidence"] for x in failures if (x["test_id"], x["sha"], x["python"]) == key
+            key = (f["test_id"], f["sha"], f["python"], f["event"])
+            flaky[key] = {"failed": {x["evidence"] for x in failures if (x["test_id"], x["sha"], x["python"], x["event"]) == key
                                      and x["repo"] == repo}, "passed": set()}
-        for (test_id, sha, python), sides in flaky.items():
+        for (test_id, sha, python, event), sides in flaky.items():
             for r in mine:
-                if r["sha"] == sha and r["python"] == python and r["evidence"] not in sides["failed"]:
+                if r["sha"] == sha and r["python"] == python and r["event"] == event and r["evidence"] not in sides["failed"]:
                     sides["passed"].add(r["evidence"])
         median = statistics.median_low(walls)
         latest = this[-1]
@@ -1859,9 +2034,9 @@ def oracle(artifacts, week=None) -> dict:
             "failed_on_main": sorted(({"test_id": f["test_id"], "sha": f["sha"], "python": f["python"], "outcome": f["outcome"],
                                        "evidence": f["evidence"]} for f in this_failures if f["event"] == "push"),
                                      key=lambda d: (d["test_id"], d["evidence"], d["python"])),
-            "flaky": sorted(({"test_id": k[0], "sha": k[1], "python": k[2], "failed_evidence": sorted(v["failed"]),
+            "flaky": sorted(({"test_id": k[0], "sha": k[1], "python": k[2], "event": k[3], "failed_evidence": sorted(v["failed"]),
                               "passed_evidence": sorted(v["passed"])} for k, v in flaky.items() if v["passed"]),
-                            key=lambda d: (d["test_id"], d["sha"], d["python"])),
+                            key=lambda d: (d["test_id"], d["sha"], d["python"], d["event"])),
             "tests_added": sorted(now_ids - old_ids) if earlier else [],
             "tests_removed": sorted(old_ids - now_ids) if earlier else [],
             "over_threshold": median > 300000,
