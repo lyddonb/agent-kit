@@ -121,15 +121,15 @@ class RecordCase(unittest.TestCase):
         clean.update(extra or {})
         return clean
 
-    def run_plain(self, *, env=None, py=()) -> subprocess.CompletedProcess:
+    def run_plain(self, *, env=None, py=(), **kw) -> subprocess.CompletedProcess:
         """`python PY... -m unittest discover -s tests`; its exit code, as a shell says it, is `plain_code`."""
         return run_in_group([sys.executable, *py, "-m", "unittest", "discover", "-s", "tests"], cwd=self.work,
-                            env=self.clean_env(env))
+                            env=self.clean_env(env), **kw)
 
-    def run_record(self, *, env=None, args=None, tests="tests", out="out.jsonl", py=()) -> Recorded:
+    def run_record(self, *, env=None, args=None, tests="tests", out="out.jsonl", py=(), **kw) -> Recorded:
         clean = self.clean_env(env)
         argv = args if args is not None else ["record", tests, "--out", out, "--repo", "demo"]
-        proc = run_in_group([sys.executable, *py, str(SCRIPT)] + argv, cwd=self.work, env=clean)
+        proc = run_in_group([sys.executable, *py, str(SCRIPT)] + argv, cwd=self.work, env=clean, **kw)
         return Recorded(proc, self.work / out)
 
     def spawn_recorder(self, **kw) -> subprocess.Popen:
@@ -416,6 +416,23 @@ class OutputShapeTest(RecordCase):
         head = self.git_head()
         self.assertEqual(self.run_record().header["sha"], head)
 
+    def test_the_sha_option_wins_over_GITHUB_SHA_and_git(self):
+        self.git_head()
+        head = "abcdef0123456789abcdef0123456789abcdef01"
+        args = ["record", "tests", "--out", "out.jsonl", "--repo", "demo", "--sha", head]
+        self.assertEqual(self.run_record(env=GITHUB_ENV, args=args).header["sha"], head)
+        self.assertEqual(self.run_record(args=args).header["sha"], head)
+
+    def test_a_sha_that_is_not_40_lowercase_hex_is_bad_usage_before_any_test_runs(self):
+        self.rec.out.unlink()  # setUp recorded a run there
+        for bad in ("abc123", "ABCDEF0123456789ABCDEF0123456789ABCDEF01", "abcdef0123456789abcdef0123456789abcdef0g", "",
+                    "abcdef0123456789abcdef0123456789abcdef01 "):
+            with self.subTest(bad):
+                rec = self.run_record(args=["record", "tests", "--out", "out.jsonl", "--repo", "demo", "--sha", bad])
+                self.assertEqual(rec.exit, 2, rec.proc.stderr)
+                self.assertIsNone(rec.raw)
+                self.assertNotIn("Ran ", rec.proc.stderr)
+
     def test_stdout_is_one_line_and_unittests_report_stays_on_stderr(self):
         self.assertRegex(self.rec.proc.stdout, r"^recorded 3 tests in \d+ ms -> out\.jsonl\n$")
         self.assertIn("Ran 3 tests", self.rec.proc.stderr)
@@ -478,6 +495,19 @@ class TallyTest(unittest.TestCase):
         tally = self.tally("S\tt.A.test_x", "O\tpass\tt.A.test_x", "E\t5\tt.A.test_x")
         tally.finish()
         self.assertEqual(tally.rows, [{"id": "t.A.test_x", "outcome": "pass", "ms": 5}])
+
+    def test_a_start_inside_an_open_test_does_not_end_it(self):
+        tally = self.tally("S\tt.Outer.test_out", "S\tt.Inner.test_in", "O\tpass\tt.Inner.test_in", "E\t1\tt.Inner.test_in",
+                           "O\tpass\tt.Outer.test_out", "E\t3\tt.Outer.test_out")
+        tally.finish()
+        self.assertEqual(tally.rows, [{"id": "t.Inner.test_in", "outcome": "pass", "ms": 1},
+                                      {"id": "t.Outer.test_out", "outcome": "pass", "ms": 3}])
+
+    def test_every_test_still_open_when_the_child_is_gone_is_an_error(self):
+        tally = self.tally("S\tt.Outer.test_out", "S\tt.Inner.test_in")
+        tally.finish()
+        self.assertEqual([(r["id"], r["outcome"]) for r in tally.rows],
+                         [("t.Inner.test_in", "error"), ("t.Outer.test_out", "error")])
 
     def test_complete_only_after_the_run_complete_event(self):
         self.assertFalse(self.tally().complete)
@@ -543,6 +573,14 @@ PARITY = {
     "setUpModule error next to a passing module": ({
         "tests/test_a.py": case_source("def test_x(self):\n    pass\n", "def setUpModule():\n    raise RuntimeError('b')\n"),
         "tests/test_b.py": case_source("def test_y(self):\n    pass\n")}, {}),
+    "a test runs an inner suite against the outer test's own result": ({"tests/test_case.py": (
+        "import unittest\nclass Inner(unittest.TestCase):\n    def test_in(self):\n        pass\n"
+        "class Outer(unittest.TestCase):\n    def test_out(self):\n"
+        "        unittest.defaultTestLoader.loadTestsFromTestCase(Inner).run(self._outcome.result)\n")}, {}),
+    "a test runs a failing inner suite against the outer test's own result": ({"tests/test_case.py": (
+        "import unittest\nclass Inner(unittest.TestCase):\n    def test_in(self):\n        self.fail('inner')\n"
+        "class Outer(unittest.TestCase):\n    def test_out(self):\n"
+        "        unittest.defaultTestLoader.loadTestsFromTestCase(Inner).run(self._outcome.result)\n")}, {}),
     "no tests at all (documented: 1 when plain says 0)": ({"tests/test_nothing.py": "x = 1\n"}, {"empty_is_1": True}),
     "sys.path is the same": (one_test(DUMP.format("sys.path"), "import os, sys\n"), {"dump": "equal"}),
     "sys.argv is the same": (one_test(DUMP.format("sys.argv"), "import os, sys\n"), {"dump": "equal"}),
@@ -637,6 +675,27 @@ class ParityTest(RecordCase):
                     self.assertEqual(dumps["record"].read_text(), dumps["plain"].read_text())
                 self.assertEqual(rec.header["exit_code"], code, "the header says how the run ended")
                 self.assertIs(rec.header["complete"], not opts.get("incomplete"), "the header says whether the run finished")
+
+    def test_a_nested_suite_leaves_the_outer_test_green(self):
+        self.write("tests/test_case.py", case_source(
+            "def test_out(self):\n    unittest.defaultTestLoader.loadTestsFromTestCase(Inner).run(self._outcome.result)\n",
+            "class Inner(unittest.TestCase):\n    def test_in(self):\n        pass\n"))
+        rec = self.run_record()
+        self.assertEqual(shell_code(self.run_plain().returncode), 0)
+        self.assertEqual((rec.exit, rec.header["failed"], rec.header["complete"]), (0, 0, True), rec.proc.stderr)
+        self.assertEqual(rec.outcomes(), {"test_case.Inner.test_in": "pass", "test_case.T.test_out": "pass"})
+
+    def test_a_recorder_started_with_SIGINT_ignored_leaves_it_ignored_for_the_suite(self):
+        self.write("tests/test_case.py", case_source(
+            "def test_x(self):\n    open('seen.txt', 'w').write(repr(signal.getsignal(signal.SIGINT)))\n", "import signal\n"))
+        ignore = dict(preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
+        self.assertEqual(shell_code(self.run_plain(**ignore).returncode), 0)
+        plain = (self.work / "seen.txt").read_text()
+        (self.work / "seen.txt").unlink()
+        rec = self.run_record(**ignore)
+        self.assertEqual(rec.exit, 0, rec.proc.stderr)
+        self.assertEqual(plain, repr(signal.SIG_IGN))
+        self.assertEqual((self.work / "seen.txt").read_text(), plain)
 
     def test_the_file_is_where_it_was_asked_after_a_chdir_that_is_never_undone(self):
         self.write("tests/test_case.py", case_source(

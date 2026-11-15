@@ -2,7 +2,7 @@
 """The Quality Director's two primitives: record a test run, and check the quality books.
 
 Usage:
-    uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME
+    uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
 
 `record` runs `python -m unittest discover -s TESTS_DIR` and writes what happened to FILE as
@@ -141,25 +141,27 @@ def _quality_child(fd, tests_dir, argv0, flags):
             pass
 
     class Result(unittest.TextTestResult):
-        _open = None
-        _t0 = 0.0
+        # A test may run an inner suite against this same result, so starts nest: a stack.
+        _open = ()
 
         def startTest(self, test):
-            self._open = test
             emit("S", ident(test))
-            self._t0 = clock()
+            self._open = self._open + ((test, clock()),)
             super().startTest(test)
 
         def stopTest(self, test):
-            if self._open is test:
-                self._open = None
-                emit("E", "%d" % max(0, round((clock() - self._t0) * 1000)), ident(test))
+            for i in range(len(self._open) - 1, -1, -1):
+                if self._open[i][0] is test:
+                    started = self._open[i][1]
+                    self._open = self._open[:i] + self._open[i + 1:]
+                    emit("E", "%d" % max(0, round((clock() - started) * 1000)), ident(test))
+                    break
             super().stopTest(test)
 
         def _mark(self, test, outcome):
             if isinstance(test, unittest.case._SubTest):
                 test = test.test_case
-            if self._open is test:
+            if any(t is test for t, _ in self._open):
                 emit("O", outcome, ident(test))
             elif outcome != "pass":
                 emit("X", outcome, ident(test))
@@ -270,16 +272,17 @@ def interpreter_flags() -> list[str]:
 class Tally:
     """Builds the rows from the child's events. It never runs or imports test code.
 
-    One test is open at a time. It keeps the worst outcome reported for it, and `E` closes it
-    with the child's own milliseconds. A test closed without any outcome (an interrupt) or never
-    closed (os._exit, a crash, a kill) is an `error`, timed by this process's clock.
+    Tests nest: a test may run an inner suite against its own result, so a start arrives while
+    the outer test is still open. The open tests are a stack. Each keeps the worst outcome
+    reported for it, and `E` closes it with the child's own milliseconds. A test closed without
+    any outcome (an interrupt) or never closed (os._exit, a crash, a kill) is an `error`, timed
+    by this process's clock.
     """
 
     def __init__(self, clock=time.perf_counter):
         self.rows: list[dict] = []
         self._clock = clock
-        self._open: tuple[str, float] | None = None  # id, when it started
-        self._outcome: str | None = None
+        self._open: list[list] = []  # [id, when it started, worst outcome so far], innermost last
         self.complete = False  # the child said its run finished normally
         self._handlers = {"S": self._start, "O": self._outcome_of, "E": self._end, "X": self._alone,
                           "C": self._completed}
@@ -291,18 +294,29 @@ class Tally:
         if handler is not None:
             handler(first, test_id)
 
+    def _find(self, test_id: str) -> int | None:
+        for i in range(len(self._open) - 1, -1, -1):
+            if self._open[i][0] == test_id:
+                return i
+        return None
+
     def _start(self, test_id: str, _: str) -> None:
-        self.finish()  # a start with the last test still open: it never finished
-        self._open, self._outcome = (_unescape(test_id), self._clock()), None
+        self._open.append([_unescape(test_id), self._clock(), None])
 
-    def _outcome_of(self, outcome: str, _id: str) -> None:
-        if self._open is not None and outcome in OUTCOMES:
-            if self._outcome is None or OUTCOMES.index(outcome) > OUTCOMES.index(self._outcome):
-                self._outcome = outcome
+    def _outcome_of(self, outcome: str, test_id: str) -> None:
+        i = self._find(_unescape(test_id))
+        if i is not None and outcome in OUTCOMES:
+            entry = self._open[i]
+            if entry[2] is None or OUTCOMES.index(outcome) > OUTCOMES.index(entry[2]):
+                entry[2] = outcome
 
-    def _end(self, ms: str, _id: str) -> None:
-        if self._open is not None and ms.isdecimal():
-            self._close(int(ms), self._outcome or "error")
+    def _end(self, ms: str, test_id: str) -> None:
+        i = self._find(_unescape(test_id))
+        if i is not None and ms.isdecimal():
+            while len(self._open) - 1 > i:
+                self._close_innermost(self._clock())  # started inside this one and never finished
+            entry = self._open.pop()
+            self.rows.append({"id": entry[0], "outcome": entry[2] or "error", "ms": int(ms)})
 
     def _alone(self, outcome: str, test_id: str) -> None:
         if outcome in OUTCOMES:
@@ -311,15 +325,16 @@ class Tally:
     def _completed(self, _: str, __: str) -> None:
         self.complete = True
 
-    def _close(self, ms: int, outcome: str) -> None:
-        self.rows.append({"id": self._open[0], "outcome": outcome, "ms": ms})
-        self._open = self._outcome = None
+    def _close_innermost(self, now: float) -> None:
+        test_id, began, outcome = self._open.pop()
+        worst = max(outcome or "error", "error", key=OUTCOMES.index)
+        self.rows.append({"id": test_id, "outcome": worst, "ms": max(0, round((now - began) * 1000))})
 
     def finish(self) -> None:
-        """The child is gone: a test still open never finished."""
-        if self._open is not None:
-            worst = max(self._outcome or "error", "error", key=OUTCOMES.index)
-            self._close(max(0, round((self._clock() - self._open[1]) * 1000)), worst)
+        """The child is gone: every test still open never finished."""
+        now = self._clock()
+        while self._open:
+            self._close_innermost(now)
 
 
 def _unescape(text: str) -> str:
@@ -394,6 +409,12 @@ def _output_problem(out: str) -> str | None:
     return None if os.access(folder, os.W_OK | os.X_OK) else f"output directory is not writable: {folder}"
 
 
+def _sha_arg(text: str) -> str:
+    if not _SHA.fullmatch(text):
+        raise argparse.ArgumentTypeError(f"must be 40 lowercase hex characters, got {text!r}")
+    return text
+
+
 def _shell_code(returncode: int) -> int:
     """subprocess says -N for death by signal N; a shell says 128+N."""
     return returncode if returncode >= 0 else 128 - returncode
@@ -450,8 +471,8 @@ def _run_child(tests_dir: str, tally: Tally) -> int:
     saved = {}
     try:
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-            if sig != signal.SIGINT and signal.getsignal(sig) == signal.SIG_IGN:
-                continue  # under nohup SIGHUP is ignored, as it would be for plain unittest
+            if signal.getsignal(sig) == signal.SIG_IGN:
+                continue  # as for plain unittest: under nohup SIGHUP, after `cmd &` in a script SIGINT
             saved[sig] = signal.signal(sig, relay)
         try:
             box.append(_start_child(tests_dir, flags, write_fd))
@@ -493,7 +514,7 @@ def cmd_record(args: argparse.Namespace) -> int:
         return 2
     env = dict(os.environ)
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    sha = env.get("GITHUB_SHA") or _git_head(os.getcwd())
+    sha = args.sha or env.get("GITHUB_SHA") or _git_head(os.getcwd())
     tally = Tally()
     t0 = time.perf_counter()
     child_code = _run_child(args.tests_dir, tally)
@@ -809,6 +830,8 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("tests_dir", metavar="TESTS_DIR")
     record.add_argument("--out", required=True, metavar="FILE")
     record.add_argument("--repo", required=True, metavar="NAME")
+    record.add_argument("--sha", type=_sha_arg, metavar="SHA",
+                        help="the commit the run tests, 40 lowercase hex (wins over GITHUB_SHA and git)")
     record.set_defaults(func=cmd_record)
     check = sub.add_parser("check", help="validate the quality books")
     check.add_argument("books_dir", metavar="BOOKS_DIR")
