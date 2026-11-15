@@ -656,7 +656,12 @@ _SECRETS = [
 ]
 
 
+# A git SHA or sha256 (hex with at least one letter) often holds a 12-digit run; it is not an account ID.
+_HEX_HASH = re.compile(r"(?<![0-9A-Za-z])(?=[0-9]*[a-f])[0-9a-f]{40}(?:[0-9a-f]{24})?(?![0-9A-Za-z])")
+
+
 def _account_ids(text: str) -> bool:
+    text = _HEX_HASH.sub(" ", text)
     if _ACCOUNT_RUN.search(text):
         return True
     for m in _ACCOUNT_GROUPED.finditer(text):
@@ -673,8 +678,9 @@ def scan_line(text: str, account_text: str | None = None) -> list[str]:
     """Return what kinds of forbidden content `text` holds. `account_text` is the part of the
     line the 12-digit rule applies to (default: all of it). Never returns the matched text."""
     found: list[str] = []
+    unhashed = _HEX_HASH.sub(" ", text)
     for pat in (_CARD_RUN, _CARD_4444, _CARD_465):
-        for m in pat.finditer(text):
+        for m in pat.finditer(unhashed):
             digits = re.sub(r"\D", "", m.group(0))
             # a 4-4-4-4 group may be followed by a CVV, expiry or amount: try the first 16 digits too
             for candidate in ([digits[:16], digits] if pat is _CARD_4444 else [digits]):
@@ -1651,12 +1657,17 @@ def vercel_projects(books: Books) -> dict[str, str]:
 def vercel_weeks(rows: list[FocusRow], mapping: dict[str, str], through: date) -> dict[str, Any]:
     """Exact cost per (Monday, books project) for the closed weeks of `rows`.
 
-    Closed: the Sunday is before `through` and not after the input's last day. Rows with no
-    project go to `shared`, a name missing from `mapping` to `unassigned`. Purchase rows (plan fees)
-    are skipped."""
+    Closed: the input covers the whole week (its Monday is not before the input's first day and
+    its Sunday not after the last), and the Sunday is before `through`. Vercel sends a row for
+    every day and service, even at $0, so a week the input only partly covers is cut off, not
+    quiet. Rows with no project go to `shared`, a name missing from `mapping` to `unassigned`.
+    Purchase rows (plan fees) are skipped."""
     weeks: list[date] = []
     if rows:
-        monday = _monday(min(r.day for r in rows))
+        first = min(r.day for r in rows)
+        monday = _monday(first)
+        if monday < first:
+            monday += timedelta(days=7)
         last = max(r.day for r in rows)
         while monday + timedelta(days=6) <= last and monday + timedelta(days=6) < through:
             weeks.append(monday)

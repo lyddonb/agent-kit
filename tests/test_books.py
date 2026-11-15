@@ -523,6 +523,14 @@ class AccountHardeningTest(Case):
         self.flagged("AWS account #1234-5678-9012 here")
         self.flagged("acct #1234-5678-9012 here")
 
+    def test_hashes_are_not_account_ids_or_cards(self):
+        # real sha256 and git SHA shapes whose digit runs match the account or card rules
+        self.clean('"prev":"8db330ba6a87b69f88eacb06a4827e78da29cedcf1f69a65b16d327695e438ff","hash":"20d5674305f92b6a3f2ff3be56121faffb90844b35b2c1779827662caa6a330e"')
+        self.clean("ref: c0ffee1234567890123412345678901234567890")
+        self.clean("x d249444918690c4242424242424242a" + "0" * 33)
+        self.flagged("billed 123456789012 beside c0ffee1234567890123412345678901234567890")
+        self.flagged("deadbeef 123456789012 cafe")
+
     def test_decimal_fraction_not_flagged(self):
         self.clean("billed 0.123456789012 USD")
         self.flagged("billed 123456789012 USD")

@@ -114,6 +114,12 @@ class MappingTest(Case):
         r = self.vercel(self.week(focus(W41, "3.00", Tags={"Environment": "production"})))
         self.assertEqual(list(self.mine(r)), ["vercel-focus:2026-W41:shared"])
 
+    def test_week_the_input_starts_inside_is_cut_off(self):
+        wednesday = W41 + timedelta(days=2)
+        r = self.vercel([focus(d, "1.00", "gizmo-app") for d in days(wednesday, 12)])  # Wed W41 to Sun W42
+        self.assertEqual(list(self.mine(r)), ["vercel-focus:2026-W42:gizmo"])
+        self.assertEqual(r["rows_outside_weeks"], 5)
+
     def test_purchase_rows_are_skipped_and_counted(self):
         r = self.vercel(self.week(focus(W41, "20.00", category="Purchase"), focus(W41, "2.00", "gizmo-app")))
         self.assertEqual(self.mine(r), {"vercel-focus:2026-W41:gizmo": ("2.00", "Vercel usage")})
@@ -274,7 +280,7 @@ class PropertyTest(Case):
         return lines, min(row_days + [last]), last, model
 
     def expected(self, first, last, through, model):
-        out, monday = {}, first - timedelta(days=first.weekday())
+        out, monday = {}, first + timedelta(days=(7 - first.weekday()) % 7)  # first whole week
         while monday + timedelta(days=6) <= last and monday + timedelta(days=6) < through:
             week = f"{monday.isocalendar()[0]}-W{monday.isocalendar()[1]:02d}"
             totals = {}
