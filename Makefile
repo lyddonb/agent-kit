@@ -7,7 +7,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: help gen check validate versions claude-validate unit test all
+.PHONY: help gen check validate versions claude-validate unit record test all
 
 help:
 	@echo "make gen              regenerate manifests, marketplaces, package.json, docs/CATALOG.md from kit.yaml"
@@ -16,6 +16,7 @@ help:
 	@echo "make versions         fail if a plugin changed since BASE (default origin/main) without a version bump"
 	@echo "make claude-validate  run 'claude plugin validate --strict' on every plugin and the marketplace"
 	@echo "make unit             unit tests for the scripts skills ship"
+	@echo "make record           the same tests through the quality recorder; writes per-test time and outcome to RECORD_OUT"
 	@echo "make all              gen + validate + claude-validate"
 
 gen:
@@ -40,5 +41,11 @@ test: check validate unit
 
 unit:
 	$(PYTHON) -m unittest discover -s tests
+
+# The same suite, run as `make unit` runs it, with per-test time and outcome written for the
+# quality books (lyddonb/quality). CI uses this and uploads the file.
+RECORD_OUT ?= $(or $(RUNNER_TEMP),$(TMPDIR),/tmp)/test-results.jsonl
+record:
+	$(PYTHON) plugins/bstack/skills/qualitydirector/scripts/quality.py record tests --out "$(RECORD_OUT)" --repo agent-kit
 
 all: gen validate claude-validate
