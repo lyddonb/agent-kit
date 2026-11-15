@@ -93,7 +93,6 @@ only what is still unreviewed.
 | `plugins/bstack/skills/reflect/references/synthesizer.md` | `pstack/skills/reflect/references/synthesizer.md @ ccb5507` |
 | `plugins/bstack/skills/reflect/references/tooling-reviewer.md` | `pstack/skills/reflect/references/tooling-reviewer.md @ ccb5507` |
 | `plugins/bstack/skills/show-me-your-work/SKILL.md` | `pstack show-me-your-work @ ccb5507` |
-| `plugins/bstack/skills/show-me-your-work/scripts/log.sh` | `pstack/skills/show-me-your-work/scripts/log.sh @ ccb5507` |
 | `plugins/bstack/skills/swarm/SKILL.md` | `pstack swarm @ 11713c6` |
 | `plugins/bstack/skills/teach/SKILL.md` | `pstack teach @ 11713c6` |
 | `plugins/bstack/skills/technical-writing/SKILL.md` | `pstack technical-writing @ 11713c6` |

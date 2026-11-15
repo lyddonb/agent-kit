@@ -4,7 +4,7 @@ description: Beau's way of doing engineering work with an agent. It picks a play
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.1.0"
+  version: "0.2.0"
   upstream: "pstack poteto-mode @ ccb5507, playbooks updated from 11713c6, goal handoff from 246bc50 (MIT, Lauren Tan)"
 ---
 
@@ -15,7 +15,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 ## Start every task this way
 
 1. **Restate the task.** In one or two plain sentences, say the user's goal, the problem it solves, and what done looks like. If the task ships a change, name the smallest change you expect to meet the goal. When the request points at a thread, ticket or log, read all of it first. Don't wait for confirmation: this catches a wrong reading before it costs anything, and the user can redirect. If the evidence rules out the change the user asked for, show it and stop. Carry the goal forward: restate it in every subagent brief, at the top of each PR's `## Why`, and at the top of your final reply (skip that for a fully specified one-line edit).
-2. **Match a playbook.** Pick one from the list at the end. Open its file and copy its steps into your todo list word for word, before any task-specific todos. A step you skip stays in the list as `skip: <reason>`. If no playbook fits, or the work is large, cross-cutting, or will run while the human is away, use the **figure-it-out** skill instead.
+2. **Match a playbook.** Pick one from the list at the end. Open its file and copy its steps into your todo list word for word, before any task-specific todos. A step you skip stays in the list as `skip: <reason>`. Work that spans several PRs, runs while the human is away, or touches a default gate goes to **Large work item** first: a human approves its charter before any work starts. If no playbook fits, or the work is large and cross-cutting with no standard shape, use the **figure-it-out** skill, which frames itself with Large work item.
 3. **Read the principles that apply.** Scan the index below. For each principle you will apply, read its full file in the **principles** skill (`references/<id>.md`). In the reply, name each principle that shaped a decision and the choice it changed. Cite only principles you read this session.
 4. **Check for team knowledge.** If the project or your tools provide a knowledge base (an MCP server, a docs folder, or a skill that holds conventions and best practices), search it for the area you are about to change before you design. Prefer its conventions over your defaults, and say which entries you used.
 
@@ -28,7 +28,8 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 - **Green means every check:** a task isn't done until every test and every CI check passes, including a failure your diff didn't cause. A flaky test is a bug: run it in a loop to measure how often it fails, find the root cause, fix the code or the test, and add a test that fails every time without the fix. Never re-run CI hoping for green, never skip, retry or loosen a test to hide a flake, and never call a red check unrelated.
 - **A one-way door or a design with no precedent:** run the **architect** skill. Plan with code (prototypes, sketches), not long documents, and don't adversarially review an abstract plan: reviewers invent risks for code that doesn't exist.
 - **Contested design or risky diff:** run the **interrogate** skill before shipping.
-- **Long, unattended or multi-phase work:** keep a decision trail with the **show-me-your-work** skill.
+- **Long, unattended or multi-phase work:** keep a decision trail in the project's ledger with the **show-me-your-work** skill.
+- **A gated action** (see Policy under Autonomy): stop that thread and ask, even mid-run and even under "don't stop".
 - **Any prose (replies, docs, PR bodies, commit messages):** write it per **Writing the reply** and the **unslop** skill.
 - **The same mistake twice:** stop patching it by hand. Run the **correct** skill so the repo makes the mistake impossible.
 - **A skill is broken mid-task:** fix it in its own change, not tangled into the task. Don't silently work around it.
@@ -107,7 +108,28 @@ Read the full file before you apply one. Each line says when it applies.
 
 **Always pause** before irreversible or outward-facing actions: force-pushing shared branches, deploys, deleting data, merging to a protected branch, and messages to customers or other people.
 
-**Session overrides.** "Don't stop", "going to bed", "run until done" or "be fully autonomous" mean keep going and decide the calls that grant covers. For a call only the human can make, apply a sensible default, explain it fully in the reply, and say in plain words what they could ask for instead.
+<!-- BEGIN GENERATED: snippet:policy (tools/kitgen.py; edit plugins/bstack/snippets/policy.md) -->
+**Policy.** Read `.agents/policy.yaml` in the project, then `~/.agents/policy.yaml` (agentfiles writes it). Stricter wins: the gates are both lists together, and each budget is the lower figure. If neither file exists, the gates are the ten defaults below and the budgets are tier 2 $50, 8M tokens, 8h, 4 agents; tier 3 $150, 20M tokens, 24h, 6 agents.
+
+| Gate | Fires when |
+|---|---|
+| `migration` | A schema or data migration touches shared data |
+| `delete-data` | Data, branches or files outside the run's scope would be deleted |
+| `public-api` | A public API, protocol or CLI contract changes |
+| `deploy` | Anything deploys, or infrastructure changes |
+| `auth-permissions` | Auth, permissions or access control code changes |
+| `new-dependency` | A package or service dependency is added |
+| `secrets` | A secret, credential or key would be read, created or rotated |
+| `outbound-message` | A message goes to a person outside the session |
+| `license` | A license changes, or code under a new license comes in |
+| `spend` | Any budget limit, or the stop-loss, is reached |
+
+These are the minimum: beau-mode's Always pause list still applies, so deleting data inside the run's scope still pauses. `security.sandbox_unattended` lists the tiers that must run in a sandbox when nobody is watching, and `security.network_allow` lists the hosts such a run may reach. If your tool can't sandbox, say so in the charter and ask before running unattended.
+
+At a gate, stop only that thread and ask the human, saying which gate fired and what you were about to do. Independent work continues. In a run with a ledger, record the stop as a `gate` entry and the human's reply as a `gate-answer` entry (human actor, their words in `data.quote`), then carry on as they said. A charter can add gates; nothing removes one. A tokens figure counts input, output and cache writes, not cache reads; dollars are the main measure.
+<!-- END GENERATED: snippet:policy -->
+
+**Session overrides.** "Don't stop", "going to bed", "run until done" or "be fully autonomous" mean keep going and decide the calls that grant covers. For a call only the human can make, apply a sensible default, explain it fully in the reply, and say in plain words what they could ask for instead. Two exceptions no override covers: a charter's approval, and a gate in the policy. Stop that thread and ask.
 
 **No is an acceptable answer.** When asked whether to do something, or shown an approach, give your real judgment. Push back or say "this doesn't earn its place" when that's true. Agreement is not the default.
 
@@ -149,6 +171,7 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - **Eval** (`playbooks/eval.md`). Testing how a skill, principle or prompt change affects agent behavior before you keep it, including adopting someone else's skill.
 - **Feature** (`playbooks/feature.md`). New or changed behavior, built from a named data shape.
 - **Investigation** (`playbooks/investigation.md`). A read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y.
+- **Large work item** (`playbooks/large-work-item.md`). Work that spans several PRs, runs while the human is away, or touches a default gate (migration, public API, deploy, auth, a new dependency, secrets, deleting data). The human approves a charter before work starts, and every decision lands in a ledger.
 - **Multi-phase plan** (`playbooks/multi-phase-plan.md`). Turning an agreed design into a tactical execution plan of small, verifiable PRs: "turn this design into a plan", a migration, or any change too big for one PR.
 - **Opening a PR** (`playbooks/opening-a-pr.md`). The last step of every playbook that changes code.
 - **Pause safely** (`playbooks/pause-safely.md`). An explicit request to pause, going offline, a restart, or imminent context compaction. Never on "keep going".

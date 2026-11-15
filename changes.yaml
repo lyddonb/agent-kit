@@ -7,6 +7,16 @@
 # kitgen renders this into docs/CHANGELOG.md and into the beau-help skill, which shows
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
+- date: 2026-11-14
+  plugin: bstack
+  version: 0.8.0
+  changes:
+    - New Large work item playbook in beau-mode. Multi-PR, unattended or gated work starts with a charter a human approves by its hash, and every decision, gate answer, review and cost goes into the project's ledger, sealed when the run merges.
+    - show-me-your-work records the decision trail with the `ledger` CLI instead of a TSV file, so CI can check that nobody edited it. Install `ledger` with agentfiles or pip.
+    - beau-mode and the Large work item playbook read the agent policy (`~/.agents/policy.yaml`, which agentfiles writes) and stop at its gates.
+    - figure-it-out frames tier 2 and 3 work as a charter.
+  try: "/beau-mode plan this migration as a large work item"
+
 - date: 2026-11-10
   plugin: bstack
   version: 0.7.0

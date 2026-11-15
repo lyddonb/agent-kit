@@ -1,0 +1,46 @@
+---
+id: large-work-item
+title: Large work item
+when: "Work that spans several PRs, runs while the human is away, or touches a default gate (migration, public API, deploy, auth, a new dependency, secrets, deleting data). The human approves a charter before work starts, and every decision lands in a ledger."
+---
+
+# Large work item
+
+The human approves the run before it starts, and afterward anyone can check what happened without trusting you. The charter fixes scope, gates, budget and staffing. The ledger records every decision, gate answer, verification and cost, and CI checks it. The commands are the `ledger` CLI (`ledger <command> --help` has the details); **show-me-your-work** says how to install it and how to write `--actor`.
+
+1. **Pick the tier.** Tier 1 is routine: reversible, with a small blast radius. Tier 2 is significant: several PRs, shared code, or user-facing changes. Tier 3 is critical: one-way doors, money, permissions, customer data or migrations. A tier 1 task you run while the human is around needs no charter, so use the matching playbook and **show-me-your-work** instead. When unsure, pick the higher tier.
+2. **Ground yourself cheaply.** Run **how**, **why** and **recall** on the affected code. Don't fan out to subagents or edit anything before approval, because the charter is what decides how much to spend.
+3. **Write the charter.** Run `ledger charter new <slug> --title '<what the run does>' --tier <n>`, then fill in every field and section of `.audit/runs/<run-id>/charter.md`. [references/charter-template.md](../references/charter-template.md) shows what good answers look like. Make the predicate checkable, the plan a list of units that each land on their own, and the budget no higher than the policy's ceiling for the tier. List planned calls (reviews, rollouts) in the estimate so the final spend can be compared with them.
+4. **Check it.** Run `ledger charter check <run-id>` until it reports no problems. It prints every value the tools will enforce and the charter's sha256.
+5. **Start the run.** Run `ledger init <slug> --date <the date in the run id> --actor '<you>' --why '<the goal>'`, so the run lives beside its charter. Without `--date`, `init` uses today in UTC and can land in a different folder.
+6. **Get approval, then stop.** Show the human the whole `charter.md` (print it, or commit and push it and send the link), the `check` output, and the sha256, and say the hash covers that exact file. They approve by replying with the first 12 characters of the hash, for example "Approved c37ae9b1a466". Record it with `ledger charter approve <run-id> --actor '<their human actor>' --sha256 <prefix> --quote '<their exact words>' --relayed-by '<your agent id>' --channel '<where they said it>'`. Their actor's id is their GitHub login: take it from `identity.human` in the policy, and if there is none, ask them. If they ask for edits, make them, check again and ask again, since an edited charter needs a new approval. Never approve on their behalf, and never start work on a draft. "Don't stop" and "run until done" don't cover this step, so if they're about to leave, ask for approval before they go.
+7. **Run it.** Work without asking on anything reversible and within budget. Follow the charter's plan, using the playbook each unit needs (Feature, Bug fix, Multi-phase plan, Autonomous run), with one PR per unit, and verify each unit before starting any unit that depends on it. Record each decision, verification and review with **show-me-your-work** into this run.
+8. **Keep one ledger branch.** The run's folder lives on one branch, the run branch, and only you, the orchestrating agent, append to it. Subagents and workers in other worktrees report back to you, and you record what they did. Two branches appending to one `ledger.jsonl` conflict, and the only fix is rewriting history. Unit PRs can merge on their own; cite each in the ledger as evidence. The run branch merges last, carrying the seal.
+9. **At a gate, stop only that thread.** Record a `gate` entry naming the gate and what you were about to do, ask the human, and keep working on independent units. Record their reply as a `gate-answer` entry (human actor, their words in `data.quote`, your id in `data.relayed_by`), then continue as they said.
+10. **Track the budget.** When a unit finishes, record a `spend` entry: `usd_micros` (dollars × 1,000,000), `tokens` (input, output and cache writes, not cache reads), and `estimate: true` unless the figures come from a bill. Take them from your tool's usage report, or the cfo plugin's **estimate-run** and **spend-snapshot** skills. Failing those, use the token counts in your transcript at list prices. If your tool reports neither, the budget is advisory: the charter says so, every figure you record has `estimate: true`, and `why` says how you got it. Add up your `spend` entries to test the limits. Reaching any limit is the `spend` gate. Stop-loss: if the predicate hasn't moved in two units and half the budget is spent, that is the `spend` gate too: stop, write up why, and ask the human whether to go on.
+11. **Close.** Verify the whole thing against the predicate on the real artifact with **verify-work**. Run the reviews the tier calls for. Tier 2 uses **interrogate** with two model families. Tier 3 adds a security lens and a decision review: a reviewer on a different model reads `ledger show` and checks each major decision against its evidence. Record a final `spend` entry comparing the estimate's planned calls with what ran. Record `lesson` entries for what a future run should know, and `lever` entries for a check, script or skill change that would have prevented a problem (`data.lever` names it).
+12. **Archive the sessions.** If the policy keeps `audit.sessions.archive` on (the default), run `ledger session add <transcript> --run <run-id> --actor '<you>'` for each session that worked on the run. **show-me-your-work** has the table of where transcripts live. Run it for your own session last, after your final entry. Redaction removes secrets, not personal content: in a public repo, or when a session holds conversation unrelated to the work, ask the human before committing it. A transcript whose redaction can't be confirmed stays out of git; say so in the reply.
+13. **Seal and hand over.** Commit everything under `.audit/runs/<run-id>/`, run `ledger seal <run-id> --actor '<you>'`, then commit the seal entry and `.audit/INDEX.jsonl`. Check that `ledger verify --base origin/main` and `ledger scan --base origin/main` pass. Then ask the human to merge the run branch. Whoever merges must use a merge commit, because a squash or rebase merge drops the commit the seal names.
+
+<!-- BEGIN GENERATED: snippet:policy (tools/kitgen.py; edit plugins/bstack/snippets/policy.md) -->
+**Policy.** Read `.agents/policy.yaml` in the project, then `~/.agents/policy.yaml` (agentfiles writes it). Stricter wins: the gates are both lists together, and each budget is the lower figure. If neither file exists, the gates are the ten defaults below and the budgets are tier 2 $50, 8M tokens, 8h, 4 agents; tier 3 $150, 20M tokens, 24h, 6 agents.
+
+| Gate | Fires when |
+|---|---|
+| `migration` | A schema or data migration touches shared data |
+| `delete-data` | Data, branches or files outside the run's scope would be deleted |
+| `public-api` | A public API, protocol or CLI contract changes |
+| `deploy` | Anything deploys, or infrastructure changes |
+| `auth-permissions` | Auth, permissions or access control code changes |
+| `new-dependency` | A package or service dependency is added |
+| `secrets` | A secret, credential or key would be read, created or rotated |
+| `outbound-message` | A message goes to a person outside the session |
+| `license` | A license changes, or code under a new license comes in |
+| `spend` | Any budget limit, or the stop-loss, is reached |
+
+These are the minimum: beau-mode's Always pause list still applies, so deleting data inside the run's scope still pauses. `security.sandbox_unattended` lists the tiers that must run in a sandbox when nobody is watching, and `security.network_allow` lists the hosts such a run may reach. If your tool can't sandbox, say so in the charter and ask before running unattended.
+
+At a gate, stop only that thread and ask the human, saying which gate fired and what you were about to do. Independent work continues. In a run with a ledger, record the stop as a `gate` entry and the human's reply as a `gate-answer` entry (human actor, their words in `data.quote`), then carry on as they said. A charter can add gates; nothing removes one. A tokens figure counts input, output and cache writes, not cache reads; dollars are the main measure.
+<!-- END GENERATED: snippet:policy -->
+
+**Reply:** the tier and why, the predicate and its final state, the units landed (PRs), every gate and how it was answered, spend against budget and estimate, what the reviews found, which sessions were archived (and any kept out of git), and the run id, so a reviewer can `ledger show` it.

@@ -4,7 +4,7 @@ description: Design a rigorous, auditable playbook for work no standard playbook
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.1.0"
+  version: "0.2.0"
   upstream: "pstack figure-it-out @ ccb5507 (MIT, Lauren Tan)"
 ---
 
@@ -24,6 +24,8 @@ Don't start the run until you can state:
 
 Present the framing and trade-offs before a multi-hour run. That one checkpoint is worth it; after it, proceed on reversible work (`never-block-on-the-human`).
 
+For tier 2 or 3 work (several PRs, or a default gate in reach), and for any run you'll do while the human is away, the framing is a charter: follow beau-mode's **Large work item** playbook through approval, then design the workflow below as the charter's plan. Its predicate, scope, budget and gates are this phase's answers, and the human approves them by hash before the run starts.
+
 ## B. Design the workflow
 
 Split the work into small units that each land independently. Put the riskiest unknown first, and scaffolding and verification before features (`foundational-thinking`).
@@ -42,7 +44,7 @@ Each unit is an experiment: state the hypothesis, make the smallest change, chec
 
 ## D. Keep the trail
 
-Log every phase with **show-me-your-work**. Work this ambitious usually deserves a committed trail.
+Log every phase with **show-me-your-work** into the run's ledger. Work this ambitious is committed with its trail, and sealed at the end (Large work item, step 12).
 
 ## E. Verify and hand back
 
