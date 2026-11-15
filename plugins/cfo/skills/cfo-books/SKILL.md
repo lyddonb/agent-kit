@@ -130,9 +130,9 @@ Run `--dry-run` first. Standard library only; Python 3.10 or later, through uv.
 - Rows are `usage`, `verified`, source `vercel-focus`, evidence `vercel-focus:2026-W44:project`. They go through the same path as `append`, so the full check runs first. A week that already has any `vercel-focus` row is skipped whole: a rerun adds nothing, and a late change never splits a recorded week. To correct one, add `adjustment` rows.
 - Only dates, service, project key, cost and currency are kept. Team, project and account ids are never written or printed. Non-USD input is an error naming the line.
 
-## Weekly Mac job for Claude Code usage
+## Weekly Mac job for Claude Code usage and Vercel billing
 
-The scheduled cloud brief can't read the Mac's logs, so `scripts/weekly-claude-code.sh` runs `claude-code` on the Mac and hands the rows to the weekly brief PR:
+The scheduled cloud brief can't read the Mac's logs, and the Vercel CLI is logged in only on the Mac, so `scripts/weekly-claude-code.sh` runs `claude-code` and `vercel` there and hands the rows to the weekly brief PR:
 
 ```sh
 <skill dir>/scripts/weekly-claude-code.sh --repo OWNER/BOOKS [--dry-run]
@@ -141,8 +141,9 @@ The scheduled cloud brief can't read the Mac's logs, so `scripts/weekly-claude-c
 1. It clones the books into a temp directory, so your working copy is never touched.
 2. If a PR from a `cfo/brief-` or `claude/cfo-brief-` branch is open, it adds a commit to the oldest one's branch. Otherwise it uses `cfo/brief-<next Sunday>` (the Sunday after, if today's brief is already on `main`): it builds on that branch if it exists unmerged, else creates it from `main`, and opens the PR. The cloud run adds its commit to an open brief PR, so the week still ends in one PR. Dates are America/Denver (`CFO_TZ`).
 3. It prices whole weeks from the first Monday at least two days inside Claude Code's log retention (`cleanupPeriodDays` in `~/.claude/settings.json`, default 30; it refuses a value under 9). Older logs may be partly deleted, and a partial week would be written as a verified total. A value set only in managed or local settings is not read.
-4. It commits only `ledger/charges.csv`, runs `check --base origin/main` first, and never pushes to `main`, merges or force-pushes. Nothing new means no commit and no PR. If the push is rejected because the cloud run pushed first, it refetches and retries once. Pushes authenticate through `gh`.
-5. A failure exits non-zero and shows one macOS notification.
+4. It imports last week's Vercel billing. The week is the latest Monday-to-Monday week whose Sunday ended more than a day ago in UTC, so `vercel` books it as closed; both Mondays are midnight Pacific (07:00Z in summer time, 08:00Z in winter time). It runs `vercel api '/v1/billing/charges?from=...&to=...&teamId=...' --method GET` into its temp directory, with the team from `vercel teams ls` (the only team, or the current one of several), then `vercel` on the books. A missing or logged-out `vercel` CLI skips this part and logs it. A failed fetch imports nothing, and an exit 1 from `vercel` (an incomplete week) books nothing; either fails the job after the Claude Code rows are pushed, so the week is refetched, never booked by hand. Team and project ids stay in the temp directory; failure output is shown with ids redacted. A missed week is not caught up: the cloud brief names it, and you import it by hand.
+5. It commits only `ledger/charges.csv`, runs `check --base origin/main` first, and never pushes to `main`, merges or force-pushes. Nothing new means no commit and no PR. If the push is rejected because the cloud run pushed first, it refetches and retries once. Pushes authenticate through `gh`.
+6. A failure exits non-zero and shows one macOS notification.
 
 Install it once; it then runs every Sunday at 06:00 local time:
 
@@ -150,6 +151,6 @@ Install it once; it then runs every Sunday at 06:00 local time:
 <skill dir>/scripts/weekly-claude-code.sh --install     # also: --status, --run-now, --uninstall
 ```
 
-`--install` checks that `git`, `gh` (logged in) and `uv` are reachable, writes the launch agent, loads it, and raises Claude Code's `cleanupPeriodDays` to 120 if it is lower (the old settings file is kept as `settings.json.bak`). Rerun it after moving agent-kit. The books repo comes from the GitHub remote of the checkout in `CFO_BOOKS`; pass `--repo OWNER/NAME` instead when `CFO_BOOKS` isn't set. A books repo can wrap these in a Makefile (`make install`, `make status`, `make run`, `make uninstall`).
+`--install` checks that `git`, `gh` (logged in) and `uv` are reachable (`vercel` is optional; log it in with `vercel login`), writes the launch agent, loads it, and raises Claude Code's `cleanupPeriodDays` to 120 if it is lower (the old settings file is kept as `settings.json.bak`). Rerun it after moving agent-kit. The books repo comes from the GitHub remote of the checkout in `CFO_BOOKS`; pass `--repo OWNER/NAME` instead when `CFO_BOOKS` isn't set. A books repo can wrap these in a Makefile (`make install`, `make status`, `make run`, `make uninstall`).
 
 A Mac that is asleep at 06:00 runs the job on wake; a Mac that is off skips it, and the next run picks up the missed week while its logs are still kept. The log is `~/Library/Logs/cfo-claude-code.log` (a few lines a week, never rotated).

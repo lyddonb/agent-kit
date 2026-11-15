@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Weekly Mac job: price this Mac's Claude Code logs into the books and hand them to the weekly brief PR.
+# Weekly Mac job: price this Mac's Claude Code logs and import last week's Vercel billing into the
+# books, and hand the rows to the weekly brief PR.
 #
-# The scheduled cloud run that writes the brief can't read ~/.claude/projects, so this job runs on
-# the Mac (launchd, Sundays before the cloud run). It pushes its ledger rows to the open brief PR's
-# branch, or opens a brief PR on a new cfo/brief-YYYY-MM-DD branch. The cloud run already adds its
-# commit to an open brief PR, so each week still ends in one PR. It never pushes to main, merges or
-# force-pushes.
+# The scheduled cloud run that writes the brief can't read ~/.claude/projects, and the Vercel CLI is
+# logged in only here, so this job runs on the Mac (launchd, Sundays before the cloud run). It pushes
+# its ledger rows to the open brief PR's branch, or opens a brief PR on a new cfo/brief-YYYY-MM-DD
+# branch. The cloud run already adds its commit to an open brief PR, so each week still ends in one
+# PR. It never pushes to main, merges or force-pushes.
 #
 # Usage:
 #   weekly-claude-code.sh --install | --uninstall | --status | --run-now   # manage the launchd agent
@@ -13,8 +14,10 @@
 #   weekly-claude-code.sh [--repo OWNER/NAME] --print-plist
 # --repo defaults to the GitHub remote of the books checkout in $CFO_BOOKS.
 #
-# Needs git, gh (logged in) and uv. Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
-# CFO_LOGS (Claude Code logs dir), CFO_CLAUDE_SETTINGS (settings file --install edits), CFO_JOB_PATH (the agent's PATH), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver).
+# Needs git, gh (logged in) and uv; Vercel billing also needs the vercel CLI, logged in (without it,
+# that part is skipped). Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
+# CFO_LOGS (Claude Code logs dir), CFO_CLAUDE_SETTINGS (settings file --install edits), CFO_JOB_PATH (the agent's PATH), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver),
+# CFO_UTC_TODAY (the UTC date that picks the Vercel week).
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -173,6 +176,90 @@ print(d + datetime.timedelta(days=(7 - d.weekday()) % 7))' "$KEEP_DAYS")
 LOG_ARGS=(); [ -n "${CFO_LOGS:-}" ] && LOG_ARGS=(--logs "$CFO_LOGS")
 echo "cfo-claude-code: cleanupPeriodDays $KEEP_DAYS, pricing whole weeks from $SINCE"
 
+# Vercel billing for the last closed Pacific week (finances AGENTS.md weekly-run step 2). Sets
+# VERCEL_FILE ("" means nothing to import) and VERCEL_WEEK. A missing or logged-out CLI is a skip;
+# anything else sets VERCEL_PROBLEM, which fails the job after the Claude Code rows are pushed.
+# Team and project ids stay in $W: never echoed, logged or committed.
+VERCEL_FILE=""; VERCEL_WEEK=""; VERCEL_PROBLEM=""
+redact() { sed -E 's/(team|prj|acct|user)_[A-Za-z0-9]+/\1_<redacted>/g' "$1" | tail -n 5 >&2; }
+fetch_vercel() {
+  if ! command -v vercel >/dev/null; then
+    echo "cfo-claude-code: vercel CLI not on PATH; skipping Vercel billing"; return
+  fi
+  if ! (cd "$W" && vercel whoami) >/dev/null 2>&1; then
+    echo "cfo-claude-code: vercel CLI not logged in (run: vercel login); skipping Vercel billing"; return
+  fi
+  local code=0 from to
+  (cd "$W" && vercel teams ls --json) >"$W/teams.json" 2>"$W/vercel.err" || code=$?
+  if [ "$code" != 0 ]; then
+    redact "$W/vercel.err"; VERCEL_PROBLEM="vercel teams ls exited $code"; return
+  fi
+  # One team, or the current one of several. The id goes only into the request.
+  "${PY[@]}" -c '
+import json, sys
+teams = json.load(open(sys.argv[1])).get("teams") or []
+pick = teams if len(teams) == 1 else [t for t in teams if t.get("current")]
+if len(pick) != 1:
+    sys.exit(f"{len(teams)} Vercel teams and {len(pick)} marked current; switch to one with: vercel switch")
+print(pick[0]["id"])' "$W/teams.json" >"$W/team" 2>"$W/vercel.err" || code=$?
+  if [ "$code" != 0 ]; then
+    cat "$W/vercel.err" >&2; VERCEL_PROBLEM="couldn't pick the Vercel team"; return
+  fi
+  # The latest Monday-to-Monday week whose Sunday ended over a day ago in UTC (books.py vercel books
+  # only closed weeks), with each Monday at midnight Pacific: 07:00Z in summer time, 08:00Z in winter.
+  read -r from to VERCEL_WEEK < <(py '
+import datetime, os
+from zoneinfo import ZoneInfo
+utc = datetime.timezone.utc
+today = os.environ.get("CFO_UTC_TODAY")
+today = datetime.date.fromisoformat(today) if today else datetime.datetime.now(utc).date()
+end = today - datetime.timedelta(days=1)
+end -= datetime.timedelta(days=end.weekday())
+start = end - datetime.timedelta(days=7)
+def midnight(d):
+    t = datetime.datetime(d.year, d.month, d.day, tzinfo=ZoneInfo("America/Los_Angeles"))
+    return t.astimezone(utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+iso = start.isocalendar()
+print(midnight(start), midnight(end), f"{iso[0]}-W{iso[1]:02d}")')
+  [ -n "$VERCEL_WEEK" ] || fail "couldn't compute the Vercel week"
+  echo "cfo-claude-code: fetching Vercel billing for $VERCEL_WEEK ($from to $to)"
+  (cd "$W" && vercel api "/v1/billing/charges?from=$from&to=$to&teamId=$(cat "$W/team")" --method GET) \
+    >"$W/focus.jsonl" 2>"$W/vercel.err" || code=$?
+  if [ "$code" != 0 ]; then
+    redact "$W/vercel.err"; VERCEL_PROBLEM="vercel api exited $code for $VERCEL_WEEK; nothing imported"; return
+  fi
+  VERCEL_FILE="$W/focus.jsonl"
+}
+
+# Import the fetched week onto the current branch (extra args go to books.py, e.g. --dry-run). Sets
+# VC_WEEKS. A non-zero exit (1: an incomplete week or failing books, 2: unreadable input) books
+# nothing and sets VERCEL_PROBLEM; a cut-off fetch is never booked or refetched silently.
+import_vercel() {
+  VC_WEEKS=""
+  [ -n "$VERCEL_FILE" ] || return 0
+  local code=0
+  "${PY[@]}" "$BOOKS_PY" vercel . "$VERCEL_FILE" --json "$@" >"$W/vercel.out" 2>"$W/vercel.err" || code=$?
+  if [ "$code" != 0 ]; then
+    git checkout -q -- ledger/charges.csv
+    "${PY[@]}" -c '
+import json, sys
+try:
+    print("incomplete weeks: " + ", ".join(json.load(open(sys.argv[1]))["incomplete_weeks"]))
+except (ValueError, KeyError):
+    print(open(sys.argv[1]).read().strip())' "$W/vercel.out" >&2 || true
+    redact "$W/vercel.err"
+    VERCEL_PROBLEM="books.py vercel exited $code for $VERCEL_WEEK; nothing booked. Refetch; never book the week by hand"
+    return 0
+  fi
+  read -r VC_WEEKS < <(py '
+import json, sys
+s = json.load(open(sys.argv[1]))
+print(", ".join(sorted({r["evidence"].split(":")[1] for r in s["rows"]})))' "$W/vercel.out")
+  echo "cfo-claude-code: Vercel $VERCEL_WEEK: $(py 'import json, sys; s = json.load(open(sys.argv[1])); print(("would add " if s["dry_run"] else "added ") + str(s["rows_added"]) + " rows, skipped " + str(s["rows_skipped"]))' "$W/vercel.out")"
+}
+
+fetch_vercel
+
 if [ -n "${CFO_CLONE_URL:-}" ]; then git clone -q "$CFO_CLONE_URL" "$B"; else gh repo clone "$REPO" "$B" -- -q; fi
 cd "$B"
 
@@ -219,28 +306,42 @@ print(today + datetime.timedelta(days=(6 - today.weekday()) % 7))')
   echo "cfo-claude-code: no open brief PR; new branch $BRANCH"
 }
 
-# Price new weeks onto the picked branch and commit. Sets WEEKS ("" when nothing is new).
+# Import Vercel and price new Claude Code weeks onto the picked branch, and commit. Sets WEEKS, a
+# description of what was added ("" when nothing is new).
 price_and_commit() {
   local out
+  import_vercel
   out=$("${PY[@]}" "$BOOKS_PY" claude-code . --since "$SINCE" "${LOG_ARGS[@]+"${LOG_ARGS[@]}"}" --json) \
     || fail "books.py claude-code failed on $BRANCH: $out"
-  WEEKS=$(printf '%s' "$out" | py '
+  local cc_weeks
+  cc_weeks=$(printf '%s' "$out" | py '
 import json, sys
 print(", ".join(sorted({r["evidence"].split(":")[1] for r in json.load(sys.stdin)["rows"]})))')
+  WEEKS=""
+  [ -z "$cc_weeks" ] || WEEKS="Claude Code API-equivalent for $cc_weeks"
+  [ -z "$VC_WEEKS" ] || WEEKS="${WEEKS:+$WEEKS; }Vercel usage for $VC_WEEKS"
   if [ -z "$WEEKS" ]; then return; fi
   local changed
   changed=$(git status --porcelain | awk '{print $2}')
   [ "$changed" = "ledger/charges.csv" ] || fail "expected only ledger/charges.csv to change, got: $changed"
   "${PY[@]}" "$BOOKS_PY" check . --base origin/main || fail "books check failed; nothing pushed"
   git add ledger/charges.csv
-  git commit -q -m "Claude Code API-equivalent for $WEEKS" -m "Added by the Mac job (agent-kit plugins/cfo weekly-claude-code.sh)."
+  git commit -q -m "$WEEKS" -m "Added by the Mac job (agent-kit plugins/cfo weekly-claude-code.sh)."
 }
 
 pick_branch
 if [ "$DRY_RUN" = 1 ]; then
+  import_vercel --dry-run
+  [ -z "$VERCEL_FILE" ] || [ -n "$VERCEL_PROBLEM" ] || py '
+import json, sys
+s = json.load(open(sys.argv[1]))
+print("Vercel weeks:", ", ".join(s["weeks"]) or "none", "| incomplete:", ", ".join(s["incomplete_weeks"]) or "none")
+for r in s["rows"]:
+    print(" ", r["evidence"].split(":")[1], r["project"], r["service"], r["billed_cost"])' "$W/vercel.out" < /dev/null
   "${PY[@]}" "$BOOKS_PY" claude-code . --since "$SINCE" "${LOG_ARGS[@]+"${LOG_ARGS[@]}"}" --dry-run \
     || fail "books.py claude-code failed"
   echo "cfo-claude-code: dry run; would push to $BRANCH$([ "$NEED_PR" = 1 ] && echo ' and open a PR')"
+  [ -z "$VERCEL_PROBLEM" ] || fail "Vercel: $VERCEL_PROBLEM"
   exit 0
 fi
 
@@ -266,10 +367,13 @@ done
 if [ "$NEED_PR" = 1 ] && [ "$DRY_RUN" = 0 ]; then
   git fetch -q origin
   if git rev-parse -q --verify "origin/$BRANCH" >/dev/null && [ "$(git rev-list --count "origin/main..origin/$BRANCH")" -gt 0 ]; then
-    URL=$(gh api "repos/$REPO/pulls" -f title="CFO brief ${BRANCH#cfo/brief-}: Claude Code usage (brief pending)" \
+    URL=$(gh api "repos/$REPO/pulls" -f title="CFO brief ${BRANCH#cfo/brief-}: Claude Code and Vercel usage (brief pending)" \
       -f head="$BRANCH" -f base=main \
-      -f body="Claude Code API-equivalent rows from the Mac job. The Sunday brief run adds its commit here and retitles this PR. Merge only after the brief lands, or merge now to record the usage alone." \
+      -f body="Claude Code API-equivalent and Vercel usage rows from the Mac job. The Sunday brief run adds its commit here and retitles this PR. Merge only after the brief lands, or merge now to record the usage alone." \
       --jq .html_url)
     echo "cfo-claude-code: opened $URL"
   fi
 fi
+
+# Reported last, so a Vercel problem never holds back the Claude Code rows.
+[ -z "$VERCEL_PROBLEM" ] || fail "Vercel: $VERCEL_PROBLEM"

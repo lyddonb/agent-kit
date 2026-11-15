@@ -9,6 +9,19 @@
 
 - date: 2026-11-15
   plugin: bstack
+  version: 0.8.5
+  changes:
+    - beau-help's catalog lists cfo 0.3.0.
+
+- date: 2026-11-15
+  plugin: cfo
+  version: 0.3.0
+  changes:
+    - "The weekly Mac job (`weekly-claude-code.sh`) also imports last week's Vercel billing: it fetches the Monday-to-Monday week at midnight Pacific with the `vercel` CLI and books it with `books.py vercel`. A missing or logged-out CLI skips Vercel; a failed fetch or an incomplete week books nothing and fails the job after the Claude Code rows are pushed."
+  try: "weekly-claude-code.sh --repo OWNER/BOOKS --dry-run"
+
+- date: 2026-11-15
+  plugin: bstack
   version: 0.8.4
   changes:
     - beau-help's catalog lists cfo 0.2.1.
