@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.8.1 (2026-11-15)
+
+- A human who approves a charter or answers a gate in their own terminal passes `--typed-by-me`; when an agent types it in, it records the human's words and its own id, and `ledger` refuses an entry with neither.
+
 ## bstack 0.8.0 (2026-11-14)
 
 - New Large work item playbook in beau-mode. Multi-PR, unattended or gated work starts with a charter a human approves by its hash, and every decision, gate answer, review and cost goes into the project's ledger, sealed when the run merges.

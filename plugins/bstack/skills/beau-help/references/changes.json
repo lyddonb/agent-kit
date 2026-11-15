@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "id": "bstack@0.8.1",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.8.1",
+      "changes": [
+        "A human who approves a charter or answers a gate in their own terminal passes `--typed-by-me`; when an agent types it in, it records the human's words and its own id, and `ledger` refuses an entry with neither."
+      ]
+    },
+    {
       "id": "bstack@0.8.0",
       "date": "2026-11-14",
       "plugin": "bstack",
