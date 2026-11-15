@@ -11,6 +11,25 @@
       "try": "make a 90-second whiteboard explainer video about how DNS works"
     },
     {
+      "id": "bstack@0.8.3",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.8.3",
+      "changes": [
+        "beau-help lists the cfo plugin's new Vercel billing command."
+      ]
+    },
+    {
+      "id": "cfo@0.2.0",
+      "date": "2026-11-15",
+      "plugin": "cfo",
+      "version": "0.2.0",
+      "changes": [
+        "`books.py vercel` turns Vercel's billing charges (FOCUS JSONL from `vercel api /v1/billing/charges`) into weekly rows per project, so the books see Vercel usage and the first overage. Weeks with no cost get one $0.00 usage-read row."
+      ],
+      "try": "books.py vercel BOOKS_DIR focus.jsonl --dry-run"
+    },
+    {
       "id": "bstack@0.8.2",
       "date": "2026-11-15",
       "plugin": "bstack",

@@ -523,6 +523,41 @@ class AccountHardeningTest(Case):
         self.flagged("AWS account #1234-5678-9012 here")
         self.flagged("acct #1234-5678-9012 here")
 
+    # made-up sha256 shapes: letters on both sides of a 12-digit run, and of a Luhn-valid 16-digit run
+    HASH_ACCOUNT = "ab" + "123456789012" + "cd" + "ef01" * 12
+    HASH_CARD = "9f" + "4111111111111111" + "a" + "3c2b" * 11 + "e"
+    LEDGER_SHAPED = ('{"prev":"' + HASH_ACCOUNT + '","hash":"' + HASH_CARD + '"}')
+
+    def test_the_made_up_hashes_do_trip_the_scan_without_the_exemption(self):
+        self.assertEqual((len(self.HASH_ACCOUNT), len(self.HASH_CARD)), (64, 64))
+        self.assertTrue(books._luhn("4111111111111111"))
+        kinds = books.scan_line(self.LEDGER_SHAPED)
+        self.assertIn("looks like a 12-digit cloud account ID", kinds)
+        self.assertTrue(any("card number" in k for k in kinds), kinds)
+        self.assertEqual(books.scan_line(self.LEDGER_SHAPED, hashes_ok=True), [])
+
+    def test_hashes_under_audit_are_not_account_ids_or_cards(self):
+        self.write(".audit/runs/r1/ledger.jsonl", self.LEDGER_SHAPED + "\n"
+                   "ref: c0ffee1234567890123412345678901234567890\n"
+                   "x d249444918690c4242424242424242a" + "ef" * 16 + "e\n")
+        self.assertClean()
+        self.write(".audit/runs/r1/ledger.jsonl", "billed 123456789012 beside c0ffee1234567890123412345678901234567890\n")
+        self.assertFlags(".audit/runs/r1/ledger.jsonl", 1, "account ID")
+
+    def test_an_id_fused_to_a_few_hex_letters_under_audit_is_still_flagged(self):
+        seven = "123456789012" + "abcdef" + "3" * 21 + "a"  # 40 hex chars, 7 letters: too few to be a hash
+        eight = "123456789012" + "abcdef" + "3" * 20 + "ab"
+        self.assertEqual((len(seven), len(eight)), (40, 40))
+        self.write(".audit/runs/r1/ledger.jsonl", "ref " + seven + "\n")
+        self.assertFlags(".audit/runs/r1/ledger.jsonl", 1, "account ID")
+        self.write(".audit/runs/r1/ledger.jsonl", "ref " + eight + "\n")
+        self.assertClean()
+
+    def test_hashes_outside_audit_are_still_flagged(self):
+        self.flagged(self.LEDGER_SHAPED)
+        self.flagged("aws 123456789012abcdef0123456789abcdef012345")
+        self.flagged("deadbeef 123456789012 cafe")
+
     def test_decimal_fraction_not_flagged(self):
         self.clean("billed 0.123456789012 USD")
         self.flagged("billed 123456789012 USD")
