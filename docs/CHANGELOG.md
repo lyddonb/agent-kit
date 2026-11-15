@@ -8,6 +8,11 @@ What changed in each plugin release, newest first. In an agent, ask for `beau-he
 - New `explainer-video` skill makes a narrated explainer video end to end with Remotion, and checks still frames and the finished MP4 before handing it over.
 - Try: `make a 90-second whiteboard explainer video about how DNS works`
 
+## bstack 0.8.2 (2026-11-15)
+
+- beau-help lists the new `video` plugin and its `explainer-video` skill.
+- Try: `beau-help video`
+
 ## bstack 0.8.1 (2026-11-15)
 
 - A human who approves a charter or answers a gate in their own terminal passes `--typed-by-me`; when an agent types it in, it records the human's words and its own id, and `ledger` refuses an entry with neither.

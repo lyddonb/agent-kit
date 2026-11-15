@@ -16,6 +16,13 @@
 
 - date: 2026-11-15
   plugin: bstack
+  version: 0.8.2
+  changes:
+    - beau-help lists the new `video` plugin and its `explainer-video` skill.
+  try: "beau-help video"
+
+- date: 2026-11-15
+  plugin: bstack
   version: 0.8.1
   changes:
     - A human who approves a charter or answers a gate in their own terminal passes `--typed-by-me`; when an agent types it in, it records the human's words and its own id, and `ledger` refuses an entry with neither.

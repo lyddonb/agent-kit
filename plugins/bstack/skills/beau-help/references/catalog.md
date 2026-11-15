@@ -30,7 +30,7 @@ Twenty-four named engineering principles (prove it works, fix root causes, subtr
 
 - `principles`: Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof.
 
-## bstack 0.8.1
+## bstack 0.8.2
 
 Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
 

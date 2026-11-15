@@ -11,6 +11,16 @@
       "try": "make a 90-second whiteboard explainer video about how DNS works"
     },
     {
+      "id": "bstack@0.8.2",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.8.2",
+      "changes": [
+        "beau-help lists the new `video` plugin and its `explainer-video` skill."
+      ],
+      "try": "beau-help video"
+    },
+    {
       "id": "bstack@0.8.1",
       "date": "2026-11-15",
       "plugin": "bstack",
