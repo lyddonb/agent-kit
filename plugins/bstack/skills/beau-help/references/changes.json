@@ -1,6 +1,23 @@
 {
   "entries": [
     {
+      "id": "bstack@0.10.0",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.10.0",
+      "changes": [
+        "`quality.py ingest` books the test-run artifacts CI uploads into the quality books (`runs.csv`, the new `failures.csv`, and `tests-weekly.csv`), rejecting any malformed file by name and booking the rest, and it changes nothing the second time you run it.",
+        "`quality.py summary --json` gives one weekly object (suite time against the prior four weeks, slowest tests, failures on push, flaky tests, tests added and removed, the 300-second threshold), so a brief copies numbers instead of computing them.",
+        "`quality.py record --sha SHA` records the commit you name, so a pull_request run books the PR head instead of GitHub's temporary merge commit.",
+        "`quality.py fetch` downloads the test-results artifacts of the repos in the new `books/watched.csv` through `gh`, with GitHub's own account of each run, and `ingest` believes that account for who a run is (repo, commit, event, workflow, start, link) and a recorder file only for what it measured, so a forged or impersonating artifact cannot put a wrong row into the append-only books. Two conflicting files for one run book neither.",
+        "`quality.py ingest` and `check` refuse test ids and other cells that a spreadsheet would run or a terminal would obey, cells over 1000 characters, files over 8 MB or 20000 tests, and starts outside 2020 to 2099; one bad file no longer blocks the others.",
+        "A test with both an `error` and a `fail` line in one run is booked as `error`. Books layout changes again: a books folder needs `books/watched.csv` (`repo,github,workflow`), and `failed_on_main` is the failures in pushes to the default branch.",
+        "The recorder now leaves SIGINT ignored when it starts that way, as plain unittest does, and a test that runs another suite inside itself no longer turns the outer test red.",
+        "Books layout changes: `tests-weekly.csv` has `total_ms` where it had `p50_ms`, and a books folder without `failures.csv` fails `check`."
+      ],
+      "try": "summarize the quality books for last week"
+    },
+    {
       "id": "bstack@0.9.0",
       "date": "2026-11-15",
       "plugin": "bstack",

@@ -1,0 +1,16 @@
+{
+  "conclusion": "failure",
+  "default_branch": "main",
+  "event": "pull_request",
+  "fork": false,
+  "github": "lyddonb/agentfiles",
+  "head_branch": "lane/q3-failing-test",
+  "head_sha": "a632207166cd1a9bdf02a327a6a9dc771cecde02",
+  "repo": "agentfiles",
+  "run_attempt": 1,
+  "run_id": 43745364408,
+  "started": "2026-11-15T18:11:51Z",
+  "updated": "2026-11-15T18:12:03Z",
+  "v": 1,
+  "workflow": "ci"
+}
