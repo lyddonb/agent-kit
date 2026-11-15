@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "video@0.1.0",
+      "date": "2026-11-15",
+      "plugin": "video",
+      "version": "0.1.0",
+      "changes": [
+        "New `explainer-video` skill makes a narrated explainer video end to end with Remotion, and checks still frames and the finished MP4 before handing it over."
+      ],
+      "try": "make a 90-second whiteboard explainer video about how DNS works"
+    },
+    {
       "id": "bstack@0.8.1",
       "date": "2026-11-15",
       "plugin": "bstack",

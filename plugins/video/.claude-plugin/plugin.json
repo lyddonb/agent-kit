@@ -1,0 +1,19 @@
+{
+  "name": "video",
+  "version": "0.1.0",
+  "description": "Narrated explainer videos made by your agent, from concept and script through voiceover and animation to a checked MP4. Renders with Remotion, whose agent skills it relies on.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/video",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "video",
+    "explainer",
+    "remotion",
+    "animation",
+    "voiceover"
+  ]
+}

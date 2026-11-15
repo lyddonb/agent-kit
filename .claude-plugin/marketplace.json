@@ -93,6 +93,20 @@
         "forecasting",
         "cfo"
       ]
+    },
+    {
+      "name": "video",
+      "description": "Narrated explainer videos made by your agent, from concept and script through voiceover and animation to a checked MP4. Renders with Remotion, whose agent skills it relies on.",
+      "version": "0.1.0",
+      "source": "./plugins/video",
+      "category": "productivity",
+      "keywords": [
+        "video",
+        "explainer",
+        "remotion",
+        "animation",
+        "voiceover"
+      ]
     }
   ]
 }
