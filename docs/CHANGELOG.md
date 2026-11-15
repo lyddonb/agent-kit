@@ -3,6 +3,15 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.10.0 (2026-11-15)
+
+- `quality.py ingest` books the test-run artifacts CI uploads into the quality books (`runs.csv`, the new `failures.csv`, and `tests-weekly.csv`), rejecting any malformed file by name and booking the rest, and it changes nothing the second time you run it.
+- `quality.py summary --json` gives one weekly object (suite time against the prior four weeks, slowest tests, failures on push, flaky tests, tests added and removed, the 300-second threshold), so a brief copies numbers instead of computing them.
+- `quality.py record --sha SHA` records the commit you name, so a pull_request run books the PR head instead of GitHub's temporary merge commit.
+- The recorder now leaves SIGINT ignored when it starts that way, as plain unittest does, and a test that runs another suite inside itself no longer turns the outer test red.
+- Books layout changes: `tests-weekly.csv` has `total_ms` where it had `p50_ms`, and a books folder without `failures.csv` fails `check`.
+- Try: `summarize the quality books for last week`
+
 ## bstack 0.9.0 (2026-11-15)
 
 - New `qualitydirector` skill records a unittest run as per-test time and outcome (`quality.py record`), so you can see what a repo's suite costs and which tests are slow or failing. A run that is cut short, an empty suite or a module that fails to import counts as a failure, never a green run.

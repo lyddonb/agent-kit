@@ -952,7 +952,10 @@ RUNS_ROW = dict(zip(quality.RUNS_SCHEMA, (
     "2026-11-16T09:30:00Z", "agentfiles", "fedcba9876543210fedcba9876543210fedcba98", "push", "ci",
     "3.12", "79", "0", "1", "4210", "0", "https://github.com/example/agentfiles/actions/runs/103/attempts/1")))
 WEEKLY_ROW = dict(zip(quality.WEEKLY_SCHEMA, (
-    "2026-W47", "agentfiles", "tests.test_a.A.test_three", "5", "0", "12", "40")))
+    "2026-W47", "agentfiles", "tests.test_a.A.test_three", "5", "0", "60", "40")))
+FAILURES_ROW = dict(zip(quality.FAILURES_SCHEMA, (
+    "2026-11-16T09:30:00Z", "agentfiles", "fedcba9876543210fedcba9876543210fedcba98", "3.12", "tests.test_a.A.test_three",
+    "fail", "https://github.com/example/agentfiles/actions/runs/103/attempts/1")))
 
 
 class CheckCase(unittest.TestCase):
@@ -970,12 +973,17 @@ class CheckCase(unittest.TestCase):
 
     def append(self, rel: str, **cells) -> int:
         schema = quality.SCHEMAS[rel]
-        base = RUNS_ROW if rel == quality.RUNS else WEEKLY_ROW
+        base = {quality.RUNS: RUNS_ROW, quality.FAILURES: FAILURES_ROW, quality.WEEKLY: WEEKLY_ROW}[rel]
         row = {**base, **cells}
         path = self.dir / rel
         with open(path, "a") as f:
             f.write(",".join(row[k] for k in schema) + "\n")
         return len(path.read_text().splitlines())
+
+    def append_failures(self, count: int, **cells) -> None:
+        """`count` failures rows for the run RUNS_ROW describes (or the one `cells` names)."""
+        for i in range(count):
+            self.append(quality.FAILURES, test_id=f"tests.test_a.A.test_fail{i}", **cells)
 
     def assertFlags(self, rel: str, line: int, kind: str, **kw):
         code, lines = self.check(**kw)
@@ -987,12 +995,17 @@ class CheckCase(unittest.TestCase):
 
 class GoodBooksTest(CheckCase):
     def test_the_fixture_is_clean(self):
-        self.assertEqual(self.check(), (0, ["ok, 4 rows, 0 problems"]))
+        self.assertEqual(self.check(), (0, ["ok, 7 rows, 0 problems"]))
 
     def test_a_valid_new_row_in_each_file_is_clean(self):
         self.append(quality.RUNS)
         self.append(quality.WEEKLY)
-        self.assertEqual(self.check(), (0, ["ok, 6 rows, 0 problems"]))
+        self.assertEqual(self.check(), (0, ["ok, 9 rows, 0 problems"]))
+
+    def test_a_run_with_failures_and_its_failure_rows_is_clean(self):
+        self.append(quality.RUNS, tests="5", failed="2", exit_code="1")
+        self.append_failures(2)
+        self.assertEqual(self.check(), (0, ["ok, 10 rows, 0 problems"]))
 
     def test_same_evidence_on_another_python_is_not_a_duplicate(self):
         self.append(quality.RUNS, evidence="https://github.com/example/agentfiles/actions/runs/101/attempts/1", python="3.13")
@@ -1037,12 +1050,23 @@ class FileProblemsTest(CheckCase):
     def test_wrong_column_count(self):
         with open(self.dir / quality.WEEKLY, "a") as f:
             f.write("2026-W47,agentfiles,t,1,0,1\n")
-        self.assertFlags(quality.WEEKLY, 4, "6 columns, expected 7")
+        self.assertFlags(quality.WEEKLY, 5, "6 columns, expected 7")
 
-    def test_row_with_an_embedded_newline(self):
+    def test_a_quoted_newline_is_part_of_one_row_reported_at_its_first_line(self):
         with open(self.dir / quality.RUNS, "a") as f:
             f.write('2026-11-16T09:30:00Z,"agent\nfiles",x\n')
-        self.assertFlags(quality.RUNS, 4, "spans more than one line")
+        code, lines = self.check()
+        self.assertEqual((code, lines), (1, ["books/runs.csv:4: row has 3 columns, expected 12", "1 problems"]))
+
+    def test_a_test_id_with_a_newline_comma_quote_and_CRLF_is_clean(self):
+        odd = 'a,b "quoted"\r\nsecond line\rthird'
+        self.append(quality.RUNS, tests="5", failed="1", exit_code="1")
+        with open(self.dir / quality.FAILURES, "a", newline="") as f:
+            f.write(quality._csv_line({**FAILURES_ROW, "test_id": odd}.values()))
+        code, lines = self.check()
+        self.assertEqual((code, lines), (0, ["ok, 9 rows, 0 problems"]))
+        books = quality.load(str(self.dir))
+        self.assertEqual(books.tables[quality.FAILURES].rows[-1].cells["test_id"], odd)
 
     def test_crlf_line_endings_name_the_cause_once(self):
         for rel in quality.SCHEMAS:
@@ -1106,6 +1130,7 @@ class RunsRulesTest(CheckCase):
 
     def test_exit_code_0_with_failures_is_a_real_case(self):
         self.append(quality.RUNS, tests="5", failed="2", exit_code="0")
+        self.append_failures(2)
         self.assertEqual(self.check()[0], 0)
 
     def test_exit_code_255_is_fine(self):
@@ -1117,7 +1142,8 @@ class RunsRulesTest(CheckCase):
         self.assertEqual(self.check()[0], 0)
 
     def test_failed_plus_skipped_equal_to_tests_is_fine(self):
-        self.append(quality.RUNS, tests="5", failed="3", skipped="2")
+        self.append(quality.RUNS, tests="5", failed="3", skipped="2", exit_code="1")
+        self.append_failures(3)
         self.assertEqual(self.check()[0], 0)
 
     def test_duplicate_evidence_and_python(self):
@@ -1134,7 +1160,7 @@ class WeeklyRulesTest(CheckCase):
         "test_id": [""],
         "runs": ["0", "-1", "x", ""],
         "failed": ["-1", "x", ""],
-        "p50_ms": ["-1", "x", ""],
+        "total_ms": ["-1", "x", ""],
         "max_ms": ["-1", "1.5", ""],
     }
 
@@ -1154,26 +1180,103 @@ class WeeklyRulesTest(CheckCase):
 
     def test_week_53_is_fine_only_in_years_that_have_it(self):
         self.append(quality.WEEKLY, week="2026-W53")
-        self.append(quality.WEEKLY, week="2020-W53")
-        self.append(quality.WEEKLY, week="2026-W01")
+        self.assertEqual(self.check()[0], 0)
+        path = self.dir / quality.WEEKLY
+        head, *rows = path.read_text().splitlines(keepends=True)
+        extra = [",".join({**WEEKLY_ROW, "week": week}[k] for k in quality.WEEKLY_SCHEMA) + "\n"
+                 for week in ("2020-W53", "2026-W01")]
+        path.write_text(head + "".join(sorted(rows + extra)))
+        self.assertEqual(self.check()[0], 0)
+        self.append(quality.WEEKLY, week="2025-W53")  # 2025 has 52 weeks
+        self.assertEqual(self.check()[0], 1)
+
+    def test_max_more_than_total(self):
+        line = self.append(quality.WEEKLY, total_ms="49", max_ms="50")
+        self.assertFlags(quality.WEEKLY, line, "max_ms (50) is more than total_ms (49)")
+
+    def test_max_equal_to_total_is_fine(self):
+        self.append(quality.WEEKLY, total_ms="40", max_ms="40")
         self.assertEqual(self.check()[0], 0)
 
-    def test_p50_more_than_max(self):
-        line = self.append(quality.WEEKLY, p50_ms="50", max_ms="49")
-        self.assertFlags(quality.WEEKLY, line, "p50_ms (50) is more than max_ms (49)")
-
-    def test_p50_equal_to_max_is_fine(self):
-        self.append(quality.WEEKLY, p50_ms="40", max_ms="40")
-        self.assertEqual(self.check()[0], 0)
+    def test_rows_out_of_order_are_flagged(self):
+        line = self.append(quality.WEEKLY, week="2026-W45")
+        self.assertFlags(quality.WEEKLY, line, "not sorted by week, repo, test_id")
 
     def test_duplicate_week_repo_test(self):
-        line = self.append(quality.WEEKLY, test_id="tests.test_a.A.test_one", week="2026-W46")
-        self.assertFlags(quality.WEEKLY, line, "duplicate of line 2")
+        line = self.append(quality.WEEKLY, test_id="tests.test_a.A.test_two", week="2026-W46")
+        self.assertFlags(quality.WEEKLY, line, "duplicate of line 4")
 
     def test_same_test_in_another_week_or_repo_is_not_a_duplicate(self):
-        self.append(quality.WEEKLY, test_id="tests.test_a.A.test_one", week="2026-W47")
         self.append(quality.WEEKLY, test_id="tests.test_a.A.test_one", week="2026-W46", repo="other")
+        self.append(quality.WEEKLY, test_id="tests.test_a.A.test_one", week="2026-W47")
         self.assertEqual(self.check()[0], 0)
+
+
+class FailuresRulesTest(CheckCase):
+    BAD = {
+        "started": ["2026-11-16 09:30:00", ""],
+        "repo": ["Agent_Files", ""],
+        "sha": ["abc123", ""],
+        "python": ["3", "3.x", ""],
+        "test_id": [""],
+        "outcome": ["pass", "skip", "failed", ""],
+        "evidence": ["", "https://github.com/example/demo"],
+    }
+
+    def test_each_bad_value_is_flagged_with_file_line_and_field(self):
+        for field, values in self.BAD.items():
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    path = self.dir / quality.FAILURES
+                    good = path.read_text()
+                    line = self.append(quality.FAILURES, **{field: value})
+                    self.assertFlags(quality.FAILURES, line, field)
+                    path.write_text(good)
+
+    def test_a_duplicate_of_evidence_python_and_test_id_is_flagged(self):
+        line = self.append(quality.FAILURES, evidence="https://github.com/example/agentfiles/actions/runs/102/attempts/1",
+                           started="2026-11-15T10:00:00Z", sha="89abcdef0123456789abcdef0123456789abcdef",
+                           test_id="tests.test_a.A.test_two")
+        self.assertFlags(quality.FAILURES, line, "duplicate of line 2")
+
+    def test_the_same_test_failing_on_another_python_is_not_a_duplicate(self):
+        self.append(quality.RUNS, python="3.13", tests="5", failed="1", exit_code="1")
+        self.append(quality.FAILURES, python="3.13")
+        self.assertEqual(self.check()[0], 0)
+
+
+class CrossFileTest(CheckCase):
+    def test_a_failure_without_a_run_is_flagged_on_its_line(self):
+        line = self.append(quality.FAILURES)  # no run 103 in runs.csv
+        self.assertFlags(quality.FAILURES, line, "no run in books/runs.csv")
+
+    def test_a_failure_for_another_python_of_a_known_evidence_has_no_run(self):
+        line = self.append(quality.FAILURES, python="3.13",
+                           evidence="https://github.com/example/agentfiles/actions/runs/102/attempts/1",
+                           started="2026-11-15T10:00:00Z", sha="89abcdef0123456789abcdef0123456789abcdef")
+        self.assertFlags(quality.FAILURES, line, "no run in books/runs.csv")
+
+    def test_a_run_whose_failed_count_is_higher_than_its_failure_rows_is_flagged(self):
+        line = self.append(quality.RUNS, tests="5", failed="2", exit_code="1")
+        self.append_failures(1)
+        self.assertFlags(quality.RUNS, line, "failed is 2 but books/failures.csv has 1 rows")
+
+    def test_a_run_with_failure_rows_but_failed_0_is_flagged(self):
+        line = self.append(quality.RUNS)
+        self.append_failures(1)
+        self.assertFlags(quality.RUNS, line, "failed is 0 but books/failures.csv has 1 rows")
+
+    def test_a_failure_whose_run_facts_differ_from_the_run_is_flagged(self):
+        self.append(quality.RUNS, tests="5", failed="1", exit_code="1")
+        line = self.append(quality.FAILURES, sha="0" * 40)
+        self.assertFlags(quality.FAILURES, line, "sha")
+
+    def test_a_missing_failures_file_is_a_problem_not_a_crash(self):
+        (self.dir / quality.FAILURES).unlink()
+        code, lines = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("books/failures.csv:1: missing file", lines)
+        self.assertEqual(len(lines), 2, lines)
 
 
 class AppendOnlyTest(CheckCase):
@@ -1189,7 +1292,7 @@ class AppendOnlyTest(CheckCase):
 
     def test_a_pure_append_passes(self):
         self.append(quality.RUNS)
-        self.assertEqual(self.check("--base", "HEAD"), (0, ["ok, 5 rows, 0 problems"]))
+        self.assertEqual(self.check("--base", "HEAD"), (0, ["ok, 8 rows, 0 problems"]))
 
     def test_no_change_passes(self):
         self.assertEqual(self.check("--base", "HEAD")[0], 0)
@@ -1208,6 +1311,28 @@ class AppendOnlyTest(CheckCase):
         code, lines = self.check("--base", "HEAD")
         self.assertEqual(code, 1)
         self.assertIn("books/runs.csv:3: removed since HEAD", lines)
+
+    def test_an_edited_failure_row_is_caught_on_its_line(self):
+        path = self.dir / quality.FAILURES
+        path.write_text(path.read_text().replace(",fail,", ",error,"))
+        code, lines = self.check("--base", "HEAD")
+        self.assertEqual(code, 1)
+        self.assertIn("books/failures.csv:2: changed since HEAD", lines)
+
+    def test_a_removed_failure_row_is_caught_with_its_runs_failed_count_still_matching(self):
+        path = self.dir / quality.FAILURES
+        path.write_text("".join(path.read_text().splitlines(keepends=True)[:1]))
+        runs = self.dir / quality.RUNS
+        runs.write_text(runs.read_text().replace(",80,2,0,4380,", ",80,0,0,4380,"))
+        code, lines = self.check("--base", "HEAD")
+        self.assertEqual(code, 1)
+        self.assertIn("books/failures.csv:2: removed since HEAD", lines)
+        self.assertIn("books/runs.csv:3: changed since HEAD", lines)
+
+    def test_failures_csv_absent_at_the_base_passes(self):
+        self.git("rm", "-q", "--cached", quality.FAILURES)
+        self.git("commit", "-q", "-m", "drop failures")
+        self.assertEqual(self.check("--base", "HEAD")[0], 0)
 
     def test_a_reordered_row_is_caught(self):
         path = self.dir / quality.RUNS
