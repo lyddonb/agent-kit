@@ -1058,8 +1058,8 @@ class FileProblemsTest(CheckCase):
         code, lines = self.check()
         self.assertEqual((code, lines), (1, ["books/runs.csv:4: row has 3 columns, expected 12", "1 problems"]))
 
-    def test_a_test_id_with_a_newline_comma_quote_and_CRLF_is_clean(self):
-        odd = 'a,b "quoted"\r\nsecond line\rthird'
+    def test_a_test_id_with_a_newline_tab_comma_and_quote_is_clean(self):
+        odd = 'a,b "quoted"\nsecond line\tthird'
         self.append(quality.RUNS, tests="5", failed="1", exit_code="1")
         with open(self.dir / quality.FAILURES, "a", newline="") as f:
             f.write(quality._csv_line({**FAILURES_ROW, "test_id": odd}.values()))

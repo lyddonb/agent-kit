@@ -1,0 +1,16 @@
+{
+  "conclusion": "success",
+  "default_branch": "main",
+  "event": "pull_request",
+  "fork": false,
+  "github": "lyddonb/agent-ledger",
+  "head_branch": "feat/record-test-runs",
+  "head_sha": "b65e9913a6c2b798c416f651f821f646d9fc006e",
+  "repo": "agent-ledger",
+  "run_attempt": 1,
+  "run_id": 43745549753,
+  "started": "2026-11-15T18:13:46Z",
+  "updated": "2026-11-15T18:14:34Z",
+  "v": 1,
+  "workflow": "test"
+}

@@ -1,0 +1,16 @@
+{
+  "conclusion": "success",
+  "default_branch": "main",
+  "event": "pull_request",
+  "fork": false,
+  "github": "lyddonb/agentfiles",
+  "head_branch": "feat/record-test-runs",
+  "head_sha": "d46a5e75d900bdda65e4ffb7bf9014eb48cd4ef7",
+  "repo": "agentfiles",
+  "run_attempt": 1,
+  "run_id": 43745332984,
+  "started": "2026-11-15T18:11:31Z",
+  "updated": "2026-11-15T18:11:51Z",
+  "v": 1,
+  "workflow": "ci"
+}
