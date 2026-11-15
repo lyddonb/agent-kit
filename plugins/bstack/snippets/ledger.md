@@ -1,4 +1,4 @@
-**The `ledger` CLI.** agentfiles installs it (`commands: {ledger: agent-ledger:ci/run_ledger.py}` in a profile). Elsewhere: `pip install git+https://github.com/lyddonb/agent-ledger` (standard-library Python 3.10+). Run it inside the project's git repo; a run's records live in `.audit/runs/<yyyy-mm-dd>-<slug>/` and are committed with the work. Every write is redacted before it is recorded, and `ledger verify` checks the chain.
+**The `ledger` CLI.** agentfiles installs it (`commands: {ledger: agent-ledger:ci/run_ledger.py}` in a profile). Elsewhere: `pip install git+https://github.com/lyddonb/agent-ledger@v1.0.0` (standard-library Python 3.10+). Run it inside the project's git repo; a run's records live in `.audit/runs/<yyyy-mm-dd>-<slug>/` and are committed with the work. Every write is redacted before it is recorded, and `ledger verify` checks the chain.
 
 Every write names who is acting with `--actor` (agent-ledger spec S2):
 
