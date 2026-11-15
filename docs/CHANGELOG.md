@@ -9,6 +9,7 @@ What changed in each plugin release, newest first. In an agent, ask for `beau-he
 - show-me-your-work records the decision trail with the `ledger` CLI instead of a TSV file, so CI can check that nobody edited it. Install `ledger` with agentfiles or pip.
 - beau-mode and the Large work item playbook read the agent policy (`~/.agents/policy.yaml`, which agentfiles writes) and stop at its gates.
 - figure-it-out frames tier 2 and 3 work as a charter.
+- A human who approves a charter or answers a gate in their own terminal passes `--typed-by-me`; when an agent types it in, it records the human's words and its own id, and `ledger` refuses an entry with neither.
 - Try: `/beau-mode plan this migration as a large work item`
 
 ## bstack 0.7.0 (2026-11-10)
