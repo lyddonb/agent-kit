@@ -360,6 +360,32 @@ class SkipTest(Case):
         self.assertFlags("other.txt", 1, "card number")
 
 
+SEALED_RUN = ROOT / "tests/fixtures/sealed-run/.audit"
+
+
+class SealedRunTest(Case):
+    """A real agent-ledger run folder, as a governed run commits it, must pass the books check."""
+
+    def test_the_fixture_still_has_what_it_tests(self):
+        ledger = next(SEALED_RUN.glob("runs/*/ledger.jsonl")).read_text()
+        self.assertRegex(ledger, r"[0-9a-f]*[a-f][0-9a-f]*[0-9]{12}", "no hash with a 12-digit run left in the fixture")
+        self.assertTrue(list(SEALED_RUN.glob("runs/*/sessions/*.jsonl.gz")), "no gzip session archive in the fixture")
+        self.assertTrue((SEALED_RUN / "INDEX.jsonl").is_file())
+
+    def test_a_sealed_run_passes_the_check(self):
+        shutil.copytree(SEALED_RUN, self.dir / ".audit")
+        self.assertClean()
+
+    def test_a_sealed_run_committed_after_the_base_passes(self):
+        git(self.dir, "init", "-q")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "base")
+        shutil.copytree(SEALED_RUN, self.dir / ".audit")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "run")
+        self.assertClean("HEAD~1")
+
+
 def git(cwd, *args):
     subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@example.com",
                     "-c", "commit.gpgsign=false"] + list(args), check=True, capture_output=True)

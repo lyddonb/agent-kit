@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.8.7 (2026-11-15)
+
+- Large work item: each unit PR opens as a draft and is marked ready only once its reviews are in, so a merge can't land before its review.
+- interrogate: an adversary in another tool's CLI runs read-only and non-interactively; for Cursor, `cursor-agent -p --trust --mode ask`, which can't hang on an approval prompt.
+- Try: `interrogate this branch with a Cursor reviewer`
+
 ## bstack 0.8.6 (2026-11-15)
 
 - The `ledger` install line outside agentfiles pins the release: `pip install git+https://github.com/lyddonb/agent-ledger@v1.0.0`.

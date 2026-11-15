@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "id": "bstack@0.8.7",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.8.7",
+      "changes": [
+        "Large work item: each unit PR opens as a draft and is marked ready only once its reviews are in, so a merge can't land before its review.",
+        "interrogate: an adversary in another tool's CLI runs read-only and non-interactively; for Cursor, `cursor-agent -p --trust --mode ask`, which can't hang on an approval prompt."
+      ],
+      "try": "interrogate this branch with a Cursor reviewer"
+    },
+    {
       "id": "bstack@0.8.6",
       "date": "2026-11-15",
       "plugin": "bstack",

@@ -19,6 +19,6 @@ source: pstack/skills/poteto-mode/playbooks/opening-a-pr.md @ ccb5507, goal in W
    - `## Verification`: one to three bullets naming the real run and its outcome. One primary number for performance work.
    Link bulky evidence (logs, decision trails, screenshots) instead of pasting it.
 5. **Size.** Prefer several narrow PRs to one wide one. Stack dependent PRs on each other's branches.
-6. **Open it ready for review**, not as a draft, with `gh pr create` or the tool's built-in PR feature. Post the URL and keep going; don't wait on CI unless asked.
+6. **Open it ready for review**, not as a draft, with `gh pr create` or the tool's built-in PR feature. The exception is a unit PR in a Large work item run, which stays a draft until its reviews are in. Post the URL and keep going; don't wait on CI unless asked.
 
 **Reply:** the PR URL and a one-line summary.
