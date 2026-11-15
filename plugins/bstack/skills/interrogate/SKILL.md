@@ -33,6 +33,8 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 
 With no `reviewers` entry for your tool, run two adversaries on the current model and say the panel was not diverse.
 
+An adversary can also run in another tool's CLI, for a second model family (a charter may staff one). Start it non-interactively and read-only, so it can't stall on a prompt nobody sees or edit the scope. For Cursor that is `cursor-agent -p --trust --mode ask --model <model> --output-format text --workspace <its worktree> "<brief>"`. Without `--mode ask`, print mode can wait indefinitely on a command approval it has no way to show. Don't pass `-f`, which runs commands without asking. Ask mode can't run anything, so add to its brief that it reviews by reading and labels each finding "proven by reading" or "inferred". Step 3 reruns its findings like any other.
+
 Give each adversary the scope, the intent, its worktree path, and this brief:
 
 > Break this change. Prove each finding with a run against the real code, such as a failing test, a repro script, or command output that shows the wrong behavior. For a design or plan, run a prototype or probe the current tree. Keep repros in your own worktree. Report each finding with a title, the exact command, the output it printed, and the output the intent requires. Leave out anything you did not run. That covers style, naming, structure, and risks that need a future change to matter. No findings is a valid result.
