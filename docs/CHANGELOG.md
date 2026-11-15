@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.8.6 (2026-11-15)
+
+- The `ledger` install line outside agentfiles pins the release: `pip install git+https://github.com/lyddonb/agent-ledger@v1.0.0`.
+
 ## bstack 0.8.5 (2026-11-15)
 
 - beau-help's catalog lists cfo 0.3.0.

@@ -9,6 +9,12 @@
 
 - date: 2026-11-15
   plugin: bstack
+  version: 0.8.6
+  changes:
+    - "The `ledger` install line outside agentfiles pins the release: `pip install git+https://github.com/lyddonb/agent-ledger@v1.0.0`."
+
+- date: 2026-11-15
+  plugin: bstack
   version: 0.8.5
   changes:
     - beau-help's catalog lists cfo 0.3.0.
