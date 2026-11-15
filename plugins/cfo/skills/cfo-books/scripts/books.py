@@ -458,6 +458,8 @@ def _read(books_dir: Path, rel: str) -> tuple[str | None, bytes, Problem | None]
         return None, b"", Problem(rel, 1, "missing file")
     except OSError as e:
         return None, b"", Problem(rel, 1, f"unreadable file ({e.strerror or type(e).__name__})")
+    if _is_audit_session(rel):
+        return "", data, None  # see _is_audit_session
     text = _decode(data)
     if text is None:
         return None, data, Problem(rel, 1, "binary file; the books hold text only")
@@ -660,6 +662,13 @@ _SECRETS = [
 # Only files under HASH_DIR, agent-ledger's run records, may carry them: elsewhere a hash-shaped
 # token could hide a real account ID fused to hex.
 HASH_DIR = ".audit/"
+
+
+def _is_audit_session(rel: str) -> bool:
+    """An agent-ledger session archive, .audit/runs/<run>/sessions/<id>.jsonl.gz. The books check
+    skips these: they are gzip, agent-ledger's own `ledger scan` (the ledger-verify CI check) scans
+    them for secrets, and a transcript quotes hashes and test fixtures that the ID rules here flag."""
+    return bool(re.fullmatch(r"\.audit/runs/[^/]+/sessions/[^/]+\.jsonl\.gz", rel))
 _HEX_HASH = re.compile(r"(?<![0-9A-Za-z])(?=(?:[0-9]*[a-f]){8})[0-9a-f]{40}(?:[0-9a-f]{24})?(?![0-9A-Za-z])")
 # (?=...{8}): a real hash has about 15 (SHA-1) or 24 (sha256) letters; an ID fused to a few hex letters is kept
 
@@ -810,7 +819,7 @@ def check_history(books: Books) -> Iterator[Problem]:
             path = raw[6:] if raw.startswith("+++ b/") else ""
         elif raw.startswith("Binary files "):
             m = re.search(r" and b/(.*) differ$", raw)
-            if m:
+            if m and not _is_audit_session(m.group(1)):
                 yield Problem(m.group(1), 1, f"binary file changed in commit {sha[:7]}; the books hold text only")
         else:
             m = _HUNK.match(raw)

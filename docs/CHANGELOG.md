@@ -3,6 +3,14 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.8.4 (2026-11-15)
+
+- beau-help's catalog lists cfo 0.2.1.
+
+## cfo 0.2.1 (2026-11-15)
+
+- The books check skips agent-ledger session archives (`.audit/runs/<run>/sessions/*.jsonl.gz`), which `ledger scan` checks instead, so a governed run's archived transcripts no longer fail it as binary files.
+
 ## video 0.1.0 (2026-11-15)
 
 - New `explainer-video` skill makes a narrated explainer video end to end with Remotion, and checks still frames and the finished MP4 before handing it over.

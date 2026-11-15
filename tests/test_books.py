@@ -318,6 +318,39 @@ class SkipTest(Case):
         (self.dir / "blob.bin").write_bytes(b"\0\1\2 4242424242424242")
         self.assertFlags("blob.bin", 1, "binary file")
 
+    def test_agent_ledger_session_archives_are_skipped(self):
+        import gzip
+        blob = gzip.compress(b'{"text": "4242424242424242"}\n')
+        session = ".audit/runs/2026-11-15-demo/sessions/abc.jsonl.gz"
+        (self.dir / session).parent.mkdir(parents=True)
+        (self.dir / session).write_bytes(blob)
+        self.assertClean()
+        for other in (".audit/runs/2026-11-15-demo/abc.jsonl.gz", "sessions/abc.jsonl.gz",
+                      ".audit/runs/2026-11-15-demo/sessions/abc.bin"):
+            with self.subTest(other):
+                (self.dir / other).parent.mkdir(parents=True, exist_ok=True)
+                (self.dir / other).write_bytes(blob)
+                self.assertFlags(other, 1, "binary file")
+                (self.dir / other).unlink()
+        self.write(".audit/runs/2026-11-15-demo/notes.md", "card 4242424242424242\n")
+        self.assertFlags(".audit/runs/2026-11-15-demo/notes.md", 1, "card number")
+
+    def test_a_session_archive_in_history_is_skipped(self):
+        import gzip
+        git(self.dir, "init", "-q")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "base")
+        session = ".audit/runs/2026-11-15-demo/sessions/abc.jsonl.gz"
+        (self.dir / session).parent.mkdir(parents=True)
+        (self.dir / session).write_bytes(gzip.compress(b"{}\n"))
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "archive")
+        self.assertClean("HEAD~1")
+        (self.dir / "blob.bin").write_bytes(b"\0\1")
+        git(self.dir, "add", "-A")
+        git(self.dir, "commit", "-q", "-m", "blob")
+        self.assertTrue(any("blob.bin" in p and "binary file changed" in p for p in self.problems("HEAD~2")))
+
     def test_gitignored_files_skipped_in_a_git_repo(self):
         git(self.dir, "init", "-q")
         self.write(".gitignore", "inbox/\n")

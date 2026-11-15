@@ -1,6 +1,24 @@
 {
   "entries": [
     {
+      "id": "bstack@0.8.4",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.8.4",
+      "changes": [
+        "beau-help's catalog lists cfo 0.2.1."
+      ]
+    },
+    {
+      "id": "cfo@0.2.1",
+      "date": "2026-11-15",
+      "plugin": "cfo",
+      "version": "0.2.1",
+      "changes": [
+        "The books check skips agent-ledger session archives (`.audit/runs/<run>/sessions/*.jsonl.gz`), which `ledger scan` checks instead, so a governed run's archived transcripts no longer fail it as binary files."
+      ]
+    },
+    {
       "id": "video@0.1.0",
       "date": "2026-11-15",
       "plugin": "video",

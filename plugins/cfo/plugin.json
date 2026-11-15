@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cfo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself.",
   "author": {
     "name": "Beau Lyddon",
