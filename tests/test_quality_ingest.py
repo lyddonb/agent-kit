@@ -308,7 +308,7 @@ REJECTIONS = {
     "event is not a string": (header_with(event=None), "header event must be str"),
     "evidence is not a run link": (header_with(evidence="http://example.com/run"), "header evidence must be https://github.com/example/demo/actions/runs/9/attempts/N"),
     "evidence is empty": (header_with(evidence=""), "header evidence must be"),
-    "python is not a version": (header_with(python="3.x"), "header python must look like 3.12"),
+    "python is not a version": (header_with(python="3.x"), "python must look like 3.12"),
     "wall_ms is negative": (header_with(wall_ms=-1), "header wall_ms must be an integer from 0"),
     "wall_ms is not an int": (header_with(wall_ms=1.5), "header wall_ms must be int"),
     "wall_ms is huge": (header_with(wall_ms=10 ** 30), "header wall_ms must be an integer from 0"),
@@ -548,7 +548,7 @@ class ImpersonationTest(TempCase):
                 put_good_run(self.art, 1)
                 code, out = self.book(**over)
                 self.assertEqual(code, 1, out)
-                self.assertRegex(out, r"(?m)^rejected: demo/5/artifacts/x/test-results.jsonl: header (evidence|python) must")
+                self.assertRegex(out, r"(?m)^rejected: demo/5/artifacts/x/test-results.jsonl: (header evidence|would fail check: python) must")
                 self.assertNotIn("\x1b", out)
                 self.assertEqual([r[11] for r in csv_rows(self.books / quality.RUNS)[1:]], [ev(1)])
                 self.assertCheckOk()
@@ -654,7 +654,7 @@ class ManifestTest(TempCase):
 
 class WhatIsBookedTest(TempCase):
     def run_of(self, n: int = 1, header=None, rows=None, name="x", **over):
-        rows = rows or good_rows()
+        rows = good_rows() if rows is None else rows
         put_run(self.art, manifest(n, **over), {name: artifact_text(header or good_header(evidence=ev(n)), rows)})
 
     def test_a_run_already_in_runs_csv_is_skipped_by_evidence_and_python(self):
@@ -1233,23 +1233,21 @@ class FindingsTest(TempCase):
 # every row-level rule of `check` is also the gate every file passes at parse time
 # ---------------------------------------------------------------------------
 
-LONG_ID = "t" * 1001
-
 # rule -> (where the bad value lives, the change, text that must be in the reason)
 RULE_CASES = {
     "runs.started": ("manifest", dict(started="2019-12-31T23:59:59Z", updated="2020-01-01T00:00:00Z"), "started must look like"),
     "runs.repo": ("manifest", dict(repo="Demo"), "repo must match"),
     "runs.sha": ("manifest", dict(head_sha="abc"), "sha must be 40 lowercase hex"),
     "runs.event": ("manifest", dict(event=""), "event is empty"),
-    "runs.python": ("header", dict(python="3.120"), "header python must look like 3.12"),
+    "runs.python": ("header", dict(python="3.120"), "python must look like 3.12"),
     "runs.counts": ("header", dict(wall_ms=-1), "header wall_ms must be an integer from 0"),
     "runs.totals": ("header", dict(exit_code=256), "exit_code must be 0 to 255"),
     "runs.evidence": ("header", dict(evidence="https://github.com/example/demo/actions/runs/9/attempts/01"), "header evidence must be"),
     "runs.text": ("manifest", dict(event="push\x1b[2J"), "event contains a control character"),
-    "failures.test_id": ("rows", [{"id": LONG_ID, "ms": 1, "outcome": "fail"}], "test_id is longer than 1000 characters"),
+    "failures.test_id": ("rows", [{"id": "", "ms": 1, "outcome": "fail"}], "line 2 id is empty"),
     "failures.outcome": ("rows", [{"id": "t.a", "ms": 1, "outcome": "boom"}], "line 2 outcome must be one of"),
     "failures.text": ("rows", [{"id": "=cmd", "ms": 1, "outcome": "fail"}], "test_id starts with"),
-    "weekly.test_id": ("rows", [{"id": LONG_ID, "ms": 1, "outcome": "pass"}], "test_id is longer than 1000 characters"),
+    "weekly.test_id": ("rows", [{"id": "", "ms": 1, "outcome": "pass"}], "line 2 id is empty"),
     "weekly.counts": ("rows", [{"id": "t.a", "ms": -1, "outcome": "pass"}], "line 2 ms must be an integer from 0"),
     "weekly.limits": ("header", dict(failed=1), "header failed is 1 but the file has 0"),
     "weekly.text": ("rows", [{"id": "@sum", "ms": 1, "outcome": "pass"}], "test_id starts with"),

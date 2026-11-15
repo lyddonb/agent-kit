@@ -111,11 +111,15 @@ TEST_KEYS = ("id", "outcome", "ms")
 RUNS = "books/runs.csv"
 FAILURES = "books/failures.csv"
 WEEKLY = "books/tests-weekly.csv"
+WATCHED = "books/watched.csv"
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
 FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "evidence")
 WEEKLY_SCHEMA = ("week", "repo", "test_id", "runs", "failed", "total_ms", "max_ms")
-SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA}
+WATCHED_SCHEMA = ("repo", "github", "workflow")
+SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}
+YEAR_MIN, YEAR_MAX = 2020, 2099  # the years a stamp or a week in the books may have
+MAX_CELL = 1000  # characters in one cell, a test id included; the csv module's own field limit (131072) is never reached
 FAILING = ("fail", "error")  # the outcomes failures.csv holds
 SUITE_MEDIAN_THRESHOLD_MS = 300_000  # a suite whose median wall time is above this is over threshold
 
@@ -674,26 +678,30 @@ Check = Callable[[Books], Iterable[Problem]]
 _REPO = re.compile(r"[a-z0-9][a-z0-9-]*")
 _STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 _SHA = re.compile(r"[0-9a-f]{40}")
-_PYTHON = re.compile(r"3\.[0-9]+")
+_PYTHON = re.compile(r"3\.(0|[1-9][0-9]?)")
 _WEEK = re.compile(r"([0-9]{4})-W([0-9]{2})")
 _RUN_LINK = re.compile(r"https://[^/\s]+/[^/\s]+/[^/\s]+/actions/runs/[0-9]+/attempts/[0-9]+")
 _COUNT = re.compile(r"0|[1-9][0-9]*")
+_GITHUB = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9._-]{0,99}")
+_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f]")  # C0 controls (ESC among them) and DEL; not newline or tab
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # a spreadsheet runs a cell that starts with one of these
 
 
 def _is_stamp(s: str) -> bool:
+    """A real UTC stamp like 2026-11-15T09:30:00Z, in the years the books accept (2020 to 2099)."""
     if not _STAMP.fullmatch(s):
         return False
     try:
-        datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
+        when = datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
     except ValueError:
         return False
-    return True
+    return YEAR_MIN <= when.year <= YEAR_MAX
 
 
 def _is_iso_week(s: str) -> bool:
-    """2026-W53 is a week; 2025-W53 and 2026-W00 are not."""
+    """2026-W53 is a week; 2025-W53 and 2026-W00 are not; the years are the books' 2020 to 2099."""
     m = _WEEK.fullmatch(s)
-    if not m:
+    if not m or not YEAR_MIN <= int(m[1]) <= YEAR_MAX:
         return False
     try:
         date.fromisocalendar(int(m[1]), int(m[2]), 1)
@@ -702,14 +710,154 @@ def _is_iso_week(s: str) -> bool:
     return True
 
 
-def _counts(row: Row, rel: str, names: Iterable[str]) -> Iterator[Problem | int]:
-    """Yield a Problem for each column that is not a non-negative integer, else its value."""
-    for name in names:
-        value = row.cells[name]
-        if _COUNT.fullmatch(value):
-            yield int(value)
-        else:
-            yield Problem(rel, row.line, f"{name} must be a non-negative integer, got {value!r}")
+# ---------------------------------------------------------------------------
+# row rules: the one definition of a good row, used by `check` on every row in the books and by
+# `ingest` on every row a file would add, before the file is planned
+# ---------------------------------------------------------------------------
+#
+# A rule takes a row's cells (a dict of column name to text) and yields a message for each
+# problem. `check` reports a message with the row's line; ingest rejects the file that would
+# produce the row, so a file that `check` would refuse can never reach the planner.
+
+Rule = Callable[[dict], Iterator[str]]
+
+
+def text_problem(value: str) -> str | None:
+    """Why a text cell cannot go into a CSV the books share with a spreadsheet and a terminal."""
+    if value.startswith(_FORMULA_START):
+        return f"starts with {_show(value[0], 8)}; a spreadsheet would run it as a formula"
+    if _CONTROL.search(value):
+        return "contains a control character"
+    if len(value) > MAX_CELL:
+        return f"is longer than {MAX_CELL} characters"
+    return None
+
+
+def _text_rule(*columns: str) -> Rule:
+    """Hygiene for the cells that hold free text. The other columns are held to a pattern that already
+    excludes what text_problem looks for."""
+    def rule(cells: dict) -> Iterator[str]:
+        for name in columns:
+            why = text_problem(cells[name])
+            if why:
+                yield f"{name} {why}"
+    return rule
+
+
+def _stamp_rule(cells: dict) -> Iterator[str]:
+    if not _is_stamp(cells["started"]):
+        yield (f"started must look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
+               f"got {_show(cells['started'])}")
+
+
+def _repo_rule(cells: dict) -> Iterator[str]:
+    if not _REPO.fullmatch(cells["repo"]):
+        yield f"repo must match [a-z0-9][a-z0-9-]*, got {_show(cells['repo'])}"
+
+
+def _sha_rule(cells: dict) -> Iterator[str]:
+    if not _SHA.fullmatch(cells["sha"]):
+        yield f"sha must be 40 lowercase hex characters, got {_show(cells['sha'])}"
+
+
+def _python_rule(cells: dict) -> Iterator[str]:
+    if not _PYTHON.fullmatch(cells["python"]):
+        yield f"python must look like 3.12, got {_show(cells['python'])}"
+
+
+def _evidence_rule(cells: dict) -> Iterator[str]:
+    if not _RUN_LINK.fullmatch(cells["evidence"]):
+        yield ("evidence must look like https://HOST/OWNER/REPO/actions/runs/N/attempts/N, "
+               f"got {_show(cells['evidence'])}")
+
+
+def _count_rule(names: tuple[str, ...]) -> Rule:
+    def rule(cells: dict) -> Iterator[str]:
+        for name in names:
+            if not _COUNT.fullmatch(cells[name]):
+                yield f"{name} must be a non-negative integer, got {_show(cells[name])}"
+    return rule
+
+
+def _counts_ok(cells: dict, names: tuple[str, ...]) -> list[int] | None:
+    return [int(cells[n]) for n in names] if all(_COUNT.fullmatch(cells[n]) for n in names) else None
+
+
+def _run_totals_rule(cells: dict) -> Iterator[str]:
+    values = _counts_ok(cells, ("tests", "failed", "skipped", "wall_ms", "exit_code"))
+    if values:
+        tests, failed, skipped, _, code = values
+        if failed + skipped > tests:
+            yield f"failed + skipped ({failed + skipped}) is more than tests ({tests})"
+        if code > 255:
+            yield f"exit_code must be 0 to 255, got {code}"
+
+
+def _event_rule(cells: dict) -> Iterator[str]:
+    if not cells["event"]:
+        yield "event is empty"
+
+
+def _test_id_rule(cells: dict) -> Iterator[str]:
+    if not cells["test_id"]:
+        yield "test_id is empty"
+
+
+def _outcome_rule(cells: dict) -> Iterator[str]:
+    if cells["outcome"] not in FAILING:
+        yield f"outcome must be fail or error, got {_show(cells['outcome'])}"
+
+
+def _week_rule(cells: dict) -> Iterator[str]:
+    if not _is_iso_week(cells["week"]):
+        yield (f"week must be a real ISO week like 2026-W46 (01 to 53) in {YEAR_MIN} to {YEAR_MAX}, "
+               f"got {_show(cells['week'])}")
+
+
+def _weekly_limits_rule(cells: dict) -> Iterator[str]:
+    values = _counts_ok(cells, ("runs", "failed", "total_ms", "max_ms"))
+    if values:
+        runs, failed, total, mx = values
+        if runs < 1:
+            yield "runs must be at least 1"
+        if failed > runs:
+            yield f"failed ({failed}) is more than runs ({runs})"
+        if mx > total:
+            yield f"max_ms ({mx}) is more than total_ms ({total})"
+
+
+def _github_rule(cells: dict) -> Iterator[str]:
+    if not _GITHUB.fullmatch(cells["github"]):
+        yield f"github must look like OWNER/NAME, got {_show(cells['github'])}"
+
+
+def _workflow_rule(cells: dict) -> Iterator[str]:
+    if not cells["workflow"]:
+        yield "workflow is empty"
+
+
+RUN_RULES: dict[str, Rule] = {
+    "started": _stamp_rule, "repo": _repo_rule, "sha": _sha_rule, "event": _event_rule, "python": _python_rule,
+    "counts": _count_rule(("tests", "failed", "skipped", "wall_ms", "exit_code")), "totals": _run_totals_rule,
+    "evidence": _evidence_rule, "text": _text_rule("event", "workflow", "evidence"),
+}
+FAILURE_RULES: dict[str, Rule] = {
+    "started": _stamp_rule, "repo": _repo_rule, "sha": _sha_rule, "python": _python_rule, "test_id": _test_id_rule,
+    "outcome": _outcome_rule, "evidence": _evidence_rule, "text": _text_rule("test_id", "evidence"),
+}
+WEEKLY_RULES: dict[str, Rule] = {
+    "week": _week_rule, "repo": _repo_rule, "test_id": _test_id_rule,
+    "counts": _count_rule(("runs", "failed", "total_ms", "max_ms")), "limits": _weekly_limits_rule,
+    "text": _text_rule("test_id"),
+}
+WATCHED_RULES: dict[str, Rule] = {
+    "repo": _repo_rule, "github": _github_rule, "workflow": _workflow_rule, "text": _text_rule("workflow"),
+}
+
+
+def rule_messages(rules: dict[str, Rule], cells: dict) -> Iterator[str]:
+    for rule in rules.values():
+        yield from rule(cells)
 
 
 def check_load(books: Books) -> Iterator[Problem]:
@@ -723,63 +871,33 @@ def check_header(books: Books) -> Iterator[Problem]:
             yield Problem(rel, 1, "header does not match the schema: expected " + ",".join(schema))
 
 
+def _check_rows(books: Books, rel: str, rules: dict[str, Rule]) -> Iterator[Problem]:
+    for row in books.tables[rel].rows:
+        for message in rule_messages(rules, row.cells):
+            yield Problem(rel, row.line, message)
+
+
 def check_runs(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, RUNS, RUN_RULES)
     seen: dict[tuple[str, str], int] = {}
     for row in books.tables[RUNS].rows:
-        c, n = row.cells, row.line
-        if not _is_stamp(c["started"]):
-            yield Problem(RUNS, n, f"started must look like 2026-11-15T09:30:00Z (UTC), got {c['started']!r}")
-        if not _REPO.fullmatch(c["repo"]):
-            yield Problem(RUNS, n, f"repo must match [a-z0-9][a-z0-9-]*, got {c['repo']!r}")
-        if not _SHA.fullmatch(c["sha"]):
-            yield Problem(RUNS, n, f"sha must be 40 lowercase hex characters, got {c['sha']!r}")
-        if not c["event"]:
-            yield Problem(RUNS, n, "event is empty")
-        if not _PYTHON.fullmatch(c["python"]):
-            yield Problem(RUNS, n, f"python must look like 3.12, got {c['python']!r}")
-        values = list(_counts(row, RUNS, ("tests", "failed", "skipped", "wall_ms", "exit_code")))
-        bad = [v for v in values if isinstance(v, Problem)]
-        yield from bad
-        if not bad:
-            tests, failed, skipped, _, code = values
-            if failed + skipped > tests:
-                yield Problem(RUNS, n, f"failed + skipped ({failed + skipped}) is more than tests ({tests})")
-            if code > 255:
-                yield Problem(RUNS, n, f"exit_code must be 0 to 255, got {code}")
-        if not _RUN_LINK.fullmatch(c["evidence"]):
-            yield Problem(RUNS, n, "evidence must look like https://HOST/OWNER/REPO/actions/runs/N/attempts/N, "
-                                   f"got {c['evidence']!r}")
-        key = (c["evidence"], c["python"])
+        key = (row.cells["evidence"], row.cells["python"])
         if key in seen:
-            yield Problem(RUNS, n, f"duplicate of line {seen[key]} (same evidence and python)")
+            yield Problem(RUNS, row.line, f"duplicate of line {seen[key]} (same evidence and python)")
         else:
-            seen[key] = n
+            seen[key] = row.line
 
 
 def check_failures(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, FAILURES, FAILURE_RULES)
     seen: dict[tuple[str, str, str], int] = {}
     for row in books.tables[FAILURES].rows:
-        c, n = row.cells, row.line
-        if not _is_stamp(c["started"]):
-            yield Problem(FAILURES, n, f"started must look like 2026-11-15T09:30:00Z (UTC), got {c['started']!r}")
-        if not _REPO.fullmatch(c["repo"]):
-            yield Problem(FAILURES, n, f"repo must match [a-z0-9][a-z0-9-]*, got {c['repo']!r}")
-        if not _SHA.fullmatch(c["sha"]):
-            yield Problem(FAILURES, n, f"sha must be 40 lowercase hex characters, got {c['sha']!r}")
-        if not _PYTHON.fullmatch(c["python"]):
-            yield Problem(FAILURES, n, f"python must look like 3.12, got {c['python']!r}")
-        if not c["test_id"]:
-            yield Problem(FAILURES, n, "test_id is empty")
-        if c["outcome"] not in FAILING:
-            yield Problem(FAILURES, n, f"outcome must be fail or error, got {c['outcome']!r}")
-        if not _RUN_LINK.fullmatch(c["evidence"]):
-            yield Problem(FAILURES, n, "evidence must look like https://HOST/OWNER/REPO/actions/runs/N/attempts/N, "
-                                       f"got {c['evidence']!r}")
+        c = row.cells
         key = (c["evidence"], c["python"], c["test_id"])
         if key in seen:
-            yield Problem(FAILURES, n, f"duplicate of line {seen[key]} (same evidence, python and test_id)")
+            yield Problem(FAILURES, row.line, f"duplicate of line {seen[key]} (same evidence, python and test_id)")
         else:
-            seen[key] = n
+            seen[key] = row.line
 
 
 def check_failures_match_runs(books: Books) -> Iterator[Problem]:
@@ -793,12 +911,12 @@ def check_failures_match_runs(books: Books) -> Iterator[Problem]:
         key = (c["evidence"], c["python"])
         run = runs.get(key)
         if run is None:
-            yield Problem(FAILURES, row.line, f"no run in {RUNS} with evidence {c['evidence']!r} and python {c['python']}")
+            yield Problem(FAILURES, row.line, f"no run in {RUNS} with evidence {_show(c['evidence'])} and python {_show(c['python'])}")
             continue
         counted[key] = counted.get(key, 0) + 1
         for name in ("started", "repo", "sha"):
             if c[name] != run.cells[name]:
-                yield Problem(FAILURES, row.line, f"{name} {c[name]!r} differs from {RUNS} line {run.line} ({run.cells[name]!r})")
+                yield Problem(FAILURES, row.line, f"{name} {_show(c[name])} differs from {RUNS} line {run.line} ({_show(run.cells[name])})")
     for key, run in runs.items():
         failed = run.cells["failed"]
         if _COUNT.fullmatch(failed) and int(failed) != counted.get(key, 0):
@@ -806,27 +924,11 @@ def check_failures_match_runs(books: Books) -> Iterator[Problem]:
 
 
 def check_weekly(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, WEEKLY, WEEKLY_RULES)
     seen: dict[tuple[str, str, str], int] = {}
     previous: tuple[str, str, str] | None = None
     for row in books.tables[WEEKLY].rows:
         c, n = row.cells, row.line
-        if not _is_iso_week(c["week"]):
-            yield Problem(WEEKLY, n, f"week must be a real ISO week like 2026-W46 (01 to 53), got {c['week']!r}")
-        if not _REPO.fullmatch(c["repo"]):
-            yield Problem(WEEKLY, n, f"repo must match [a-z0-9][a-z0-9-]*, got {c['repo']!r}")
-        if not c["test_id"]:
-            yield Problem(WEEKLY, n, "test_id is empty")
-        values = list(_counts(row, WEEKLY, ("runs", "failed", "total_ms", "max_ms")))
-        bad = [v for v in values if isinstance(v, Problem)]
-        yield from bad
-        if not bad:
-            runs, failed, total, mx = values
-            if runs < 1:
-                yield Problem(WEEKLY, n, "runs must be at least 1")
-            if failed > runs:
-                yield Problem(WEEKLY, n, f"failed ({failed}) is more than runs ({runs})")
-            if mx > total:
-                yield Problem(WEEKLY, n, f"max_ms ({mx}) is more than total_ms ({total})")
         key = (c["week"], c["repo"], c["test_id"])
         if key in seen:
             yield Problem(WEEKLY, n, f"duplicate of line {seen[key]} (same week, repo and test_id)")
@@ -835,6 +937,23 @@ def check_weekly(books: Books) -> Iterator[Problem]:
         if previous is not None and key < previous:
             yield Problem(WEEKLY, n, "not sorted by week, repo, test_id")
         previous = key
+
+
+def check_watched(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, WATCHED, WATCHED_RULES)
+    repos: dict[str, int] = {}
+    pairs: dict[tuple[str, str], int] = {}
+    for row in books.tables[WATCHED].rows:
+        c, n = row.cells, row.line
+        if c["repo"] in repos:
+            yield Problem(WATCHED, n, f"duplicate of line {repos[c['repo']]} (same repo)")
+        else:
+            repos[c["repo"]] = n
+        pair = (c["github"].lower(), c["workflow"])  # GitHub names are not case sensitive
+        if pair in pairs:
+            yield Problem(WATCHED, n, f"duplicate of line {pairs[pair]} (same github and workflow)")
+        else:
+            pairs[pair] = n
 
 
 def _base_problem(books: Books) -> Problem | None:
@@ -907,6 +1026,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("failures", check_failures),
     ("failures-match-runs", check_failures_match_runs),
     ("weekly", check_weekly),
+    ("watched", check_watched),
     ("append-only", check_append_only),
 )
 
@@ -982,7 +1102,7 @@ def _typed_rows(books: Books, rel: str, cls) -> list:
 def week_of(stamp: str) -> str:
     """The ISO week (UTC) of a `2026-11-15T09:30:00Z` stamp."""
     year, week, _ = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").isocalendar()
-    return f"{year}-W{week:02d}"
+    return f"{year:04d}-W{week:02d}"
 
 
 def week_back(week: str, count: int) -> str:
@@ -1003,19 +1123,35 @@ def _csv_line(cells: Iterable[object]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# ingest: untrusted artifacts in, books out
+# ingest: fetched runs in, books out
 # ---------------------------------------------------------------------------
+#
+# Who a run is comes from GitHub's API, written by `fetch` into manifest.json. What a recorder
+# file says about itself (repo, sha, event, workflow, started) is ignored: CI runs pull-request
+# code, so anyone who can get a workflow to run can write any file. A file is believed only for
+# what it measured: python, wall_ms, exit_code, complete, the test rows and, inside `evidence`,
+# the attempt number (and only when it names this run).
 
-MAX_ARTIFACT_BYTES = 64 << 20
+MAX_ARTIFACT_BYTES = 8 << 20  # one artifact file
+MAX_MANIFEST_BYTES = 64 << 10
+MAX_TEST_ROWS = 20_000  # test lines in one file
+MAX_FILES = 2000  # artifact files read by one ingest
+MAX_INGEST_BYTES = 128 << 20  # artifact bytes read by one ingest
+START_SLACK = timedelta(minutes=5)  # a run's `started` may be this much after its `updated`
 MAX_NUMBER = 1 << 53  # what any JSON consumer still holds exactly
 HEADER_KINDS = {"v": int, "repo": str, "sha": str, "event": str, "workflow": str, "python": str, "os": str,
                 "started": str, "wall_ms": int, "exit_code": int, "complete": bool, "tests": int,
                 "failed": int, "skipped": int, "evidence": str}
 ROW_KINDS = {"id": str, "outcome": str, "ms": int}
+MANIFEST_KINDS = {"v": int, "repo": str, "github": str, "run_id": int, "run_attempt": int, "workflow": str,
+                  "event": str, "head_sha": str, "head_branch": str, "default_branch": str, "started": str,
+                  "updated": str, "conclusion": str, "fork": bool}
+MANIFEST = "manifest.json"
+ARTIFACTS = "artifacts"
 
 
 class Rejected(Exception):
-    """An artifact that cannot be booked, and why."""
+    """A file that cannot be booked, and why."""
 
 
 def _show(value: object, limit: int = 60) -> str:
@@ -1024,28 +1160,60 @@ def _show(value: object, limit: int = 60) -> str:
     return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
+def printable(text: str) -> str:
+    """Text for the terminal with each character that is not printable written as an escape (\\n, \\x1b)."""
+    return "".join(ch if ch.isprintable() else ch.encode("unicode_escape").decode("ascii") for ch in text)
+
+
+class Manifest(NamedTuple):
+    """What the API reported about one run, as `fetch` wrote it."""
+    v: int
+    repo: str
+    github: str
+    run_id: int
+    run_attempt: int
+    workflow: str
+    event: str
+    head_sha: str
+    head_branch: str
+    default_branch: str
+    started: str
+    updated: str
+    conclusion: str
+    fork: bool
+
+    def evidence(self, attempt: int) -> str:
+        return f"https://github.com/{self.github}/actions/runs/{self.run_id}/attempts/{attempt}"
+
+
 @dataclass(frozen=True)
 class RecordedRun:
-    """One artifact, parsed and checked: the header, and one (id, outcome, ms) per test line."""
-    header: dict
-    tests: tuple[tuple[str, str, int], ...]
-    digest: str  # of the file's bytes: the tie-breaker between two files that claim the same run
+    """One artifact file, believed for what it measured, under the identity of its manifest."""
+    manifest: Manifest
+    attempt: int
+    python: str
+    wall_ms: int
+    exit_code: int
+    complete: bool
+    tests: tuple[tuple[str, str, int], ...]  # (id, outcome, ms) per line
+    digest: str  # of what is believed, so two files are the same run's same data or they are not
+
+    @property
+    def evidence(self) -> str:
+        return self.manifest.evidence(self.attempt)
 
     @property
     def key(self) -> tuple[str, str]:
-        return self.header["evidence"], self.header["python"]
-
-    @property
-    def is_ci(self) -> bool:
-        return self.header["event"] != "local" and self.header["evidence"] != ""
+        return self.evidence, self.python
 
     def verdict(self) -> int:
         """The recorder's own verdict for the run, recomputed: a run cut short never books as green."""
         rows = [{"outcome": outcome} for _, outcome, _ in self.tests]
-        return exit_code(self.header["exit_code"], rows, self.header["complete"])
+        return exit_code(self.exit_code, rows, self.complete)
 
     def failing(self) -> dict[str, str]:
-        """test id -> fail or error (error when any of its lines is an error)."""
+        """test id -> fail or error. A test with both an error line and a fail line is an error:
+        the worst outcome wins, whatever order the lines come in."""
         found: dict[str, str] = {}
         for test_id, outcome, _ in self.tests:
             if outcome in FAILING:
@@ -1061,6 +1229,32 @@ class RecordedRun:
                 failed, total = seen.get(test_id, (False, 0))
                 seen[test_id] = (failed or outcome in FAILING, total + ms)
         return seen
+
+    def run_cells(self) -> dict[str, str]:
+        """The runs.csv row this file would add."""
+        m = self.manifest
+        skipped = sum(outcome == "skip" for _, outcome, _ in self.tests)
+        return _cells(RUNS_SCHEMA, started=m.started, repo=m.repo, sha=m.head_sha, event=m.event, workflow=m.workflow,
+                      python=self.python, tests=len(self.tests), failed=len(self.failing()), skipped=skipped,
+                      wall_ms=self.wall_ms, exit_code=self.verdict(), evidence=self.evidence)
+
+    def failure_cells(self) -> Iterator[dict[str, str]]:
+        """The failures.csv rows, one per failing test, sorted by test id."""
+        m, failing = self.manifest, self.failing()
+        for test_id in sorted(failing):
+            yield _cells(FAILURES_SCHEMA, started=m.started, repo=m.repo, sha=m.head_sha, python=self.python,
+                         test_id=test_id, outcome=failing[test_id], evidence=self.evidence)
+
+    def weekly_cells(self) -> Iterator[dict[str, str]]:
+        """What this file adds to tests-weekly.csv, as one row per test (runs 1, its failure, its time)."""
+        week = week_of(self.manifest.started)
+        for test_id, (failed, ms) in self.per_test().items():
+            yield _cells(WEEKLY_SCHEMA, week=week, repo=self.manifest.repo, test_id=test_id, runs=1, failed=int(failed),
+                         total_ms=ms, max_ms=ms)
+
+
+def _cells(schema: tuple[str, ...], **values: object) -> dict[str, str]:
+    return {name: str(values[name]) for name in schema}
 
 
 def _clean_text(value: str, what: str) -> None:
@@ -1092,44 +1286,140 @@ def _check_fields(obj: object, kinds: dict[str, type], what: str) -> dict:
     return obj
 
 
-def _load_json(line: bytes, number: int) -> object:
+def _load_json(line: bytes, where: str) -> object:
     def twice(pairs):
         found: dict = {}
         for key, value in pairs:
             if key in found:
-                raise Rejected(f"line {number}: duplicate key {_show(key)}")
+                raise Rejected(f"{where}: duplicate key {_show(key)}")
             found[key] = value
         return found
 
     def constant(name):
-        raise Rejected(f"line {number}: {name} is not valid JSON")
+        raise Rejected(f"{where}: {name} is not valid JSON")
 
     try:
         return json.loads(line.decode("utf-8"), object_pairs_hook=twice, parse_constant=constant)
     except Rejected:
         raise
     except UnicodeDecodeError:
-        raise Rejected(f"line {number}: not UTF-8 text") from None
+        raise Rejected(f"{where}: not UTF-8 text") from None
     except (ValueError, RecursionError):
-        raise Rejected(f"line {number}: not valid JSON") from None
+        raise Rejected(f"{where}: not valid JSON") from None
 
 
-def parse_artifact(data: bytes) -> RecordedRun:
-    """A recorder file, strictly. Every claim in it is checked here and nowhere else; nothing in it
-    is executed, imported or evaluated, and a test id is only ever a string."""
+def _read_file(path: str, cap: int) -> bytes:
+    """A regular file's bytes, refusing a link, a pipe or anything over `cap` before reading it."""
+    try:
+        info = os.lstat(path)
+        if stat.S_ISLNK(info.st_mode):
+            raise Rejected("is a symbolic link")
+        if not stat.S_ISREG(info.st_mode):
+            raise Rejected("is not a regular file")
+        if info.st_size > cap:
+            raise Rejected(f"file is larger than {_size(cap)}")
+        with open(path, "rb") as f:
+            return f.read(cap + 1)
+    except OSError as e:
+        raise Rejected(f"cannot read file ({e.strerror or type(e).__name__})") from None
+
+
+def _size(cap: int) -> str:
+    return f"{cap >> 20} MB" if cap >= 1 << 20 else f"{cap >> 10} KB"
+
+
+def _problems(messages: Iterable[str], limit: int = 3) -> list[str]:
+    found: list[str] = []
+    for message in messages:
+        if message not in found:
+            found.append(message)
+            if len(found) > limit:
+                break
+    return found
+
+
+def _fail_if(messages: Iterable[str], prefix: str = "") -> None:
+    found = _problems(messages)
+    if found:
+        raise Rejected(prefix + "; ".join(found[:3]) + (" ..." if len(found) > 3 else ""))
+
+
+def read_manifest(path: str, folder_repo: str, folder_run: str, watched: dict[str, tuple[str, str]]) -> Manifest:
+    """A run's manifest, checked. It is trusted for who the run is, so it must agree with where it
+    was found, with the watch list, and with the rules every booked row is held to."""
+    obj = _check_fields(_load_json(_read_file(path, MAX_MANIFEST_BYTES), "manifest"), MANIFEST_KINDS, "manifest")
+    if obj["v"] != RECORD_VERSION:
+        raise Rejected(f"manifest v must be {RECORD_VERSION}, got {_show(obj['v'])}")
+    m = Manifest(**obj)
+    for name in ("run_id", "run_attempt"):
+        if getattr(m, name) < 1:
+            raise Rejected(f"{name} must be at least 1, got {getattr(m, name)}")
+    for name in ("head_branch", "default_branch"):
+        value = getattr(m, name)
+        if not value or len(value) > 255 or _CONTROL.search(value):
+            raise Rejected(f"{name} must be 1 to 255 characters without control characters, got {_show(value)}")
+    if not _GITHUB.fullmatch(m.github):
+        raise Rejected(f"github must look like OWNER/NAME, got {_show(m.github)}")
+    placeholder = _cells(RUNS_SCHEMA, started=m.started, repo=m.repo, sha=m.head_sha, event=m.event, workflow=m.workflow,
+                         python="3.12", tests=0, failed=0, skipped=0, wall_ms=0, exit_code=0, evidence=m.evidence(m.run_attempt))
+    _fail_if(rule_messages(RUN_RULES, placeholder))
+    if not _is_stamp(m.updated):
+        raise Rejected(f"updated must look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
+                       f"got {_show(m.updated)}")
+    if m.repo != folder_repo:
+        raise Rejected(f"repo {printable(m.repo)} is not in folder {printable(folder_repo)}")
+    if str(m.run_id) != folder_run:
+        raise Rejected(f"run_id {m.run_id} is not in folder {printable(folder_run)}")
+    if m.repo not in watched:
+        raise Rejected(f"repo {m.repo} is not on the watch list")
+    github, workflow = watched[m.repo]
+    if m.github.lower() != github.lower():
+        raise Rejected(f"github {printable(m.github)} is not {printable(github)}, the watch list's")
+    if m.workflow != workflow:
+        raise Rejected(f"workflow {printable(m.workflow)} is not {printable(workflow)}, the watch list's")
+    if m.fork:
+        raise Rejected("run is from a fork: its code is not the repo's")
+    if m.event == "push" and m.head_branch != m.default_branch:
+        raise Rejected(f"push to {printable(m.head_branch)}, not the default branch {printable(m.default_branch)}")
+    started = datetime.strptime(m.started, "%Y-%m-%dT%H:%M:%SZ")
+    if started > datetime.strptime(m.updated, "%Y-%m-%dT%H:%M:%SZ") + START_SLACK:
+        raise Rejected(f"started {m.started} is after updated {m.updated}")
+    return m
+
+
+def _attempt_of(evidence: str, m: Manifest) -> int:
+    """The attempt a file's evidence names, when it names this run in canonical form and the attempt exists."""
+    found = _EVIDENCE.fullmatch(evidence)
+    if found and found[1].lower() == m.github.lower() and found[2] == str(m.run_id) and 1 <= int(found[3]) <= m.run_attempt:
+        return int(found[3])
+    raise Rejected(f"header evidence must be {m.evidence('N')} with N from 1 to {m.run_attempt}, got {_show(evidence)}")
+
+
+_EVIDENCE = re.compile(r"https://github\.com/([^/\s]+/[^/\s]+)/actions/runs/([1-9][0-9]*)/attempts/([1-9][0-9]*)")
+
+
+def parse_artifact(data: bytes, m: Manifest) -> RecordedRun:
+    """A recorder file, strictly, under the identity of its manifest. Nothing in it is executed,
+    imported or evaluated, and a test id is only ever a string.
+
+    The header's repo, sha, event, workflow and started are not read for booking. The rows the
+    books would get from this file are then built and held to every row rule `check` has, so a
+    file that would make `check` fail is rejected here, by name, and never reaches the plan."""
     if len(data) > MAX_ARTIFACT_BYTES:
-        raise Rejected(f"file is larger than {MAX_ARTIFACT_BYTES >> 20} MB")
+        raise Rejected(f"file is larger than {_size(MAX_ARTIFACT_BYTES)}")
     lines = data.split(b"\n")
     if lines and lines[-1] == b"":
         lines.pop()
     if not lines:
         raise Rejected("file is empty")
-    header = _check_fields(_load_json(lines[0], 1), HEADER_KINDS, "header")
+    if len(lines) - 1 > MAX_TEST_ROWS:
+        raise Rejected(f"file has more than {MAX_TEST_ROWS} test rows")
+    header = _check_fields(_load_json(lines[0], "line 1"), HEADER_KINDS, "header")
     if header["v"] != RECORD_VERSION:
         raise Rejected(f"header v must be {RECORD_VERSION}, got {_show(header['v'])}")
     tests = []
     for number, line in enumerate(lines[1:], start=2):
-        row = _check_fields(_load_json(line, number), ROW_KINDS, f"line {number}")
+        row = _check_fields(_load_json(line, f"line {number}"), ROW_KINDS, f"line {number}")
         if row["outcome"] not in OUTCOMES:
             raise Rejected(f"line {number} outcome must be one of {', '.join(OUTCOMES)}, got {_show(row['outcome'])}")
         if not row["id"]:
@@ -1140,76 +1430,141 @@ def parse_artifact(data: bytes) -> RecordedRun:
     for key, actual in counted.items():
         if header[key] != actual:
             raise Rejected(f"header {key} is {header[key]} but the file has {actual}")
-    run = RecordedRun(header, tuple(tests), hashlib.sha256(data).hexdigest())
-    if run.is_ci:
-        _check_ci_header(header)
+    attempt = _attempt_of(header["evidence"], m)
+    believed = [attempt, header["python"], header["wall_ms"], header["exit_code"], header["complete"], tests]
+    run = RecordedRun(m, attempt, header["python"], header["wall_ms"], header["exit_code"], header["complete"],
+                      tuple(tests), hashlib.sha256(json.dumps(believed).encode("utf-8")).hexdigest())
+    gate(run)
     return run
 
 
-def _check_ci_header(header: dict) -> None:
-    for key, pattern, hint in (("repo", _REPO, "match [a-z0-9][a-z0-9-]*"), ("sha", _SHA, "be 40 lowercase hex characters"),
-                               ("python", _PYTHON, "look like 3.12"), ("evidence", _RUN_LINK, "be a run link like "
-                               "https://HOST/OWNER/REPO/actions/runs/N/attempts/N")):
-        if not pattern.fullmatch(header[key]):
-            raise Rejected(f"header {key} must {hint}, got {_show(header[key])}")
-    if not _is_stamp(header["started"]):
-        raise Rejected(f"header started must look like 2026-11-15T09:30:00Z, got {_show(header['started'])}")
-    if header["exit_code"] > 255:
-        raise Rejected(f"header exit_code must be 0 to 255, got {header['exit_code']}")
+def gate(run: RecordedRun) -> None:
+    """Hold every row this file would add to every row rule `check` has: the same functions, so there is
+    one definition of a good row."""
+    messages: list[str] = []
+
+    def add(rules: dict[str, Rule], cells: dict[str, str]) -> None:
+        if len(messages) <= 3:
+            messages.extend(m for m in rule_messages(rules, cells) if m not in messages)
+
+    add(RUN_RULES, run.run_cells())
+    for cells in run.failure_cells():
+        add(FAILURE_RULES, cells)
+    for cells in run.weekly_cells():
+        add(WEEKLY_RULES, cells)
+    for test_id in {t for t, outcome, _ in run.tests if outcome == "skip"}:
+        add({"test_id": _test_id_rule, "text": _text_rule("test_id")}, {"test_id": test_id})  # skipped: no row, same id rules
+    _fail_if(messages, "would fail check: ")
 
 
 @dataclass
 class Scan:
-    path: str  # relative to the artifact directory
-    status: str  # booked, already, local, rejected
+    path: str  # relative to the fetch directory
+    status: str  # booked, already, duplicate, no artifacts, rejected
     run: RecordedRun | None = None
     reason: str = ""
 
 
-def find_artifacts(root: str) -> list[str]:
-    """Every *.jsonl under root, any depth, as sorted relative paths. Symlinked directories are not entered."""
-    found = []
+def _layout(root: str) -> tuple[dict[tuple[str, str], tuple[str | None, list[str]]], list[str]]:
+    """The run folders under root: (repo, run) -> (manifest path or None, artifact files), and the
+    *.jsonl files that are not under <repo>/<run_id>/artifacts/. All paths relative, sorted. Symlinked
+    directories are not entered."""
+    runs: dict[tuple[str, str], list] = {}  # (repo, run) -> [manifest path or None, artifact files]
+    stray = []
     for folder, _, names in os.walk(root):
-        found += [os.path.relpath(os.path.join(folder, n), root) for n in names if n.endswith(".jsonl")]
-    return sorted(found)
+        for name in names:
+            rel = os.path.relpath(os.path.join(folder, name), root)
+            parts = rel.split(os.sep)
+            if len(parts) == 3 and name == MANIFEST:
+                runs.setdefault((parts[0], parts[1]), [None, []])[0] = rel
+            elif name.endswith(".jsonl"):
+                if len(parts) >= 4 and parts[2] == ARTIFACTS:
+                    runs.setdefault((parts[0], parts[1]), [None, []])[1].append(rel)
+                else:
+                    stray.append(rel)
+    for _, files in runs.values():
+        files.sort()
+    return {key: (value[0], value[1]) for key, value in sorted(runs.items())}, sorted(stray)
 
 
-def _read_artifact(path: str) -> bytes:
-    try:
-        info = os.lstat(path)
-        if stat.S_ISLNK(info.st_mode):
-            raise Rejected("is a symbolic link")
-        if not stat.S_ISREG(info.st_mode):
-            raise Rejected("is not a regular file")
-        if info.st_size > MAX_ARTIFACT_BYTES:
-            raise Rejected(f"file is larger than {MAX_ARTIFACT_BYTES >> 20} MB")
-        with open(path, "rb") as f:
-            return f.read()
-    except OSError as e:
-        raise Rejected(f"cannot read file ({e.strerror or type(e).__name__})") from None
+@dataclass
+class Scanned:
+    scans: list[Scan]
+    unread_files: int = 0  # artifact files beyond MAX_FILES
+    unread_bytes: int = 0  # artifact files beyond MAX_INGEST_BYTES
 
 
-def scan_artifacts(root: str) -> list[Scan]:
-    scans = []
-    for rel in find_artifacts(root):
+def scan_fetched(root: str, watched: dict[str, tuple[str, str]]) -> Scanned:
+    runs, stray = _layout(root)
+    found = Scanned([Scan(rel, "rejected", reason="not inside <repo>/<run_id>/artifacts/ of a run folder") for rel in stray])
+    files_read = bytes_read = 0
+    for (repo, run_id), (manifest_path, artifacts) in runs.items():
+        if manifest_path is None:
+            for rel in artifacts:
+                if files_read >= MAX_FILES:
+                    found.unread_files += 1
+                else:
+                    files_read += 1
+                    found.scans.append(Scan(rel, "rejected", reason=f"no {MANIFEST} in its run folder"))
+            continue
         try:
-            run = parse_artifact(_read_artifact(os.path.join(root, rel)))
+            m = read_manifest(os.path.join(root, manifest_path), repo, run_id, watched)
         except Rejected as e:
-            scans.append(Scan(rel, "rejected", reason=str(e)))
+            note = f" ({len(artifacts)} artifact file{'s' * (len(artifacts) != 1)} not read)" if artifacts else ""
+            found.scans.append(Scan(manifest_path, "rejected", reason=str(e) + note))
+            continue
+        if not artifacts:
+            found.scans.append(Scan(manifest_path, "no artifacts"))
+        for rel in artifacts:
+            if files_read >= MAX_FILES:
+                found.unread_files += 1
+                continue
+            path = os.path.join(root, rel)
+            try:
+                size = os.lstat(path).st_size
+            except OSError:
+                size = 0
+            if bytes_read + size > MAX_INGEST_BYTES:
+                found.unread_bytes += 1
+                continue
+            files_read += 1
+            bytes_read += size
+            try:
+                found.scans.append(Scan(rel, "booked", parse_artifact(_read_file(path, MAX_ARTIFACT_BYTES), m)))
+            except Rejected as e:
+                found.scans.append(Scan(rel, "rejected", reason=str(e)))
+    found.scans.sort(key=lambda s: s.path)
+    return found
+
+
+def settle_duplicates(scans: list[Scan]) -> None:
+    """Files that claim one (evidence, python) in one batch. Identical content counts once. Content that
+    differs is rejected on every file: a forged file next to a genuine one must never decide which is
+    believed, so neither is."""
+    groups: dict[tuple[str, str], list[Scan]] = {}
+    for scan in scans:
+        if scan.status == "booked":
+            groups.setdefault(scan.run.key, []).append(scan)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        digests = {s.path: s.run.digest for s in group}
+        if len(set(digests.values())) > 1:
+            for scan in group:
+                other = next(path for path, digest in digests.items() if digest != digests[scan.path])
+                scan.status, scan.run = "rejected", None
+                scan.reason = (f"conflicts with {printable(other)}: the same attempt and python with different content, "
+                               "so neither is booked")
         else:
-            scans.append(Scan(rel, "booked" if run.is_ci else "local", run))
-    return scans
+            for scan in group[1:]:
+                scan.status, scan.reason = "duplicate", f"duplicate of {printable(group[0].path)}"
 
 
 def choose_new_runs(scans: list[Scan], booked: set[tuple[str, str]]) -> list[Scan]:
-    """Mark the scans that book a run nobody has booked yet (status stays `booked`), the rest `already`.
-
-    Two files for one run (a download taken twice) book one: the one that sorts first by content
-    hash, so the choice never depends on the order the files were found in.
-    """
+    """Mark the scans that book a run nobody has booked yet (status stays `booked`), the rest `already`."""
     taken = set(booked)
     candidates = sorted((s for s in scans if s.status == "booked"),
-                        key=lambda s: (s.run.header["started"], s.run.key, s.run.digest, s.path))
+                        key=lambda s: (s.run.manifest.started, s.run.key, s.path))
     for scan in candidates:
         if scan.run.key in taken:
             scan.status, scan.reason = "already", "already booked"
@@ -1220,7 +1575,7 @@ def choose_new_runs(scans: list[Scan], booked: set[tuple[str, str]]) -> list[Sca
 
 @dataclass
 class Plan:
-    """What an ingest adds to the books, as the three files' new bytes (None: unchanged)."""
+    """What an ingest adds to the books, as the files' new bytes (None: unchanged)."""
     files: dict[str, bytes | None]
     runs: int
     failures: int
@@ -1237,22 +1592,17 @@ def plan_ingest(books: Books, new: list[Scan]) -> Plan:
     touched: set[tuple[str, str, str]] = set()
     runs_text, failures_text, failures = "", "", 0
     for scan in new:
-        h = scan.run.header
-        failing = scan.run.failing()
-        runs_text += _csv_line((h["started"], h["repo"], h["sha"], h["event"], h["workflow"], h["python"], h["tests"],
-                                len(failing), h["skipped"], h["wall_ms"], scan.run.verdict(), h["evidence"]))
-        for test_id in sorted(failing):
-            failures_text += _csv_line((h["started"], h["repo"], h["sha"], h["python"], test_id, failing[test_id],
-                                        h["evidence"]))
+        runs_text += _csv_line(scan.run.run_cells()[k] for k in RUNS_SCHEMA)
+        for cells in scan.run.failure_cells():
+            failures_text += _csv_line(cells[k] for k in FAILURES_SCHEMA)
             failures += 1
-        week = week_of(h["started"])
-        for test_id, (failed, ms) in scan.run.per_test().items():
-            key = (week, h["repo"], test_id)
+        for cells in scan.run.weekly_cells():
+            key = (cells["week"], cells["repo"], cells["test_id"])
             cell = weekly.setdefault(key, [0, 0, 0, 0])
             cell[0] += 1
-            cell[1] += failed
-            cell[2] += ms
-            cell[3] = max(cell[3], ms)
+            cell[1] += int(cells["failed"])
+            cell[2] += int(cells["total_ms"])
+            cell[3] = max(cell[3], int(cells["max_ms"]))
             touched.add(key)
     weekly_text = _csv_line(WEEKLY_SCHEMA) + "".join(_csv_line(k + tuple(v)) for k, v in sorted(weekly.items()))
 
@@ -1260,8 +1610,10 @@ def plan_ingest(books: Books, new: list[Scan]) -> Plan:
         data = old[rel]
         return data + (b"" if data.endswith(b"\n") or not data else b"\n") + text.encode("utf-8")
 
-    return Plan({RUNS: appended(RUNS, runs_text), FAILURES: appended(FAILURES, failures_text),
-                 WEEKLY: weekly_text.encode("utf-8")}, len(new), failures, len(touched))
+    files: dict[str, bytes | None] = {rel: None for rel in SCHEMAS}
+    files.update({RUNS: appended(RUNS, runs_text), FAILURES: appended(FAILURES, failures_text),
+                  WEEKLY: weekly_text.encode("utf-8")})
+    return Plan(files, len(new), failures, len(touched))
 
 
 def commit_files(books_dir: str, files: dict[str, bytes | None]) -> None:
@@ -1302,8 +1654,13 @@ def _print_problems(problems: list[Problem]) -> None:
         print(p)
 
 
+def watch_list(books: Books) -> dict[str, tuple[str, str]]:
+    """repo -> (github, workflow) from books that passed check."""
+    return {r.cells["repo"]: (r.cells["github"], r.cells["workflow"]) for r in books.tables[WATCHED].rows}
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
-    for folder in (args.books_dir, args.artifact_dir):
+    for folder in (args.books_dir, args.fetch_dir):
         if not os.path.isdir(folder):
             print(f"quality.py: not a directory: {folder}", file=sys.stderr)
             return 2
@@ -1313,7 +1670,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         _print_problems(problems)
         print(f"{len(problems)} problems; refusing to ingest into books that fail check")
         return 1
-    scans = scan_artifacts(args.artifact_dir)
+    found = scan_fetched(args.fetch_dir, watch_list(books))
+    scans = found.scans
+    settle_duplicates(scans)
     booked = {(r.evidence, r.python) for r in _typed_rows(books, RUNS, RunRow)}
     new = choose_new_runs(scans, booked)
     plan = plan_ingest(books, new)
@@ -1331,17 +1690,17 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         except OSError as e:
             print(f"quality.py: cannot write the books, they are unchanged: {e}", file=sys.stderr)
             return 1
-    rejected = [s for s in scans if s.status == "rejected"]
-    totals = {"files": len(scans), "booked": len(new), "already_booked": sum(s.status == "already" for s in scans),
-              "local": sum(s.status == "local" for s in scans), "rejected": len(rejected),
+    count = lambda status: sum(s.status == status for s in scans)
+    unread = found.unread_files + found.unread_bytes
+    totals = {"files": len(scans), "booked": len(new), "already_booked": count("already"), "duplicates": count("duplicate"),
+              "no_artifacts": count("no artifacts"), "rejected": count("rejected"), "unread": unread,
               "failures": plan.failures, "weekly_rows": plan.weekly_rows}
     if args.json:
-        files = [_scan_json(s) for s in scans]
-        print(json.dumps({"dry_run": args.dry_run, "files": files, "totals": totals, "wrote": wrote},
-                         sort_keys=True, indent=2))
+        print(json.dumps({"dry_run": args.dry_run, "files": [_scan_json(s) for s in scans], "totals": totals,
+                          "wrote": wrote}, sort_keys=True, indent=2))
     else:
-        _print_ingest(scans, totals, args.dry_run)
-    return 1 if rejected else 0
+        _print_ingest(scans, totals, found, args.dry_run)
+    return 1 if totals["rejected"] or unread else 0
 
 
 def _scan_json(scan: Scan) -> dict:
@@ -1349,31 +1708,36 @@ def _scan_json(scan: Scan) -> dict:
     if scan.reason:
         out["reason"] = scan.reason
     if scan.status == "booked":
-        h = scan.run.header
-        out.update(evidence=h["evidence"], python=h["python"], tests=h["tests"], exit_code=scan.run.verdict())
+        out.update(evidence=scan.run.evidence, python=scan.run.python, tests=len(scan.run.tests),
+                   exit_code=scan.run.verdict())
     return out
 
 
-def _print_ingest(scans: list[Scan], totals: dict, dry_run: bool) -> None:
+def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool) -> None:
     for s in scans:
         name = _show(s.path, 200) if not s.path.isprintable() else s.path
         if s.status == "booked":
-            h = s.run.header
-            print(f"{'would book' if dry_run else 'booked'}: {name}: {h['repo']} {h['python']} {h['tests']} tests, "
-                  f"exit_code {s.run.verdict()}, {h['evidence']}")
+            m = s.run.manifest
+            print(f"{'would book' if dry_run else 'booked'}: {name}: {m.repo} {s.run.python} {len(s.run.tests)} tests, "
+                  f"exit_code {s.run.verdict()}, {s.run.evidence}")
         elif s.status == "already":
             print(f"skipped, already booked: {name}")
-        elif s.status == "local":
-            print(f"skipped, not a CI run (event local or no evidence): {name}")
+        elif s.status == "duplicate":
+            print(f"skipped, {s.reason}: {name}")
+        elif s.status == "no artifacts":
+            print(f"no artifacts: {name}")
         else:
             print(f"rejected: {name}: {s.reason}")
-    line = (f"{'would book' if dry_run else 'booked'} {totals['booked']} runs, {totals['failures']} failures, "
-            f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
-            f"{totals['local']} local; rejected {totals['rejected']} of {totals['files']} files")
-    print(line)
-    if totals["rejected"]:
-        print("some files were rejected: the others were booked and ingest exits 1 so the rejection is not missed"
-              if not dry_run else "some files were rejected; ingest exits 1")
+    for count, why in ((found.unread_files, f"the {MAX_FILES}-file cap"), (found.unread_bytes, f"the {MAX_INGEST_BYTES >> 20} MB cap")):
+        if count:
+            print(f"{count} artifact file{'s' * (count != 1)} beyond {why} {'was' if count == 1 else 'were'} not read; "
+                  "ingest again after moving the booked runs out of the fetch folder, or fetch less")
+    print(f"{'would book' if dry_run else 'booked'} {totals['booked']} runs, {totals['failures']} failures, "
+          f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
+          f"{totals['duplicates']} duplicates; rejected {totals['rejected']} of {totals['files']} files")
+    if totals["rejected"] or totals["unread"]:
+        print("some files were rejected or not read: the others were booked and ingest exits 1 so it is not missed"
+              if not dry_run else "some files were rejected or not read; ingest exits 1")
 
 
 # ---------------------------------------------------------------------------
@@ -1484,7 +1848,7 @@ def render_summary(s: dict) -> str:
         lines.append(f"  failed on a push: {len(r['failed_on_main'])}; flaky: {len(r['flaky'])}; "
                      f"tests added {len(r['tests_added'])}, removed {len(r['tests_removed'])}; CI time {r['ci_wall_ms']} ms")
         for t in r["slowest_tests"][:3]:
-            lines.append(f"  slow: {t['test_id']} mean {t['mean_ms']} ms over {t['runs']} runs")
+            lines.append(f"  slow: {printable(t['test_id'])} mean {t['mean_ms']} ms over {t['runs']} runs")
     lines.append(f"threshold: suite median above {s['thresholds']['suite_median_ms']} ms")
     return "\n".join(lines)
 
@@ -1526,9 +1890,9 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("books_dir", metavar="BOOKS_DIR")
     check.add_argument("--base", metavar="REF", help="fail if a runs.csv line at REF changed or was removed")
     check.set_defaults(func=cmd_check)
-    ingest = sub.add_parser("ingest", help="book recorder files (JSON Lines) into the quality books")
+    ingest = sub.add_parser("ingest", help="book the runs `fetch` downloaded into the quality books")
     ingest.add_argument("books_dir", metavar="BOOKS_DIR")
-    ingest.add_argument("artifact_dir", metavar="ARTIFACT_DIR")
+    ingest.add_argument("fetch_dir", metavar="FETCH_DIR")
     ingest.add_argument("--dry-run", action="store_true", help="say what would be booked; write nothing")
     ingest.add_argument("--json", action="store_true")
     ingest.set_defaults(func=cmd_ingest)
