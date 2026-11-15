@@ -7,7 +7,7 @@ metadata:
   version: "0.1.0"
 ---
 
-# CFO books: check, append, summary, claude-code
+# CFO books: check, append, summary, claude-code, vercel
 
 Run the checker before you commit anything to the books. The other cfo skills do this before they commit.
 
@@ -111,6 +111,23 @@ Runs only on the machine that holds the Claude Code session logs (`~/.claude/pro
 - A model missing from `pricing.json` is never guessed. The output lists its tokens as unpriced and leaves its cost out of every total. Add it to the table with the price from the source URL.
 - The output states the weeks, messages counted after dedupe, duplicates dropped, unpriced models, message speeds and the pricing date. Fast-mode messages get a model's `fast_multiplier` when the table has one; otherwise they are priced at standard rates and counted.
 - `pricing.json` carries its `source` and `as_of`. `check` warns when `as_of` is more than 90 days old. Refresh the table from the source, then update `as_of`.
+
+## Read Vercel billing
+
+```sh
+vercel api /v1/billing/charges ... > focus.jsonl     # FOCUS v1.3, one JSON object per line
+uv run --python 3.12 <skill dir>/scripts/books.py vercel BOOKS_DIR FOCUS_JSONL [--through YYYY-MM-DD] [--dry-run] [--json]
+```
+
+Run `--dry-run` first. Standard library only; Python 3.10 or later, through uv.
+
+- Each FOCUS row is one Pacific day. Its day is the UTC date of the midpoint of `ChargePeriodStart` and `ChargePeriodEnd`, so 07:00Z and 08:00Z (DST) starts both land on the right date. Weeks are ISO weeks (Monday to Sunday).
+- A week is written only when its Sunday is before `--through` (today in UTC by default) and not after the input's last day. Anything else is counted as "outside" in the report. The input does not need a row for every day. An input with no JSON rows is an error, since it usually means the fetch failed.
+- `Purchase` rows (the plan fee) are skipped and counted; the Pro fee comes from Gmail receipts.
+- Cost is summed exactly per (week, project) from the raw JSON text (never as floats), then rounded half-up to the cent. The project is the one in `projects.yaml` whose `resources:` lists `vercel:<ProjectName>` (a name under two projects is an error). Rows with no `ProjectName` go to `shared`; a name that is not listed goes to `unassigned` and the report names it, so you can add it to `projects.yaml` as `proposed`.
+- One row per project whose week rounds to $0.01 or more (service "Vercel usage"). If none does, one $0.00 row with service "usage read" and project `shared`, so the books show the week was read. A week's cost below a cent for a project that has company is listed in the report, not booked.
+- Rows are `usage`, `verified`, source `vercel-focus`, evidence `vercel-focus:2026-W44:project`. They go through the same path as `append`, so the full check runs first. A week that already has any `vercel-focus` row is skipped whole: a rerun adds nothing, and a late change never splits a recorded week. To correct one, add `adjustment` rows.
+- Only dates, service, project key, cost and currency are kept. Team, project and account ids are never written or printed. Non-USD input is an error naming the line.
 
 ## Weekly Mac job for Claude Code usage
 

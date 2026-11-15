@@ -3,6 +3,15 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## cfo 0.2.0 (2026-11-15)
+
+- `books.py vercel` turns Vercel's billing charges (FOCUS JSONL from `vercel api /v1/billing/charges`) into weekly rows per project, so the books see Vercel usage and the first overage. Weeks with no cost get one $0.00 usage-read row.
+- Try: `books.py vercel BOOKS_DIR focus.jsonl --dry-run`
+
+## bstack 0.8.2 (2026-11-15)
+
+- beau-help now lists the cfo plugin's new Vercel billing command.
+
 ## bstack 0.8.1 (2026-11-15)
 
 - A human who approves a charter or answers a gate in their own terminal passes `--typed-by-me`; when an agent types it in, it records the human's words and its own id, and `ledger` refuses an entry with neither.

@@ -5,6 +5,7 @@ Usage:
     uv run --python 3.12 books.py check BOOKS_DIR [--base REF]
     uv run --python 3.12 books.py append BOOKS_DIR ROWS_CSV
     uv run --python 3.12 books.py summary BOOKS_DIR --month YYYY-MM [--as-of YYYY-MM-DD] [--json]
+    uv run --python 3.12 books.py vercel BOOKS_DIR FOCUS_JSONL [--through YYYY-MM-DD] [--dry-run] [--json]
 
 `check` prints one `path:line: message` line per problem (path relative to BOOKS_DIR), then
 `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when there are problems,
@@ -36,7 +37,7 @@ import tempfile
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Context, Decimal, Inexact, InvalidOperation, Overflow
 from pathlib import Path
 from typing import Any
 
@@ -1560,12 +1561,210 @@ def render_claude_code(s: dict[str, Any]) -> str:
     verb = "would add" if s["dry_run"] else "added"
     out.append(f"Rows {verb}: {s['rows_added']}, skipped: {s['rows_skipped']} (week or evidence already in the ledger)")
     if s["dry_run"] and s["rows"]:
-        buf = io.StringIO()
-        w = csv.writer(buf, lineterminator="\n")
-        for r in s["rows"]:
-            w.writerow([r[k] for k in SCHEMA])
-        out.append(",".join(SCHEMA))
-        out.append(buf.getvalue().rstrip("\n"))
+        out.append(_csv_block(s["rows"]))
+    return "\n".join(out)
+
+
+def _csv_block(rows: list[dict[str, str]]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    for r in rows:
+        w.writerow([r[k] for k in SCHEMA])
+    return ",".join(SCHEMA) + "\n" + buf.getvalue().rstrip("\n")
+
+
+# ---------------------------------------------------------------------------
+# vercel: FOCUS v1.3 billing charges -> weekly rows
+# ---------------------------------------------------------------------------
+
+VERCEL_EVIDENCE = re.compile(r"vercel-focus:(\d{4}-W\d{2}):")
+FOCUS_REQUIRED = ("BilledCost", "ChargePeriodStart", "ChargePeriodEnd", "BillingCurrency", "ChargeCategory")
+SHARED = "shared"
+
+
+@dataclass(frozen=True)
+class FocusRow:
+    line: int
+    day: date  # UTC date of the midpoint of the charge period; Vercel days start at local midnight
+    cost: Decimal
+    category: str
+    project: str  # the Vercel project name, "" for team-level cost
+
+
+def _focus_time(value: Any, line: int, field_name: str) -> datetime:
+    try:
+        t = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        raise UsageError(f"FOCUS line {line}: {field_name} is not an ISO timestamp: {value!r}") from None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not a number")
+
+
+def read_focus(text: str) -> list[FocusRow]:
+    """Parse FOCUS JSONL. Lines that don't start with `{` (the CLI's hint lines) are ignored; a
+    JSON line that is malformed, missing a required field or not USD is an error naming its line.
+    Costs are parsed from the raw JSON text, so 5.7e-10 stays exact."""
+    rows: list[FocusRow] = []
+    for n, raw in enumerate(text.splitlines(), 1):
+        if not raw.lstrip().startswith("{"):
+            continue
+        try:
+            obj = json.loads(raw, parse_float=Decimal, parse_constant=_reject_constant)
+        except ValueError as e:
+            raise UsageError(f"FOCUS line {n}: not valid JSON ({e})") from None
+        if not isinstance(obj, dict):
+            raise UsageError(f"FOCUS line {n}: expected a JSON object")
+        for f in FOCUS_REQUIRED:
+            if obj.get(f) is None:
+                raise UsageError(f"FOCUS line {n}: missing {f}")
+        cost = obj["BilledCost"]
+        if isinstance(cost, bool) or not isinstance(cost, (int, Decimal)) or not Decimal(cost).is_finite():
+            raise UsageError(f"FOCUS line {n}: BilledCost is not a number: {cost!r}")
+        if obj["BillingCurrency"] != "USD":
+            raise UsageError(f"FOCUS line {n}: BillingCurrency is {obj['BillingCurrency']!r}, only USD is supported")
+        start = _focus_time(obj["ChargePeriodStart"], n, "ChargePeriodStart")
+        end = _focus_time(obj["ChargePeriodEnd"], n, "ChargePeriodEnd")
+        tags = obj.get("Tags") or {}
+        project = tags.get("ProjectName") if isinstance(tags, dict) else None
+        rows.append(FocusRow(n, (start + (end - start) / 2).astimezone(timezone.utc).date(), Decimal(cost),
+                             str(obj["ChargeCategory"]), project if isinstance(project, str) else ""))
+    return rows
+
+
+def vercel_projects(books: Books) -> dict[str, str]:
+    """Vercel project name -> books project, from the `vercel:<name>` entries in `resources:`."""
+    doc = books.yaml.get("projects.yaml")
+    projects = doc.get("projects") if isinstance(doc, dict) else None
+    found: dict[str, str] = {}
+    for name, entry in (projects.items() if isinstance(projects, dict) else []):
+        for res in entry.get("resources") or [] if isinstance(entry, dict) else []:
+            if isinstance(res, str) and res.startswith("vercel:"):
+                other = found.setdefault(res[len("vercel:"):], name)
+                if other != name:
+                    raise UsageError(f"projects.yaml: resource {res} is listed under both {other} and {name}")
+    return found
+
+
+def vercel_weeks(rows: list[FocusRow], mapping: dict[str, str], through: date) -> dict[str, Any]:
+    """Exact cost per (Monday, books project) for the closed weeks of `rows`.
+
+    Closed: the Sunday is before `through` and not after the input's last day. Rows with no
+    project go to `shared`, a name missing from `mapping` to `unassigned`. Purchase rows (plan fees)
+    are skipped."""
+    weeks: list[date] = []
+    if rows:
+        monday = _monday(min(r.day for r in rows))
+        last = max(r.day for r in rows)
+        while monday + timedelta(days=6) <= last and monday + timedelta(days=6) < through:
+            weeks.append(monday)
+            monday += timedelta(days=7)
+    cells: dict[tuple[date, str], Decimal] = {}
+    purchases = outside = counted = 0
+    unmapped: set[str] = set()
+    ctx = Context(prec=400, traps=[Inexact, InvalidOperation, Overflow])  # any rounding is an error
+    for r in rows:
+        if r.category == "Purchase":
+            purchases += 1
+            continue
+        monday = _monday(r.day)
+        if monday not in weeks:
+            outside += 1
+            continue
+        counted += 1
+        if not r.project:
+            key = SHARED
+        elif r.project in mapping:
+            key = mapping[r.project]
+        else:
+            key = UNASSIGNED
+            unmapped.add(r.project)
+        cells[(monday, key)] = ctx.add(cells.get((monday, key), Decimal(0)), r.cost)
+    return {"weeks": weeks, "cells": cells, "purchases_skipped": purchases, "rows_outside_weeks": outside,
+            "rows_counted": counted, "unmapped_projects": sorted(unmapped)}
+
+
+def vercel_rows(weeks: list[date], cells: dict[tuple[date, str], Decimal]) -> list[dict[str, str]]:
+    out = []
+    for monday in weeks:
+        priced = [(project, _q(cost)) for (m, project), cost in sorted(cells.items()) if m == monday]
+        keep = [(p, c) for p, c in priced if c >= CENT]
+        for project, cost, service in ([(p, c, "Vercel usage") for p, c in keep]
+                                       or [(SHARED, Decimal("0.00"), "usage read")]):
+            row = {k: "" for k in SCHEMA}
+            sunday = monday + timedelta(days=6)
+            row.update(charge_date=sunday.isoformat(), period_start=monday.isoformat(), period_end=sunday.isoformat(),
+                       provider="Vercel", service=service, charge_type="usage", billed_cost=str(cost),
+                       currency="USD", project=project, status="verified", source="vercel-focus",
+                       evidence=f"vercel-focus:{_week(monday)}:{project}")
+            out.append(row)
+    return out
+
+
+def cmd_vercel(args: argparse.Namespace) -> int:
+    books_dir = Path(args.books_dir)
+    if not books_dir.is_dir():
+        print(f"books.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    if args.through is not None and not _is_date(args.through):
+        print(f"books.py: --through must look like 2026-11-09, got {args.through!r}", file=sys.stderr)
+        return 2
+    through = datetime.now(timezone.utc).date() if args.through is None else date.fromisoformat(args.through)
+    books = load(books_dir)
+    problems = run_checks(books)
+    if problems:
+        for p in problems:
+            print(p)
+        print(f"{len(problems)} problems; no Vercel rows from unchecked books")
+        return 1
+    try:
+        text = Path(args.focus_jsonl).read_text(encoding="utf-8")
+        focus = read_focus(text)
+        if not focus:
+            raise UsageError(f"no FOCUS rows in {args.focus_jsonl}; the fetch may have failed")
+        result = vercel_weeks(focus, vercel_projects(books), through)
+    except (OSError, UsageError) as e:
+        print(f"books.py: {e}", file=sys.stderr)
+        return 2
+
+    # A week is written whole by one run, so a late sub-cent change never splits a recorded week.
+    recorded = {m.group(1) for r in books.rows if (m := VERCEL_EVIDENCE.match(r.cells["evidence"]))}
+    built = vercel_rows(result["weeks"], result["cells"])
+    rows = [r for r in built if VERCEL_EVIDENCE.match(r["evidence"]).group(1) not in recorded]
+    code, fresh, skipped = append_cells(books_dir, rows, write=not args.dry_run)
+    if code != 0:
+        return code
+    below = sorted((_week(m), p, str(_q(c))) for (m, p), c in result["cells"].items() if _q(c) < CENT)
+    summary = {
+        "weeks": [_week(w) for w in result["weeks"]], "rows_counted": result["rows_counted"],
+        "purchase_rows_skipped": result["purchases_skipped"], "rows_outside_weeks": result["rows_outside_weeks"],
+        "unmapped_projects": result["unmapped_projects"],
+        "below_one_cent": [{"week": w, "project": p, "cost": c} for w, p, c in below if c != "0.00"],
+        "dry_run": bool(args.dry_run), "rows_added": len(fresh),
+        "rows_skipped": skipped + len(built) - len(rows), "rows": fresh,
+    }
+    if args.json:
+        print(json.dumps(summary, indent=2))
+        return 0
+    print(render_vercel(summary))
+    return 0
+
+
+def render_vercel(s: dict[str, Any]) -> str:
+    out = ["Vercel billing (FOCUS), billed cost in USD",
+           "Weeks covered: " + (", ".join(s["weeks"]) if s["weeks"] else "none (no closed week in the input)"),
+           f"FOCUS rows counted: {s['rows_counted']}; Purchase rows skipped: {s['purchase_rows_skipped']};"
+           f" rows outside the weeks: {s['rows_outside_weeks']}"]
+    if s["unmapped_projects"]:
+        out.append("Vercel projects not in projects.yaml (booked as unassigned): " + ", ".join(s["unmapped_projects"]))
+    for b in s["below_one_cent"]:
+        out.append(f"Not booked, rounds below $0.01: {b['week']} {b['project']} {b['cost']}")
+    verb = "would add" if s["dry_run"] else "added"
+    out.append(f"Rows {verb}: {s['rows_added']}, skipped: {s['rows_skipped']} (week or evidence already in the ledger)")
+    if s["dry_run"] and s["rows"]:
+        out.append(_csv_block(s["rows"]))
     return "\n".join(out)
 
 
@@ -1626,6 +1825,13 @@ def main(argv: list[str] | None = None) -> int:
     cc.add_argument("--dry-run", action="store_true", help="print totals and the rows, write nothing")
     cc.add_argument("--json", action="store_true")
     cc.set_defaults(func=cmd_claude_code)
+    vc = sub.add_parser("vercel", help="turn Vercel FOCUS billing JSONL into weekly rows, one per project per ISO week")
+    vc.add_argument("books_dir", metavar="BOOKS_DIR")
+    vc.add_argument("focus_jsonl", metavar="FOCUS_JSONL", help="output of `vercel api /v1/billing/charges`")
+    vc.add_argument("--through", metavar="YYYY-MM-DD", help="today (UTC) by default; only weeks ending before it are written")
+    vc.add_argument("--dry-run", action="store_true", help="print the report and the rows, write nothing")
+    vc.add_argument("--json", action="store_true")
+    vc.set_defaults(func=cmd_vercel)
     args = parser.parse_args(argv)
     return args.func(args)
 
