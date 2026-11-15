@@ -25,6 +25,7 @@ Everything in the repo: **[docs/CATALOG.md](docs/CATALOG.md)**.
 | `bstack` | **`beau-mode`**, a rigorous engineering workflow: routes each task to a playbook, applies named principles, proves the work on the real artifact, keeps a decision trail. Plus skills to understand code (`how`, `why`, `teach`, `recall`), prove it works (`verify-work`, `create-verification-skill`, `maintain-verification-skill`, `swarm`), design and plan (`architect`, `arena`, `technical-writing`), build a product (`scaffold-product` and the Product phase playbook), review (`interrogate`, `show-me-your-work`), and improve (`reflect`, `correct`, `unslop`) |
 | `principles` | 24 named engineering principles ("prove it works", "subtract before you add", ...) that steer agents by name |
 | `cfo` | A CFO for AI and cloud spending: `spend-snapshot` (what you spend, by provider and project), `estimate-run` (price a run or charter before it starts), `cfo-brief` (the weekly bookkeeping run that proposes and asks, never acts). Data lives in your own private books repo |
+| `video` | `explainer-video`: a narrated explainer video, from script and voiceover to an MP4 whose frames the agent checks before delivering. Renders with [Remotion](https://www.remotion.dev); install its agent skills too (`npx skills add remotion-dev/skills`) |
 
 ### bstack and beau-mode
 

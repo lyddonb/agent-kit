@@ -126,4 +126,5 @@ only what is still unreviewed.
 | `plugins/principles/skills/principles/references/subtract-before-you-add.md` | `pstack/skills/principle-subtract-before-you-add @ ccb5507` |
 | `plugins/principles/skills/principles/references/test-behavior-not-implementation.md` | `pstack/skills/principle-test-behavior-not-implementation @ 246bc50` |
 | `plugins/principles/skills/principles/references/type-system-discipline.md` | `pstack/skills/principle-type-system-discipline @ ccb5507` |
+| `plugins/video/skills/explainer-video/SKILL.md` | `h14h/explainers .agents/skills/promo/SKILL.md @ 314eb13` |
 <!-- END GENERATED: upstream-files -->

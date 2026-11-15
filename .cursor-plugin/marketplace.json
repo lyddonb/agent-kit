@@ -37,6 +37,11 @@
       "name": "cfo",
       "source": "plugins/cfo",
       "description": "A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself."
+    },
+    {
+      "name": "video",
+      "source": "plugins/video",
+      "description": "Narrated explainer videos made by your agent, from concept and script through voiceover and animation to a checked MP4. Renders with Remotion, whose agent skills it relies on."
     }
   ]
 }

@@ -8,6 +8,20 @@
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
 - date: 2026-11-15
+  plugin: video
+  version: 0.1.0
+  changes:
+    - New `explainer-video` skill makes a narrated explainer video end to end with Remotion, and checks still frames and the finished MP4 before handing it over.
+  try: "make a 90-second whiteboard explainer video about how DNS works"
+
+- date: 2026-11-15
+  plugin: bstack
+  version: 0.8.2
+  changes:
+    - beau-help lists the new `video` plugin and its `explainer-video` skill.
+  try: "beau-help video"
+
+- date: 2026-11-15
   plugin: bstack
   version: 0.8.1
   changes:

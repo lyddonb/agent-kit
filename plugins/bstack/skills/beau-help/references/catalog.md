@@ -30,7 +30,7 @@ Twenty-four named engineering principles (prove it works, fix root causes, subtr
 
 - `principles`: Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof.
 
-## bstack 0.8.1
+## bstack 0.8.2
 
 Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), and improvement (reflect, correct, unslop) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
 
@@ -82,3 +82,9 @@ A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and p
 - `cfo-brief`: The CFO's weekly routine. Collects new receipts, invoices, vendor notices and billing data into the private books, checks spend against the budget, finds waste and renewals, writes a brief, and sends it with decisions and questions for the user to approve. Proposes; never acts. Use for "CFO brief", "weekly finance review", "check my spending this week", or from a weekly scheduled task.
 - `estimate-run`: Estimate what an agent run, a charter or a whole project will cost before it starts, in both cash and API-equivalent terms, with a typical and a high figure based on past runs where the books have them. Fills a run charter's estimate and budget. Use for "what will this cost", "estimate this run", "price this charter", "is this worth running", or when writing a run charter.
 - `spend-snapshot`: Answer "what am I spending" on AI, cloud and developer tools, by provider and by project, with month-to-date spend against the budget, renewals coming up, and anything unknown. Reads the private books plus receipts and billing data from connected tools. Use for "what am I spending", "how much do my AI tools cost", "am I over budget", "spend snapshot", or before deciding on a new tool or plan.
+
+## video 0.1.0
+
+Narrated explainer videos made by your agent, from concept and script through voiceover and animation to a checked MP4. Renders with Remotion, whose agent skills it relies on.
+
+- `explainer-video`: Make a finished, narrated explainer video (MP4) about a subject, from concept and script through voiceover, animation and render, and check the frames before delivering. Use when asked to make an explainer, promo, product or walkthrough video, or "a video about X".
