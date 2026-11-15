@@ -1127,6 +1127,16 @@ class FindingsTest(TempCase):
         self.assertIn("1 artifact file beyond the 2000-file cap was not read", out)
         self.assertCheckOk()
 
+    def test_finding_4_artifacts_beyond_the_byte_budget_of_one_ingest_are_counted_not_read(self):
+        for n in (1, 2, 3):
+            put_good_run(self.art, n)
+        size = (self.art / "demo/1/artifacts/test-results-py3.12/test-results.jsonl").stat().st_size
+        with unittest.mock.patch.object(quality, "MAX_INGEST_BYTES", size * 2 + 1):
+            code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertEqual(len(csv_rows(self.books / quality.RUNS)) - 1, 2)
+        self.assertRegex(out, r"1 artifact file beyond the .* cap was not read")
+
     def test_finding_5_a_test_id_that_a_spreadsheet_would_run_is_rejected_by_name_and_the_rest_are_booked(self):
         hostile = ['=HYPERLINK("http://evil","x")', "+1+1", "-2+3", "@SUM(A1)", "\tcmd", "a\rb", "a\x1b[2Jb", "a\x7fb",
                    "a\x00b", "a\x01b", "a\x1fb"]
@@ -1176,6 +1186,9 @@ class FindingsTest(TempCase):
                 write_books(self.books, [dict(run, workflow=bad)], [], [weekly_row(test_id=bad)])
                 code, out = cli("check", self.books)
                 self.assertEqual(code, 1, out)
+                if name == "NUL" and sys.version_info < (3, 11):
+                    self.assertIn("unreadable CSV: line contains NUL", out)  # the csv module itself refuses it
+                    continue
                 self.assertIn("books/runs.csv:2: workflow contains a control character", out)
                 self.assertIn("books/tests-weekly.csv:2: test_id contains a control character", out)
                 self.assertNotRegex(out, "[\x00-\x08\x0b-\x1f\x7f]")

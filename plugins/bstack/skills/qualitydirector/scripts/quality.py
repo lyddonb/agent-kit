@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""The Quality Director's primitives: record a test run, check the quality books, book recorded
-runs into them, and summarize a week.
+"""The Quality Director's primitives: record a test run, fetch the runs of watched repos from GitHub,
+book them into the quality books, check the books, and summarize a week.
 
 Usage:
     uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
+    uv run --python 3.12 quality.py fetch BOOKS_DIR OUT_DIR [--since YYYY-MM-DD] [--repo SLUG]
+    uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
-    uv run --python 3.12 quality.py ingest BOOKS_DIR ARTIFACT_DIR [--dry-run] [--json]
     uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json]
 
 `record` runs `python -m unittest discover -s TESTS_DIR` and writes what happened to FILE as
@@ -42,25 +43,61 @@ trace in those and is not carried (PYTHONUNBUFFERED is, through the environment)
 and git: on pull_request events GITHUB_SHA is a temporary merge commit, so a workflow passes
 `--sha "${{ github.event.pull_request.head.sha || github.sha }}"`.
 
-The books are three CSV files under BOOKS_DIR: books/runs.csv (one row per recorded CI run, append
-only), books/failures.csv (one row per failing test in a run, append only) and
-books/tests-weekly.csv (per ISO week, repo and test: runs, failed, total and max milliseconds;
-rows are updated in place and kept sorted).
+The books are four CSV files under BOOKS_DIR: books/runs.csv (one row per recorded CI run, append
+only), books/failures.csv (one row per failing test in a run, append only), books/tests-weekly.csv
+(per ISO week, repo and test: runs, failed, total and max milliseconds; rows are updated in place and
+kept sorted) and books/watched.csv (the repos to book: `repo,github,workflow`, for example
+`agentfiles,lyddonb/agentfiles,ci`; edited by hand).
 
-`check` validates the three files and prints one `path:line: message` line per problem (path
+Trust: CI runs pull-request code, so anyone who can get a workflow to run can write any recorder
+file, and runs.csv and failures.csv cannot be edited afterwards. Who a run is therefore comes from
+GitHub's API, never from the file. `fetch` writes the API's account of each run as manifest.json;
+`ingest` believes the manifest for repo, sha, event, workflow, start time and the run link, and a
+recorder file only for what it measured (python, wall_ms, exit_code, complete, its test rows, and the
+attempt number inside its evidence when that names this run).
+
+`fetch` asks GitHub through the `gh` CLI (found on PATH, or at $QUALITY_GH) for the completed runs
+of each watched repo's workflow created on or after --since (default: the day of the latest
+`started` in runs.csv for that repo, else 7 days before today UTC; `--today` sets "today" for tests),
+and writes OUT_DIR/<repo>/<run_id>/manifest.json plus OUT_DIR/<repo>/<run_id>/artifacts/<name>/ for each
+artifact whose name starts with `test-results-`. It never writes under BOOKS_DIR. A run from a fork
+(its head repository is not the watched one) is listed and not downloaded. A push to a branch other than
+the default branch is skipped, so every booked `push` run is a push to the default branch and
+summary's `failed_on_main` is true to its name. A run whose artifacts are all booked is skipped. An
+expired artifact, a failed call or an unsafe archive is reported and the rest carries on. Exit 0 when
+everything listed was fetched, 1 when any run could not be, 2 on bad usage, a missing gh, or an OUT_DIR
+inside BOOKS_DIR. The calls it makes, in order, for each repo: `gh api --paginate
+"repos/O/N/actions/runs?status=completed&per_page=100&created=>=SINCE"`, `gh api repos/O/N`,
+and for each run `gh api --paginate "repos/O/N/actions/runs/ID/artifacts?per_page=100"` and, for
+each artifact, `gh api repos/O/N/actions/artifacts/ID/zip`. `--since` filters on a run's creation
+date, so a re-run of an old run needs an earlier --since.
+
+`check` validates the four files and prints one `path:line: message` line per problem (path
 relative to BOOKS_DIR), then `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when
 there are problems, 2 on bad usage. With --base REF, runs.csv and failures.csv must be
 append-only against REF. It also checks across the files: every failures row belongs to a run,
-and a run has exactly as many failures rows as its `failed` says.
+and a run has exactly as many failures rows as its `failed` says. Every row is held to the row
+rules (RUN_RULES, FAILURE_RULES, WEEKLY_RULES, WATCHED_RULES): stamps and weeks in 2020 to 2099,
+`python` as 3.0 to 3.99 without leading zeros, cells of at most 1000 characters, and no cell that
+starts with = + - @ tab or CR (a spreadsheet would run it) or holds a control character other than
+newline and tab (a terminal would obey it).
 
-`ingest` books every `*.jsonl` recorder file under ARTIFACT_DIR (any depth) into the books. Those
-files come from CI that runs pull-request code, so they are untrusted: each is parsed strictly
-(see `parse_artifact`), a file that is not valid is named with the reason and skipped, and ingest
-exits 1 after booking the good ones. A run whose event is `local` or whose evidence is empty is
-skipped with a note. A run already in runs.csv (same evidence and python) is skipped, so a second
-ingest changes nothing. The runs.csv `exit_code` is the recorder's verdict recomputed from the
-rows (a run cut short at child exit 0 books as 1). The three files are built in memory, checked,
-and written only if the result passes, all or none.
+`ingest` reads the layout `fetch` writes. For each <repo>/<run_id>/manifest.json: it must agree with
+its folder, the repo must be on the watch list with the same github and workflow, `fork` must be false,
+`started` must not be after `updated` plus 5 minutes and must be in 2020 to 2099, and a push must be to
+the default branch; a manifest that fails is rejected by name with its artifact files unread. Each
+*.jsonl under <run>/artifacts is parsed strictly (see `parse_artifact`); a file that is not valid is
+named with the reason and skipped, and ingest exits 1 after booking the good ones. The rows a file would
+add are built and held to the same row rules `check` uses before anything is planned, so no file can pass
+here and fail `check`. Two files in one run folder for the same attempt and python with different
+content are both rejected (identical copies count once); a forged file never wins by sorting first. A run
+already in runs.csv (same evidence and python) is skipped, so a second ingest changes nothing. The runs.csv
+`exit_code` is the recorder's verdict recomputed from the rows (a run cut short at child exit 0 books as
+1), and a test with both an `error` and a `fail` line is an `error`: the worst outcome wins. Caps: 8 MB
+per file, 20000 test lines per file, 1000 characters per cell, 2000 files and 32 MB of artifacts per
+ingest (the rest are counted and named, not read, and ingest exits 1). The three files are built in
+memory, checked, and written only if the result passes, all or none. Anything artifact-derived that is
+printed has its non-printable characters escaped.
 
 `summary` prints the numbers of one ISO week from books that pass `check`: the one place a
 report takes its numbers from. With --json it is one object with sorted keys and integer
@@ -89,13 +126,15 @@ import json
 import os
 import re
 import select
+import shutil
 import signal
 import stat
 import subprocess
 import time
+import zipfile
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import NamedTuple
 
 # ---------------------------------------------------------------------------
@@ -1136,7 +1175,7 @@ MAX_ARTIFACT_BYTES = 8 << 20  # one artifact file
 MAX_MANIFEST_BYTES = 64 << 10
 MAX_TEST_ROWS = 20_000  # test lines in one file
 MAX_FILES = 2000  # artifact files read by one ingest
-MAX_INGEST_BYTES = 128 << 20  # artifact bytes read by one ingest
+MAX_INGEST_BYTES = 32 << 20  # artifact bytes read by one ingest
 START_SLACK = timedelta(minutes=5)  # a run's `started` may be this much after its `updated`
 MAX_NUMBER = 1 << 53  # what any JSON consumer still holds exactly
 HEADER_KINDS = {"v": int, "repo": str, "sha": str, "event": str, "workflow": str, "python": str, "os": str,
@@ -1728,7 +1767,7 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
             print(f"no artifacts: {name}")
         else:
             print(f"rejected: {name}: {s.reason}")
-    for count, why in ((found.unread_files, f"the {MAX_FILES}-file cap"), (found.unread_bytes, f"the {MAX_INGEST_BYTES >> 20} MB cap")):
+    for count, why in ((found.unread_files, f"the {MAX_FILES}-file cap"), (found.unread_bytes, f"the {_size(MAX_INGEST_BYTES)} cap")):
         if count:
             print(f"{count} artifact file{'s' * (count != 1)} beyond {why} {'was' if count == 1 else 'were'} not read; "
                   "ingest again after moving the booked runs out of the fetch folder, or fetch less")
@@ -1876,6 +1915,315 @@ def cmd_summary(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# fetch: GitHub's own account of each run, and its test-results artifacts, onto disk
+# ---------------------------------------------------------------------------
+#
+# `fetch` is the only command that talks to GitHub, through the `gh` CLI (`gh api`). It writes
+# under OUT_DIR only, never under BOOKS_DIR. What it writes is what `ingest` reads:
+#   OUT_DIR/<repo>/<run_id>/manifest.json             the API's account of the run (see Manifest)
+#   OUT_DIR/<repo>/<run_id>/artifacts/<name>/*.jsonl  the run's test-results-* artifacts, unzipped
+# The artifacts are downloaded as they are and believed only by `ingest`, and only for what they measured.
+
+ARTIFACT_PREFIX = "test-results-"
+_ARTIFACT_NAME = re.compile(r"test-results-[A-Za-z0-9._-]{1,100}")
+MAX_ARTIFACTS_PER_RUN = 100
+MAX_ZIP_BYTES = 32 << 20  # one downloaded archive
+MAX_ZIP_MEMBERS = 100
+GH_TIMEOUT_SECONDS = 300
+LOOKBACK_DAYS = 7  # how far back a repo with nothing booked yet is listed
+
+
+class GhError(Exception):
+    """A `gh api` call that failed, and why."""
+
+
+class Gh:
+    def __init__(self, exe: str):
+        self.exe = exe
+
+    def api(self, endpoint: str, paginate: bool = False) -> bytes:
+        argv = [self.exe, "api", *(["--paginate"] if paginate else []), endpoint]
+        try:
+            done = subprocess.run(argv, capture_output=True, timeout=GH_TIMEOUT_SECONDS,
+                                  env={**os.environ, "GH_PROMPT_DISABLED": "1", "NO_COLOR": "1"})
+        except (OSError, subprocess.SubprocessError) as e:
+            raise GhError(f"gh could not run: {type(e).__name__}") from None
+        if done.returncode != 0:
+            raise GhError(f"gh api {endpoint.split('?')[0]} failed: "
+                          + (printable(done.stderr.decode('utf-8', 'replace').strip()) or f"exit {done.returncode}"))
+        return done.stdout
+
+    def pages(self, endpoint: str) -> list[dict]:
+        """A paginated listing: `gh api --paginate` prints one JSON object per page, one after another."""
+        raw = self.api(endpoint, paginate=True).decode("utf-8", "replace")
+        decoder, at, found = json.JSONDecoder(), 0, []
+        try:
+            while True:
+                while at < len(raw) and raw[at].isspace():
+                    at += 1
+                if at >= len(raw):
+                    break
+                page, at = decoder.raw_decode(raw, at)
+                if not isinstance(page, dict):
+                    raise ValueError("a page is not an object")
+                found.append(page)
+        except (ValueError, RecursionError):
+            raise GhError(f"gh api {endpoint.split('?')[0]} did not answer with JSON") from None
+        return found
+
+
+def find_gh() -> str | None:
+    """QUALITY_GH when set (tests point it at a fake), else `gh` on PATH."""
+    return shutil.which(os.environ.get("QUALITY_GH") or "gh")
+
+
+def _day(text: str) -> date | None:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _inside(folder: str, parent: str) -> bool:
+    folder, parent = os.path.realpath(folder), os.path.realpath(parent)
+    return folder == parent or folder.startswith(parent.rstrip(os.sep) + os.sep)
+
+
+def _safe_member(name: str) -> bool:
+    parts = name.split("/")
+    return (0 < len(name) <= 200 and "\\" not in name and not _CONTROL.search(name)
+            and all(p not in ("", ".", "..") for p in parts))
+
+
+def extract_archive(raw: bytes, dest: str) -> int:
+    """Unzip the *.jsonl members of an artifact into `dest`, replacing it. An archive with a member whose
+    name climbs out, is absolute, or is a link, or one that is too big, is refused whole. Returns the files written."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        raise Rejected("is not a zip archive") from None
+    with archive:
+        members = [i for i in archive.infolist() if not i.filename.endswith("/")]
+        if len(members) > MAX_ZIP_MEMBERS:
+            raise Rejected(f"has more than {MAX_ZIP_MEMBERS} files")
+        for info in members:
+            if not _safe_member(info.filename) or stat.S_ISLNK(info.external_attr >> 16):
+                raise Rejected(f"has an unsafe member name {_show(info.filename, 80)}")
+            if info.file_size > MAX_ARTIFACT_BYTES:
+                raise Rejected(f"has a file larger than {_size(MAX_ARTIFACT_BYTES)}")
+        partial = dest + ".partial"
+        shutil.rmtree(partial, ignore_errors=True)
+        written = 0
+        try:
+            for info in members:
+                if not info.filename.endswith(".jsonl"):
+                    continue
+                with archive.open(info) as member:
+                    data = member.read(MAX_ARTIFACT_BYTES + 1)
+                if len(data) > MAX_ARTIFACT_BYTES:
+                    raise Rejected(f"has a file larger than {_size(MAX_ARTIFACT_BYTES)}")
+                path = os.path.join(partial, *info.filename.split("/"))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "xb") as f:
+                    f.write(data)
+                written += 1
+            shutil.rmtree(dest, ignore_errors=True)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if written:
+                os.replace(partial, dest)
+            else:
+                os.makedirs(dest)
+        finally:
+            shutil.rmtree(partial, ignore_errors=True)
+    return written
+
+
+@dataclass
+class FetchTally:
+    runs: int = 0  # fetched
+    artifacts: int = 0
+    listed: int = 0
+    forks: int = 0
+    pushes: int = 0
+    booked: int = 0
+    empty: int = 0
+    failed: int = 0
+
+    def fail(self, where: str, why: str) -> None:
+        self.failed += 1
+        print(f"  FAILED {where}: {why}")
+
+
+def _latest_started(books: Books, repo: str) -> str | None:
+    stamps = [r.cells["started"] for r in books.tables[RUNS].rows if r.cells["repo"] == repo]
+    return max(stamps)[:10] if stamps else None
+
+
+def _booked_per_run(books: Books) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for r in books.tables[RUNS].rows:
+        counts[r.cells["evidence"]] = counts.get(r.cells["evidence"], 0) + 1
+    return counts
+
+
+def _write_json(path: str, value: object) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temp = f"{path}.{os.getpid()}.tmp"
+    with open(temp, "w") as f:
+        f.write(json.dumps(value, sort_keys=True, indent=2) + "\n")
+    os.replace(temp, path)
+
+
+def _manifest_of(run: dict, repo: str, github: str, workflow: str, default_branch: str) -> Manifest:
+    """The manifest for one API run object. Raises Rejected when the API left out what the manifest holds."""
+    def field(key: str, kind: type) -> object:
+        value = run.get(key)
+        if type(value) is not kind:
+            raise Rejected(f"run has no usable {key}")
+        return value
+
+    head = run.get("head_repository")
+    fork = not isinstance(head, dict) or str(head.get("full_name") or "").lower() != github.lower()
+    return Manifest(RECORD_VERSION, repo, github, field("id", int), field("run_attempt", int), workflow, field("event", str),
+                    field("head_sha", str), str(run.get("head_branch") or ""), default_branch,
+                    field("run_started_at", str), field("updated_at", str), str(run.get("conclusion") or ""), fork)
+
+
+def fetch_repo(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, since: str,
+               tally: FetchTally, booked: dict[str, int]) -> None:
+    print(f"{repo} ({github}, {workflow}): runs created since {since}")
+    try:
+        listing = gh.pages(f"repos/{github}/actions/runs?status=completed&per_page=100&created=%3E%3D{since}")
+    except GhError as e:
+        tally.fail("listing", str(e))
+        return
+    runs = sorted((r for page in listing for r in page.get("workflow_runs", []) if isinstance(r, dict)
+                   and r.get("name") == workflow and type(r.get("id")) is int), key=lambda r: r["id"])
+    tally.listed += len(runs)
+    if not runs:
+        return
+    try:
+        info = json.loads(gh.api(f"repos/{github}"))
+        default_branch = info.get("default_branch") if isinstance(info, dict) else None
+    except (GhError, ValueError) as e:
+        tally.fail("default branch", str(e) if isinstance(e, GhError) else f"gh api repos/{github} did not answer with JSON")
+        return
+    if not isinstance(default_branch, str) or not default_branch:
+        tally.fail("default branch", f"gh api repos/{github} did not name one")
+        return
+    for run in runs:
+        fetch_run(gh, out_dir, repo, github, workflow, default_branch, run, tally, booked)
+
+
+def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, default_branch: str, run: dict,
+              tally: FetchTally, booked: dict[str, int]) -> None:
+    run_id = run["id"]
+    head = run.get("head_repository")
+    if not isinstance(head, dict) or str(head.get("full_name") or "").lower() != github.lower():
+        tally.forks += 1
+        print(f"  skipped {run_id}: fork ({printable(str((head or {}).get('full_name')))}), its code is not the repo's; not downloaded")
+        return
+    branch = str(run.get("head_branch") or "")
+    if run.get("event") == "push" and branch != default_branch:
+        tally.pushes += 1
+        print(f"  skipped {run_id}: push to {printable(branch)}, not the default branch {printable(default_branch)}")
+        return
+    try:
+        manifest = _manifest_of(run, repo, github, workflow, default_branch)
+        artifacts = [a for page in gh.pages(f"repos/{github}/actions/runs/{run_id}/artifacts?per_page=100")
+                     for a in page.get("artifacts", []) if isinstance(a, dict)]
+    except (Rejected, GhError) as e:
+        tally.fail(str(run_id), str(e))
+        return
+    wanted = [a for a in artifacts if str(a.get("name", "")).startswith(ARTIFACT_PREFIX)]
+    if not wanted:
+        tally.empty += 1  # counted in the totals line; most runs (a docs-only change) have none
+        return
+    for a in wanted[MAX_ARTIFACTS_PER_RUN:]:
+        tally.fail(str(run_id), f"artifact {printable(str(a.get('name')))} is beyond the {MAX_ARTIFACTS_PER_RUN}-artifact limit")
+    wanted = wanted[:MAX_ARTIFACTS_PER_RUN]
+    fresh = []
+    for a in wanted:
+        name = str(a.get("name"))
+        if a.get("expired") is True:
+            tally.fail(str(run_id), f"artifact {printable(name)} expired")
+        elif not _ARTIFACT_NAME.fullmatch(name) or type(a.get("id")) is not int:
+            tally.fail(str(run_id), f"artifact {_show(name, 80)} is not a plain name or has no id")
+        else:
+            fresh.append(a)
+    if not fresh:
+        return
+    if booked.get(manifest.evidence(manifest.run_attempt), 0) >= len(fresh):
+        tally.booked += 1
+        print(f"  skipped {run_id}: already booked")
+        return
+    folder = os.path.join(out_dir, repo, str(run_id))
+    _write_json(os.path.join(folder, MANIFEST), manifest._asdict())
+    got = 0
+    for a in fresh:
+        name = a["name"]
+        try:
+            if type(a.get("size_in_bytes")) is int and a["size_in_bytes"] > MAX_ZIP_BYTES:
+                raise Rejected(f"is larger than {_size(MAX_ZIP_BYTES)}")
+            raw = gh.api(f"repos/{github}/actions/artifacts/{a['id']}/zip")
+            if len(raw) > MAX_ZIP_BYTES:
+                raise Rejected(f"is larger than {_size(MAX_ZIP_BYTES)}")
+            extract_archive(raw, os.path.join(folder, ARTIFACTS, name))
+            got += 1
+        except (Rejected, GhError, OSError) as e:
+            tally.fail(str(run_id), f"artifact {name} ({a['id']}) not fetched: {e if not isinstance(e, OSError) else e.strerror}")
+    if got:
+        tally.runs += 1
+        tally.artifacts += got
+        print(f"  fetched {run_id}: {printable(str(run.get('event')))} {printable(branch)} attempt {manifest.run_attempt}, "
+              f"{got} artifact{'s' * (got != 1)}")
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    if not os.path.isdir(args.books_dir):
+        print(f"quality.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    today = _day(args.today) if args.today else datetime.now(timezone.utc).date()
+    if today is None or (args.since is not None and _day(args.since) is None):
+        print("quality.py: --since and --today must be a date like 2026-11-15", file=sys.stderr)
+        return 2
+    if _inside(args.out_dir, args.books_dir):
+        print(f"quality.py: {args.out_dir} is inside the books folder; fetch never writes there", file=sys.stderr)
+        return 2
+    exe = find_gh()
+    if exe is None:
+        print("quality.py: cannot find the gh CLI (put it on PATH, or set QUALITY_GH to its path)", file=sys.stderr)
+        return 2
+    books = load(args.books_dir)
+    problems = run_checks(books)
+    if problems:
+        _print_problems(problems)
+        print(f"{len(problems)} problems; refusing to fetch with books that fail check")
+        return 1
+    watched = [(r.cells["repo"], r.cells["github"], r.cells["workflow"]) for r in books.tables[WATCHED].rows]
+    if args.repo is not None:
+        watched = [w for w in watched if w[0] == args.repo]
+        if not watched:
+            print(f"quality.py: {args.repo!r} is not in books/watched.csv", file=sys.stderr)
+            return 2
+    if not watched:
+        print("nothing to fetch: books/watched.csv lists no repos")
+        return 0
+    os.makedirs(args.out_dir, exist_ok=True)
+    gh, tally, booked = Gh(exe), FetchTally(), _booked_per_run(books)
+    for repo, github, workflow in watched:
+        since = args.since or _latest_started(books, repo) or (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
+        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked)
+    t = tally
+    print(f"fetched {t.runs} runs ({t.artifacts} artifacts); listed {t.listed}; skipped {t.forks} forks, "
+          f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts; "
+          f"{t.failed} failed")
+    return 1 if t.failed else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="quality.py", description="The Quality Director's recorder and books checker.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1890,6 +2238,14 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("books_dir", metavar="BOOKS_DIR")
     check.add_argument("--base", metavar="REF", help="fail if a runs.csv line at REF changed or was removed")
     check.set_defaults(func=cmd_check)
+    fetch = sub.add_parser("fetch", help="download the test-results artifacts and GitHub's account of each watched run")
+    fetch.add_argument("books_dir", metavar="BOOKS_DIR")
+    fetch.add_argument("out_dir", metavar="OUT_DIR")
+    fetch.add_argument("--since", metavar="YYYY-MM-DD", help="runs created on or after this day (default: the day of "
+                       "the repo's latest started in runs.csv, else 7 days before today UTC)")
+    fetch.add_argument("--repo", metavar="SLUG", help="only this watched repo")
+    fetch.add_argument("--today", metavar="YYYY-MM-DD", help="the date to count the 7 days back from (for tests)")
+    fetch.set_defaults(func=cmd_fetch)
     ingest = sub.add_parser("ingest", help="book the runs `fetch` downloaded into the quality books")
     ingest.add_argument("books_dir", metavar="BOOKS_DIR")
     ingest.add_argument("fetch_dir", metavar="FETCH_DIR")

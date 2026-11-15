@@ -254,7 +254,7 @@ class ListingTest(FetchCase):
         self.runs([self.pull])
         code, out = self.fetch()
         self.assertEqual(code, 0, out)
-        self.assertRegex(out, r"(?m)^\s+skipped 101: no test-results artifacts")
+        self.assertIn("1 without test-results artifacts", out)
         self.assertFalse((self.out / "agentfiles" / "101").exists())
 
     def test_the_calls_gh_gets(self):
