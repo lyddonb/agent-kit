@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "id": "bstack@0.10.2",
+      "date": "2026-11-15",
+      "plugin": "bstack",
+      "version": "0.10.2",
+      "changes": [
+        "The weekly quality brief no longer stops in a Claude Code cloud session: it checks GitHub access with a real `gh api` call, not `gh auth status`, which fails there even when access works. It also says what to do when every artifact download is refused."
+      ]
+    },
+    {
       "id": "bstack@0.10.1",
       "date": "2026-11-15",
       "plugin": "bstack",

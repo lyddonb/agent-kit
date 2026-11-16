@@ -9,11 +9,10 @@ Measure and propose. Never skip, delete, loosen or retry a test, never change a 
 Do this before anything is fetched or booked, because booking edits files and they must be edited on the right branch.
 
 ```sh
-gh auth status
 gh api 'repos/lyddonb/quality/pulls?state=open' --jq '.[] | [.number, .head.ref] | @tsv'
 ```
 
-If `gh` is missing or not signed in, stop and tell Beau: the run cannot fetch anything.
+If `gh` is missing or that call fails, stop and tell Beau the exact error: the run cannot fetch anything. Do not use `gh auth status` as the check. In a Claude Code cloud session it fails while `gh api` works, because a proxy supplies the credential.
 
 In `BOOKS`, run `git fetch origin`. If an open PR's branch starts with `quality/brief-` or `claude/quality-brief-`, check that branch out (`git checkout -B BRANCH origin/BRANCH`): unmerged weeks share one PR, and its books already hold last week's rows. Otherwise create `quality/brief-YYYY-MM-DD` from `origin/main`, where the date is `TZ=America/Denver date +%F` (add `-2`, `-3` if the name exists on the remote).
 
@@ -28,6 +27,8 @@ Lists each watched repo's completed runs on GitHub and downloads their test reco
 If `questions.md` has an open question about a run that could not be fetched, run `fetch` once more with `--since` set to the date in that question, so the run is tried again.
 
 Exit 1 means at least one run could not be fetched (`FAILED RUN_ID: why`). Carry on. Each failed run goes in the brief's Reliability section, and gets a question in `questions.md` that names the repo, the run id and the date, so a later run retries it. Exit 2 is a setup problem (no `gh`, bad arguments): stop and tell Beau the exact error.
+
+If every download fails with `Forbidden` while the runs list fine, the network is blocking the host GitHub serves artifacts from. In a Claude Code cloud environment, Beau adds `*.blob.core.windows.net` to the environment's allowed domains; say so in your message.
 
 ## 2. Book
 
