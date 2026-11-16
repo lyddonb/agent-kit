@@ -2048,7 +2048,8 @@ def oracle(artifacts, week=None) -> dict:
 
 
 class PropertyTest(TempCase):
-    SEEDS = range(40)
+    # Every run checks the first 5 seeds. QUALITY_FULL_SEEDS=1 checks all 40: CI sets it once a week.
+    SEEDS = range(40 if os.environ.get("QUALITY_FULL_SEEDS") == "1" else 5)
 
     def test_summary_json_equals_a_recomputation_from_the_raw_artifacts(self):
         for seed in self.SEEDS:

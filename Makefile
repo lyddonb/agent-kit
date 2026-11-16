@@ -15,7 +15,7 @@ help:
 	@echo "make validate         portability lint for skills and plugins"
 	@echo "make versions         fail if a plugin changed since BASE (default origin/main) without a version bump"
 	@echo "make claude-validate  run 'claude plugin validate --strict' on every plugin and the marketplace"
-	@echo "make unit             unit tests for the scripts skills ship"
+	@echo "make unit             unit tests for the scripts skills ship (QUALITY_FULL_SEEDS=1 runs every property-test seed)"
 	@echo "make record           the same tests through the quality recorder; writes per-test time and outcome to RECORD_OUT"
 	@echo "make all              gen + validate + claude-validate"
 
