@@ -49,7 +49,7 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
 ## From "Steering AI Beyond Automation" (2026-11-15)
 
 Ideas from Narayanan and Unger's [essay](https://www.normaltech.ai/p/steering-ai-beyond-automation) on collaboration over full automation.
-Context and reasoning: [notes in agent-ledger](https://github.com/lyddonb/agent-ledger/blob/docs/steering-beyond-automation/docs/notes/steering-beyond-automation.md). The ledger side (`steer`,
+Context and reasoning: [notes in agent-ledger](https://github.com/lyddonb/agent-ledger/blob/main/docs/notes/steering-beyond-automation.md). The ledger side (`steer`,
 `disagreement` entries, `ledger stats`) lives in agent-ledger's IDEAS.md.
 
 - **Mid-run steering in the Large work item playbook.** Today the human approves a charter,
