@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.10.2 (2026-11-15)
+
+- The weekly quality brief no longer stops in a Claude Code cloud session: it checks GitHub access with a real `gh api` call, not `gh auth status`, which fails there even when access works. It also says what to do when every artifact download is refused.
+
 ## bstack 0.10.1 (2026-11-15)
 
 - `qualitydirector` has the weekly quality brief as numbered steps (`references/weekly-brief.md`): fetch the week's CI test records, book them, summarize, write the brief from the books' template with at most three proposals, check, and open one pull request for sign-off.
