@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 9 * * 6"        # Saturdays 09:17 UTC: the weekly run with every property-test seed
 
 permissions:
   contents: read
@@ -34,6 +36,9 @@ jobs:
         run: make versions BASE=origin/${{ github.base_ref }}
 
       - name: Script unit tests, recorded
+        env:
+          # the two heaviest property tests check 5 seeds on a pull request or push, all 40 weekly
+          QUALITY_FULL_SEEDS: ${{ github.event_name == 'schedule' && '1' || '0' }}
         run: make record RECORD_OUT="$RUNNER_TEMP/test-results.jsonl"
 
       - name: Upload the test record
