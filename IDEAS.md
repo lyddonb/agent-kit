@@ -45,3 +45,29 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
   used for a while.
 - **Mode for reviewing other people's PRs.** A playbook that reviews a teammate's PR the way
   you would, using `interrogate` plus your team's conventions from the KB.
+
+## From "Steering AI Beyond Automation" (2026-11-15)
+
+Ideas from Narayanan and Unger's [essay](https://www.normaltech.ai/p/steering-ai-beyond-automation) on collaboration over full automation.
+Context and reasoning: [notes in agent-ledger](https://github.com/lyddonb/agent-ledger/blob/docs/steering-beyond-automation/docs/notes/steering-beyond-automation.md). The ledger side (`steer`,
+`disagreement` entries, `ledger stats`) lives in agent-ledger's IDEAS.md.
+
+- **Mid-run steering in the Large work item playbook.** Today the human approves a charter,
+  answers gates the agent raises, and merges. Add a step that checks for human `steer`
+  entries between units and follows them, once agent-ledger has the entry type.
+- **An `interactive` role for attended work.** For tier 1 work while the human is present, a
+  fast model holds the conversation and hands deep work to `code` and `judgment` subagents in
+  the background, so the human keeps flow instead of waiting on a slow agent. This is the real
+  conflict D11 asks for before adding a role: latency against depth. Needs the role in
+  agentfiles too.
+- **Teach at seal.** An optional step at the end of a Large work item that runs `teach` over the
+  ledger, so the human comes out of a run understanding the change, not only having approved it.
+- **Say why the tiers trade autonomy for reliability.** The essay's trilemma (fully autonomous,
+  reliable at high stakes, general-purpose: pick two) is the reason tier 3 has more gates and
+  reviews. One sentence in the Large work item playbook would make that explicit.
+- **Record disagreement.** When beau-mode stops because the evidence rules out the change the
+  human asked for, record it as a `disagreement` entry so we can later see how often the agent
+  was right to push back.
+- **Ambient caution for Dr Eggbot.** The always-running maintenance agent above is what the
+  essay calls an ambient agent. Give it its own charter covering what it may read and who it
+  may message, beyond the `outbound-message` gate.
