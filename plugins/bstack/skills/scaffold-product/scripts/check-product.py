@@ -11,8 +11,9 @@ With --receipts RUN_ID, every box this branch newly checked (`- [x]` in a phase 
 `[x]` in the same file at REF, default origin/main) must be backed by a receipt: the run's last
 `verification` entry for that criterion in .audit/runs/RUN_ID/ledger.jsonl (written by
 verify-work's receipt.py) says VERIFIED, names this spec, hashes to the spec at its commit, and
-no source has changed since that commit (changes under .audit/, .evidence/ and docs/phases/
-don't count).
+the criterion's own text is unchanged since that commit, and no source has changed since it
+(bookkeeping files don't count: .audit/, .evidence/, docs/phases/, docs/plans/, docs/DECISIONS.md,
+ROADMAP.md, HUMAN_TASKS.md, IDEAS.md).
 Needs `ledger` on PATH; exit 2 when it, the run folder or REF is missing.
 
 The layout (see the skill's references/layout.md):
@@ -266,6 +267,11 @@ def drafts(repo: Path) -> int:
 
 
 CHECKED_ITEM = re.compile(r"^\s*- \[[xX]\] \*\*([A-Z]\d+)\.\*\*")
+ANY_ITEM = re.compile(r"^\s*- (?:\[[ xX]\] )?(?:~~)?\*\*([A-Z]\d+)\.\*\*")
+# What the Product phase playbook edits alongside a ticked box. These are records, not source, so a
+# change to one doesn't make a receipt stale. verify-work's receipt.py has the same list.
+BOOKKEEPING = (".audit", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
+               "HUMAN_TASKS.md", "IDEAS.md")
 
 
 class UsageError(Exception):
@@ -273,7 +279,7 @@ class UsageError(Exception):
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, errors="replace")
 
 
 def checked_ids(text: str) -> dict[str, int]:
@@ -286,17 +292,40 @@ def checked_ids(text: str) -> dict[str, int]:
     return found
 
 
+def criterion_text(text: str, cid: str) -> str | None:
+    """What an item claims: its lines up to the next item, blank line or heading, without the box
+    state and without `Evidence:`, which ticking the box changes."""
+    block: list[str] | None = None
+    for l in text.splitlines():
+        m = ANY_ITEM.match(l)
+        if block is None:
+            if m and m.group(1) == cid:
+                block = [l]
+        elif m or not l.strip() or l.startswith("#"):
+            break
+        else:
+            block.append(l)
+    if block is None:
+        return None
+    claim = re.sub(r"^- \[[ xX]\] ", "- ", " ".join(x.strip() for x in block))
+    return " ".join(EVIDENCE.split(claim, 1)[0].split())
+
+
 def newly_checked(repo: Path, base: str) -> list[tuple[Path, str, str, int]]:
-    """(spec, phase id, item id, line) for each item checked now and not checked in the same file at base."""
+    """(spec, phase id, item id, line) for each item checked now and not checked in that phase's
+    spec at base. Keyed by phase id, not file name, so renaming a spec makes nothing new."""
+    before: set[tuple[str, str]] = set()
+    for name in git(repo, "ls-tree", "--name-only", f"{base}:docs/phases").stdout.splitlines():
+        m = PHASE_FILE.match(name)
+        if m:
+            before |= {(m.group(1), cid) for cid in checked_ids(git(repo, "show", f"{base}:docs/phases/{name}").stdout)}
     out = []
     for spec in sorted((repo / "docs/phases").glob("*.md")) if (repo / "docs/phases").is_dir() else []:
         m = PHASE_FILE.match(spec.name)
         if not m:
             continue
-        shown = git(repo, "show", f"{base}:docs/phases/{spec.name}")
-        before = checked_ids(shown.stdout) if shown.returncode == 0 else {}
-        for cid, line in checked_ids(spec.read_text(encoding="utf-8")).items():
-            if cid not in before:
+        for cid, line in checked_ids(spec.read_text(encoding="utf-8", errors="replace")).items():
+            if (m.group(1), cid) not in before:
                 out.append((spec, m.group(1), cid, line))
     return out
 
@@ -324,15 +353,21 @@ def receipt_problems(repo: Path, rel: str, line: int, crit: str, data: dict | No
     if receipt.get("spec") != rel:
         return [f"{where}: its receipt names spec {receipt.get('spec')}, not {rel}"]
     commit = str(receipt.get("commit"))
+    if git(repo, "cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+        return [f"{where}: its receipt's commit {commit[:12]} is not in this clone (history was rewritten after the "
+                f"probe ran, or the clone is shallow); re-run its probe"]
     shown = subprocess.run(["git", "-C", str(repo), "show", f"{commit}:{rel}"], capture_output=True)
     if shown.returncode != 0:
         return [f"{where}: its receipt's commit {commit[:12]} has no {rel} in this repo"]
     out = []
     if hashlib.sha256(shown.stdout).hexdigest() != receipt.get("spec_sha256"):
         out.append(f"{where}: {rel} at receipt commit {commit[:12]} does not match the receipt's spec_sha256")
-    # phase specs are excluded as a folder: one PR can tick boxes in two specs, and each receipt
-    # pins the text it was checked against with spec_sha256
-    excludes = ["--", ".", ":(exclude).audit", ":(exclude).evidence", ":(exclude)docs/phases", f":(exclude){rel}"]
+    cid = crit.split("-", 1)[1]
+    now = criterion_text((repo / rel).read_text(encoding="utf-8", errors="replace"), cid)
+    if now != criterion_text(shown.stdout.decode("utf-8", "replace"), cid):
+        out.append(f"{where}: the criterion's text or probe changed after its receipt at {commit[:12]}; "
+                   f"the receipt is for the old claim (re-run its probe)")
+    excludes = ["--", ".", *(f":(exclude){p}" for p in BOOKKEEPING)]
     if git(repo, "diff", "--quiet", commit, "HEAD", *excludes).returncode != 0:
         out.append(f"{where}: its receipt is stale; source changed after commit {commit[:12]} (re-run its probe)")
     elif git(repo, "status", "--porcelain", "--untracked-files=no", *excludes).stdout.strip():
