@@ -30,7 +30,7 @@ Check the real thing, not a proxy. A green build, a passing unit test or a subag
      --spec docs/phases/<spec>.md --criterion C8 -- <the probe command>
    ```
 
-   It records which probe ran, on which commit, and what came back, as a ledger entry (**show-me-your-work** says how to start a run and write `--actor`; a PR with no run yet starts one for itself). Commit your work before you run it: a probe run on uncommitted changes is recorded as INCONCLUSIVE. Pass `--not-run '<what>'` when the spec's probe has a part you did not run, which also records INCONCLUSIVE. Never write a receipt by hand for a probe a command can run. When a person is the probe (their words after a trial period), record their exact words with `ledger append`, with them as the actor.
+   It records which probe ran, on which commit, and what came back, as a ledger entry (**show-me-your-work** says how to start a run and write `--actor`; a PR with no run yet starts one for itself). Commit your work, and the criterion itself, before you run it: a probe run on uncommitted changes or beside an untracked file is recorded as INCONCLUSIVE. Ticking the box and updating `ROADMAP.md` can come before or after. Pass `--not-run '<what>'` when the spec's probe has a part you did not run, which also records INCONCLUSIVE. Never write a receipt by hand for a probe a command can run. When a person is the probe (their words after a trial period), record their exact words with `ledger append`, with them as the actor.
 
 ## Output
 

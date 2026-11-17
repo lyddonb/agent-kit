@@ -11,11 +11,15 @@ verdict from the exit code, not from anyone's prose:
 
     non-zero exit                      NOT VERIFIED
     exit 0 with --not-run, or a dirty  INCONCLUSIVE
-      tree (tracked files differ from HEAD, outside .audit/, .evidence/ and phase specs)
+      tree: a tracked file differs from HEAD before or after the probe, or an untracked file
+      that git doesn't ignore exists before it (bookkeeping files don't count: see BOOKKEEPING)
     exit 0 otherwise                   VERIFIED
 
 Then it appends a `verification` entry with a `receipt` (agent-ledger 1.1.0 or newer; see
 "Receipt entries" in its S3 spec). Prints `P2e-C8 VERIFIED (seq 4)`.
+
+The criterion and its spec must be committed: the receipt names HEAD and hashes the spec as HEAD
+has it, so `check-product.py --receipts` can check both later. Ticking the box may wait or not.
 
 Exit code: 0 when the receipt was written, whatever the verdict. 2 when it refused (nothing is
 written, and the probe did not run). When `ledger append` fails, its exit code and stderr.
@@ -38,6 +42,10 @@ VERIFIED, NOT_VERIFIED, INCONCLUSIVE = "VERIFIED", "NOT VERIFIED", "INCONCLUSIVE
 LIVE_ITEM = re.compile(r"^\s*- \[[ xX]\] \*\*([A-Z]\d+)\.\*\*")
 LOCAL_ID = re.compile(r"^[A-Z](?:0|[1-9][0-9]*)$")
 PHASE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+# What the Product phase playbook edits alongside a ticked box. These are records, not source, so a
+# change to one neither dirties a probe nor makes its receipt stale. check-product.py has the same list.
+BOOKKEEPING = (".audit", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
+               "HUMAN_TASKS.md", "IDEAS.md")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -108,9 +116,13 @@ def locate(args: argparse.Namespace) -> tuple[Path, str, str, str]:
     local = args.criterion
     if not LOCAL_ID.match(local):
         raise Refusal(f"criterion {local!r} is not an id like C8 (one capital letter, a number with no leading zero)")
-    live = {m.group(1) for l in spec_file.read_text(encoding="utf-8").splitlines() if (m := LIVE_ITEM.match(l))}
+    committed = subprocess.run(["git", "-C", str(root), "show", f"HEAD:{spec}"], capture_output=True)
+    if committed.returncode != 0:
+        raise Refusal(f"{spec} is not committed; commit the spec first, so the receipt can name the text it checked")
+    live = {m.group(1) for l in committed.stdout.decode("utf-8", "replace").splitlines() if (m := LIVE_ITEM.match(l))}
     if local not in live:
-        raise Refusal(f"{local} is not a live item in {spec} (items look like `- [ ] **{local}.**`; a struck item is not live)")
+        raise Refusal(f"{local} is not a live item in {spec} at HEAD (items look like `- [ ] **{local}.**`; a struck "
+                      f"item is not live, and a new criterion must be committed first)")
     if args.not_run is not None and not args.not_run.strip():
         raise Refusal("--not-run needs text saying which part of the probe did not run")
     if not (root / ".audit/runs" / args.run / "ledger.jsonl").is_file():
@@ -118,10 +130,11 @@ def locate(args: argparse.Namespace) -> tuple[Path, str, str, str]:
     return root, spec, phase, local
 
 
-def dirty_tree(root: Path, spec: str) -> bool:
-    # phase specs are excluded as a folder: one PR can tick boxes in two specs
-    out = git(root, "status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude).audit", ":(exclude).evidence",
-              ":(exclude)docs/phases", f":(exclude){spec}")
+def dirty_tree(root: Path, untracked: bool) -> bool:
+    """Tracked files differ from HEAD outside the bookkeeping files. With `untracked`, a file git
+    doesn't ignore counts too: a probe can pass because of a file that is in no commit."""
+    out = git(root, "status", "--porcelain", f"--untracked-files={'normal' if untracked else 'no'}", "--", ".",
+              *(f":(exclude){p}" for p in BOOKKEEPING))
     if out.returncode != 0:
         raise Refusal(f"git status failed: {out.stderr.strip()}")
     return bool(out.stdout.strip())
@@ -129,7 +142,6 @@ def dirty_tree(root: Path, spec: str) -> bool:
 
 def run_probe(cmd: list[str], root: Path, evidence: Path) -> tuple[int, str]:
     """Run cmd at the repo root, tee its combined output to the terminal and the evidence file."""
-    evidence.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256()
     with evidence.open("wb") as f:
         try:
@@ -172,19 +184,24 @@ def main(argv: list[str]) -> int:
         if head.returncode != 0:
             raise Refusal(f"no commit to run the probe on: {head.stderr.strip()}")
         commit = head.stdout.strip()
-        spec_sha = hashlib.sha256((root / spec).read_bytes()).hexdigest()
-        dirty_before = dirty_tree(root, spec)
+        at_head = subprocess.run(["git", "-C", str(root), "show", f"HEAD:{spec}"], capture_output=True, check=True)
+        spec_sha = hashlib.sha256(at_head.stdout).hexdigest()
+        dirty_before = dirty_tree(root, untracked=True)
+        evidence = root / ".evidence" / args.run / f"{criterion.lower()}.txt"
+        try:
+            evidence.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise Refusal(f"cannot write evidence under .evidence/{args.run}: {e}")
     except Refusal as e:
         print(f"receipt.py: refused: {e}", file=sys.stderr)
         return 2
 
-    evidence = root / ".evidence" / args.run / f"{criterion.lower()}.txt"
     code, out_sha = run_probe(cmd, root, evidence)
     try:
-        dirty = dirty_before or dirty_tree(root, spec)
-    except Refusal as e:
-        print(f"receipt.py: refused: {e}", file=sys.stderr)
-        return 2
+        # files the probe itself leaves behind don't count; a tracked file it changed does
+        dirty = dirty_before or dirty_tree(root, untracked=False)
+    except Refusal:
+        dirty = True  # the probe ran, so record it; a tree we can't read is not a clean one
     verdict = decide_verdict(code, args.not_run, dirty)
     receipt = Receipt(criterion=criterion, spec=spec, spec_sha256=spec_sha, probe=shlex.join(cmd),
                       commit=commit, exit=code, dirty=dirty, not_run=args.not_run)
