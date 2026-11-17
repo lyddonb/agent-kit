@@ -37,7 +37,7 @@ ledger append --run <run-id> --actor '<you>' --type <type> \
   --evidence '<commit, PR, file:line or artifact path>' --data '{"phase": "<phase>", "result": "<outcome>"}'
 ```
 
-- **type**: `decision` for a fork chosen or a unit finished, `verification` for a check and its verdict, `state` for a phase moving (`{"state": "..."}`), `review` for a review and what came of it, `lesson` for something a future run should know, `spend` for cost (`usd_micros`, `tokens`, and `estimate: true` when estimated). `gate` and `gate-answer` are for gates; `approval` is a human's and comes from the Large work item playbook.
+- **type**: `decision` for a fork chosen or a unit finished, `verification` for a check and its verdict (a spec criterion's check is a receipt, written by **verify-work**'s `scripts/receipt.py`, not by hand), `state` for a phase moving (`{"state": "..."}`), `review` for a review and what came of it, `lesson` for something a future run should know, `spend` for cost (`usd_micros`, `tokens`, and `estimate: true` when estimated). `gate` and `gate-answer` are for gates; `approval` is a human's and comes from the Large work item playbook.
 - **evidence**: a pointer, never a paragraph. Repeat `--evidence` for more than one.
 - **result** in `data`: the outcome, such as `tests green`, `reverted`, `pixel-diff 0`, `INCONCLUSIVE`, `open`.
 
