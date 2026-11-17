@@ -66,13 +66,96 @@ class CheckProductTest(unittest.TestCase):
         self.assertTrue(any("D3 follows D1" in p for p in found), found)
         self.assertTrue(any("D3 has no status line" in p for p in found), found)
 
-    def test_phase_needs_outcome_and_checkable_acceptance(self):
-        self.edit("docs/phases/P1-first-slice.md", "**Outcome.**", "Outcome:")
-        self.edit("docs/phases/P1-first-slice.md", "- [ ] filled", "- filled")
-        self.edit("docs/phases/P1-first-slice.md", "- [ ] `ROADMAP.md`", "- `ROADMAP.md`")
+    SPEC = "docs/phases/P1-first-slice.md"
+
+    def test_phase_needs_outcome_and_checkable_criteria(self):
+        self.edit(self.SPEC, "**Outcome.**", "Outcome:")
+        self.edit(self.SPEC, "- [ ] **C1.** filled Probe: filled.", "- filled")
+        self.edit(self.SPEC, "- [ ] **C2.**", "- **C2.**")
         found = self.problems()
         self.assertTrue(any("no `**Outcome.**`" in p for p in found), found)
-        self.assertTrue(any("Acceptance has no '- [ ]' boxes" in p for p in found), found)
+        self.assertTrue(any("Criteria has no '- [ ] **C1.**' boxes" in p for p in found), found)
+
+    def test_older_acceptance_format_points_at_the_upgrade(self):
+        self.edit(self.SPEC, "## Criteria", "## Acceptance")
+        found = self.problems()
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("older spec format ('## Acceptance')", found[0])
+
+    def test_ideal_state_needs_three_levels_and_a_confirmed_line(self):
+        self.edit(self.SPEC, "3. **Surprising.** filled\n", "")
+        self.edit(self.SPEC, "**Confirmed.** filled\n", "")
+        found = self.problems()
+        self.assertTrue(any("ideal state has no level **Surprising.**" in p for p in found), found)
+        self.assertTrue(any("no `**Confirmed.**` line" in p for p in found), found)
+
+    def test_missing_ideal_state_is_flagged(self):
+        self.edit(self.SPEC, "## Ideal state", "## Hopes")
+        self.assertFlags("no '## Ideal state' section")
+
+    def test_unconfirmed_ideal_state_is_fine_while_specced(self):
+        self.edit(self.SPEC, "**Confirmed.** filled", "**Confirmed.** Not yet.")
+        self.assertEqual(self.problems(), [])
+
+    def test_building_needs_a_person_to_confirm_the_ideal_state(self):
+        for said in ("Not yet.", "Beau, 2026-11-16 (draft, from README)", ""):
+            for status in ("Planned", "Building", "In progress", "Gated"):
+                with self.subTest(said=said, status=status):
+                    self.repo = filled_scaffold()
+                    self.edit(self.SPEC, "**Confirmed.** filled", f"**Confirmed.** {said}".rstrip())
+                    self.edit("ROADMAP.md", "| Specced |", f"| {status} |")
+                    self.assertFlags(f"the phase is {status} but no person has confirmed levels 1 and 2")
+
+    def test_confirmed_ideal_state_lets_building_pass(self):
+        self.edit(self.SPEC, "**Confirmed.** filled", "**Confirmed.** Beau, 2026-11-16, PR #12.")
+        self.edit("ROADMAP.md", "| Specced |", "| Building |")
+        self.assertEqual(self.problems(), [])
+
+    def test_criteria_need_ids_and_probes(self):
+        self.edit(self.SPEC, "- [ ] **C1.** filled Probe: filled.", "- [ ] filled Probe: filled.")
+        self.edit(self.SPEC, "- [ ] **A1.** filled Probe: filled.", "- [ ] **A1.** never filled.")
+        found = self.problems()
+        self.assertTrue(any(":35: criterion has no id; start it with **C<n>.**" in p for p in found), found)
+        self.assertTrue(any(":42: A1 names no 'Probe:'" in p for p in found), found)
+
+    def test_probe_on_a_continuation_line_counts(self):
+        self.edit(self.SPEC, "- [ ] **A1.** filled Probe: filled.", "- [ ] **A1.** filled.\n  Probe: filled.")
+        self.assertEqual(self.problems(), [])
+
+    def test_checked_box_needs_evidence(self):
+        self.edit(self.SPEC, "- [ ] **C1.** filled Probe: filled.", "- [x] **C1.** filled Probe: filled.")
+        self.assertFlags("C1 is checked without 'Evidence:'")
+        self.edit(self.SPEC, "- [x] **C1.** filled Probe: filled.", "- [x] **C1.** filled Probe: filled. Evidence: verify-demo run 3.")
+        self.assertEqual(self.problems(), [])
+
+    def test_ids_are_unique_and_never_reused(self):
+        self.edit(self.SPEC, "- [ ] **C2.**", "- ~~**C3.** dropped~~ Dropped: out of scope.\n- [ ] **C3.** Probe: x.\n- [ ] **C1.**")
+        found = self.problems()
+        self.assertTrue(any("C3 is used twice" in p for p in found), found)
+        self.assertTrue(any("C1 is used twice" in p for p in found), found)
+
+    def test_struck_criterion_needs_no_box_or_probe(self):
+        self.edit(self.SPEC, "- [ ] **C2.**", "- ~~**C3.** dropped~~ Dropped: out of scope.\n- [ ] **C2.**")
+        self.assertEqual(self.problems(), [])
+
+    def test_ids_match_their_section(self):
+        self.edit(self.SPEC, "- [ ] **A1.**", "- [ ] **C9.**")
+        self.assertFlags("C9 is under Anti-criteria; ids there start with A")
+
+    def test_anti_criteria_are_required(self):
+        self.edit(self.SPEC, "## Anti-criteria", "## Worries")
+        self.assertFlags("no '## Anti-criteria' section")
+
+    def test_done_phase_with_unchecked_boxes_is_flagged(self):
+        self.edit("ROADMAP.md", "| Specced |", "| Done |")
+        self.assertFlags("the phase is Done but 3 box(es) are unchecked")
+
+    def test_done_phase_with_every_box_proven_passes(self):
+        self.edit("ROADMAP.md", "| Specced |", "| Done |")
+        path = self.repo / self.SPEC
+        path.write_text(path.read_text().replace("- [ ] ", "- [x] ").replace("Probe: filled.", "Probe: filled. Evidence: ran it.")
+                        .replace("0 problems.", "0 problems. Evidence: ran it."))
+        self.assertEqual(self.problems(), [])
 
     def test_roadmap_and_specs_match(self):
         self.edit("ROADMAP.md", "| P1 filled | Specced |", "| P1 filled | Specced |\n| P2 Next | Not started | x |")
