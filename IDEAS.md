@@ -71,3 +71,23 @@ Context and reasoning: [notes in agent-ledger](https://github.com/lyddonb/agent-
 - **Ambient caution for Dr Eggbot.** The always-running maintenance agent above is what the
   essay calls an ambient agent. Give it its own charter covering what it may read and who it
   may message, beyond the `outbound-message` gate.
+
+## From "intent over steps" (2026-11-16)
+
+From a thread on running an agent system on intent, ideal states and evals instead of
+step-by-step instructions. Context and the full mapping to this repo:
+[notes in agent-ledger](https://github.com/lyddonb/agent-ledger/blob/main/docs/notes/intent-over-steps.md). The ideal-state spec landed in bstack 0.11.0; R21 to R26
+in the roadmap carry the next parts.
+
+- **A notifier for scheduled jobs.** One place that reads each scheduled job's result (CFO
+  brief, quality brief, maintain-verification-skill) and decides: a message now, a line in a
+  daily digest, or nothing. Worth it once three or more jobs run on a schedule.
+- **"Should work" is not a status.** A check in `unslop` or `verify-work` that flags replies
+  and PR bodies claiming something works without a VERIFIED result or a receipt.
+- **Hillclimb on the books.** R17's Hillclimb playbook, fed from the quality books and the
+  CFO books: pick one number below target, run experiments, keep only what the numbers support.
+- **A pointer to life goals, not the goals themselves.** A private profile could point
+  agents at the goals in the PKM vault, so a project's VISION.md can say which life goal it
+  serves. Keep the content out of this public repo.
+- **The surprising level as an eval target.** Collect the "Surprising" lines from shipped
+  specs and see which ones actually happened, to learn whether level 3 steers anything.

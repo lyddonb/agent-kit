@@ -144,6 +144,52 @@ shorter prompts, not new behavior.
 **Prioritize when:** before the next round of beau-mode tuning (R10), so edits land on the
 current text.
 
+### R21. A receipt for every criterion
+**What:** `verify-work` and each project's `verify-<app>` skill write one ledger entry per
+criterion they probe (`P1-C3`: pass or fail, the probe that ran, the evidence). The Opening a
+PR playbook renders those entries as a receipt table in the PR body, and the Product phase
+playbook checks a spec box only when a receipt backs it. Nothing reaches the human on a
+self-review: the receipt says which checks ran and which didn't.
+**Why not done:** Needs the criterion ids that bstack 0.11.0 added, and a `data` convention
+for criterion results in agent-ledger (its IDEAS.md, "Criterion receipts"). Design the
+convention once, from one real phase.
+**Prioritize when:** the next product phase reaches Building on the new spec format.
+Context: [intent over steps](https://github.com/lyddonb/agent-ledger/blob/main/docs/notes/intent-over-steps.md).
+
+### R22. Spec drift gate: CI first, then a hook
+**What:** `check-product.py --base REF` fails a PR that changes source files but neither
+changes a phase spec nor cites a criterion id (`P1-C3`) in its commits or body. Ship it as a
+CI step in the scaffold templates so it holds in every tool. Then, behind agentfiles'
+`allow: [hooks]`, an optional Claude Code hook that stops an edit when the session hasn't read
+the active spec.
+**Why not done:** The rule needs criterion ids (now in place) and a tuned list of paths that
+count as source. A hook alone would only hold in Claude Code (see R6).
+**Prioritize when:** a merged PR changes behavior a spec doesn't describe, or R21 lands.
+
+### R23. Rejections sharpen the criteria
+**What:** When the human rejects work whose checks passed, the agent records a `rejection`
+ledger entry: what was rejected, the criterion or probe that was missing, and the new
+criterion it added. `reflect` and `correct` read past rejections across sessions, not only
+the current transcript, and a fix counts only when the new probe fails on the rejected work
+and passes on the fix. This is the persistent complaint log (ERRATA in the source thread).
+**Why not done:** The Product phase playbook now does this inside one spec; a cross-session
+log needs the `rejection` entry type in agent-ledger.
+**Prioritize when:** the same kind of rejection happens twice.
+
+### R24. Goals say what measures them, what moves them and the first move
+**What:** The `docs/VISION.md` goals table gains three columns: Measure, Lever and First move.
+`check-product.py` fails a goal row with any of them empty. The scaffold interview asks for
+them, and a phase that serves a goal names which lever it pulls.
+**Why not done:** Kept out of 0.11.0 so the spec format change landed alone.
+**Prioritize when:** the next VISION.md is written or upgraded.
+
+### R26. A bug that survives two fixes gets a fresh diagnosis
+**What:** The Bug fix playbook stops after two fixes that didn't hold and starts over with a
+new diagnosis from the symptom (a fresh subagent that hasn't seen the failed fixes, ideally on
+the `judgment` model), instead of a third patch.
+**Why not done:** Small, but it should come from a real case so the wording fits.
+**Prioritize when:** next, or the first time a third patch is about to land.
+
 ## P2
 
 ### R15. `lead-mode` for engineering leadership work
@@ -188,6 +234,15 @@ installing one skill alone still works.
 **Why not done:** Both skills ship in bstack and install side by side in every supported tool,
 so the sibling path works today.
 **Prioritize when:** someone installs `recall` without `reflect`.
+
+### R25. Skills describe outcomes; cut steps a smarter model wouldn't need
+**What:** Audit each bstack skill and playbook with one test: would a stronger model need
+this step? Keep steps that enforce a gate, a verification or a record (those are the point).
+Cut steps that only teach how. Measure the always-on and per-skill token cost before and
+after.
+**Why not done:** Playbooks are step-by-step on purpose, so weaker models in Codex or pi
+still hit the gates. Cutting needs evidence from runs in more than one tool (R10, R13).
+**Prioritize when:** R13's evals exist, so a cut can be shown not to lose a gate.
 
 ---
 
