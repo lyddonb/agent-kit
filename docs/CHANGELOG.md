@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.13.1 (2026-11-16)
+
+- `check-product.py --receipts` no longer accepts a receipt for a criterion whose text or probe was rewritten afterward, and `receipt.py` records INCONCLUSIVE when an untracked file was present before the probe.
+- Ticking two boxes in turn, updating `ROADMAP.md` and the other record files, or renaming a spec no longer makes a receipt fail. A receipt whose commit is missing from the clone now says to run the probe again.
+
 ## bstack 0.13.0 (2026-11-16)
 
 - A checked spec criterion now has a receipt: a ledger entry saying which probe ran, on which commit, and what came back. verify-work's `scripts/receipt.py` runs the probe and writes it, so the verdict comes from the exit code.
