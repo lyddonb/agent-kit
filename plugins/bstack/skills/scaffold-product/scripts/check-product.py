@@ -2,10 +2,18 @@
 """Check that a repo follows the product layout from bstack's scaffold-product skill.
 
 Usage:
-    python3 check-product.py [REPO_DIR]
+    python3 check-product.py [REPO_DIR] [--receipts RUN_ID [--base REF]]
 
 Prints one `file:line: problem` line per problem on stderr and a summary on stdout.
 Exit code 0 when there are no problems, 1 when there are some, 2 on bad usage.
+
+With --receipts RUN_ID, every box this branch newly checked (`- [x]` in a phase spec now, not
+`[x]` in the same file at REF, default origin/main) must be backed by a receipt: the run's last
+`verification` entry for that criterion in .audit/runs/RUN_ID/ledger.jsonl (written by
+verify-work's receipt.py) says VERIFIED, names this spec, hashes to the spec at its commit, and
+no source has changed since that commit (changes under .audit/, .evidence/ and docs/phases/
+don't count).
+Needs `ledger` on PATH; exit 2 when it, the run folder or REF is missing.
 
 The layout (see the skill's references/layout.md):
   AGENTS.md, README.md, ROADMAP.md, HUMAN_TASKS.md, IDEAS.md
@@ -17,7 +25,11 @@ The layout (see the skill's references/layout.md):
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -253,18 +265,150 @@ def drafts(repo: Path) -> int:
     return sum(f.read_text(encoding="utf-8").count("(draft") for f in files if f.is_file())
 
 
+CHECKED_ITEM = re.compile(r"^\s*- \[[xX]\] \*\*([A-Z]\d+)\.\*\*")
+
+
+class UsageError(Exception):
+    pass
+
+
+def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+
+def checked_ids(text: str) -> dict[str, int]:
+    """Each checked item id mapped to the line it is first checked on."""
+    found: dict[str, int] = {}
+    for i, l in enumerate(text.splitlines()):
+        m = CHECKED_ITEM.match(l)
+        if m:
+            found.setdefault(m.group(1), i + 1)
+    return found
+
+
+def newly_checked(repo: Path, base: str) -> list[tuple[Path, str, str, int]]:
+    """(spec, phase id, item id, line) for each item checked now and not checked in the same file at base."""
+    out = []
+    for spec in sorted((repo / "docs/phases").glob("*.md")) if (repo / "docs/phases").is_dir() else []:
+        m = PHASE_FILE.match(spec.name)
+        if not m:
+            continue
+        shown = git(repo, "show", f"{base}:docs/phases/{spec.name}")
+        before = checked_ids(shown.stdout) if shown.returncode == 0 else {}
+        for cid, line in checked_ids(spec.read_text(encoding="utf-8")).items():
+            if cid not in before:
+                out.append((spec, m.group(1), cid, line))
+    return out
+
+
+def last_receipts(ledger_file: Path) -> dict[str, dict]:
+    """criterion -> the verification entry's data of the last receipt for it."""
+    found: dict[str, dict] = {}
+    for raw in ledger_file.read_text(encoding="utf-8").splitlines():
+        entry = json.loads(raw)
+        data = entry.get("data")
+        receipt = data.get("receipt") if isinstance(data, dict) else None
+        if entry.get("type") == "verification" and isinstance(receipt, dict) and isinstance(receipt.get("criterion"), str):
+            found[receipt["criterion"]] = data
+    return found
+
+
+def receipt_problems(repo: Path, rel: str, line: int, crit: str, data: dict | None) -> list[str]:
+    where = f"{rel}:{line}: {crit}"
+    if data is None:
+        return [f"{where} is checked but has no receipt in the run's ledger (run verify-work's receipt.py for it)"]
+    receipt = data["receipt"]
+    verdict = data.get("verdict")
+    if verdict != "VERIFIED":
+        return [f"{where}: its last receipt says {verdict}, not VERIFIED"]
+    if receipt.get("spec") != rel:
+        return [f"{where}: its receipt names spec {receipt.get('spec')}, not {rel}"]
+    commit = str(receipt.get("commit"))
+    shown = subprocess.run(["git", "-C", str(repo), "show", f"{commit}:{rel}"], capture_output=True)
+    if shown.returncode != 0:
+        return [f"{where}: its receipt's commit {commit[:12]} has no {rel} in this repo"]
+    out = []
+    if hashlib.sha256(shown.stdout).hexdigest() != receipt.get("spec_sha256"):
+        out.append(f"{where}: {rel} at receipt commit {commit[:12]} does not match the receipt's spec_sha256")
+    # phase specs are excluded as a folder: one PR can tick boxes in two specs, and each receipt
+    # pins the text it was checked against with spec_sha256
+    excludes = ["--", ".", ":(exclude).audit", ":(exclude).evidence", ":(exclude)docs/phases", f":(exclude){rel}"]
+    if git(repo, "diff", "--quiet", commit, "HEAD", *excludes).returncode != 0:
+        out.append(f"{where}: its receipt is stale; source changed after commit {commit[:12]} (re-run its probe)")
+    elif git(repo, "status", "--porcelain", "--untracked-files=no", *excludes).stdout.strip():
+        out.append(f"{where}: its receipt is stale; tracked files have uncommitted changes (commit them, then re-run its probe)")
+    return out
+
+
+def check_receipts(repo: Path, run_id: str, base: str) -> tuple[list[str], int, int]:
+    """Problems for newly checked boxes without a current receipt, how many are new, how many backed."""
+    if shutil.which("ledger") is None:
+        raise UsageError("`ledger` is not on PATH; --receipts needs agent-ledger")
+    if git(repo, "rev-parse", "--git-dir").returncode != 0:
+        raise UsageError(f"{repo} is not inside a git repo; --receipts reads git history")
+    run_dir = repo / ".audit/runs" / run_id
+    if not (run_dir / "ledger.jsonl").is_file():
+        raise UsageError(f"no ledger for run {run_id} at .audit/runs/{run_id}/ledger.jsonl")
+    if git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode != 0:
+        raise UsageError(f"base ref {base} does not exist here (fetch it, or pass --base)")
+    new = newly_checked(repo, base)
+    if subprocess.run(["ledger", "verify", f".audit/runs/{run_id}"], cwd=repo, capture_output=True).returncode != 0:
+        return ["the run's ledger fails verify"], len(new), 0
+    receipts = last_receipts(run_dir / "ledger.jsonl")
+    problems: list[str] = []
+    backed = 0
+    for spec, phase, cid, line in new:
+        found = receipt_problems(repo, f"docs/phases/{spec.name}", line, f"{phase}-{cid}", receipts.get(f"{phase}-{cid}"))
+        problems += found
+        backed += not found
+    return problems, len(new), backed
+
+
+def parse(argv: list[str]) -> tuple[str, str | None, str]:
+    """(repo dir, receipts run id, base ref), or UsageError."""
+    positional: list[str] = []
+    opts: dict[str, str] = {}
+    it = iter(argv[1:])
+    for a in it:
+        if a in ("-h", "--help"):
+            raise UsageError("")
+        if a in ("--receipts", "--base"):
+            value = next(it, None)
+            if value is None or value.startswith("--"):
+                raise UsageError(f"{a} needs a value")
+            opts[a] = value
+        else:
+            positional.append(a)
+    if len(positional) > 1:
+        raise UsageError("")
+    if "--base" in opts and "--receipts" not in opts:
+        raise UsageError("--base only goes with --receipts")
+    return (positional[0] if positional else "."), opts.get("--receipts"), opts.get("--base", "origin/main")
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) > 2 or (len(argv) == 2 and argv[1] in ("-h", "--help")):
-        print(__doc__.strip(), file=sys.stderr)
+    try:
+        repo_arg, run_id, base = parse(argv)
+    except UsageError as e:
+        print(f"{e}\n{__doc__.strip()}".strip(), file=sys.stderr)
         return 2
-    repo = Path(argv[1] if len(argv) == 2 else ".").resolve()
+    repo = Path(repo_arg).resolve()
     if not repo.is_dir():
         print(f"not a directory: {repo}", file=sys.stderr)
         return 2
     problems = check(repo)
+    receipt_line = ""
+    if run_id is not None:
+        try:
+            more, new, backed = check_receipts(repo, run_id, base)
+        except UsageError as e:
+            print(f"check-product: {e}", file=sys.stderr)
+            return 2
+        problems += more
+        receipt_line = f", receipts: {new} newly checked, {backed} backed"
     for p in problems:
         print(p, file=sys.stderr)
-    print(f"check-product: {repo.name}: {len(problems)} problem(s), {drafts(repo)} draft marker(s) awaiting confirmation")
+    print(f"check-product: {repo.name}: {len(problems)} problem(s), {drafts(repo)} draft marker(s) awaiting confirmation{receipt_line}")
     return 1 if problems else 0
 
 

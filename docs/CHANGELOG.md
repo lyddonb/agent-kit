@@ -3,6 +3,13 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.13.0 (2026-11-16)
+
+- A checked spec criterion now has a receipt: a ledger entry saying which probe ran, on which commit, and what came back. verify-work's `scripts/receipt.py` runs the probe and writes it, so the verdict comes from the exit code.
+- A PR that moves criteria carries the `ledger receipts` table in its Verification section, and the Product phase playbook checks a box only on a VERIFIED receipt.
+- `check-product.py --receipts <run-id>` fails when a box was checked without a VERIFIED receipt, or when the code changed after the probe ran. Needs agent-ledger 1.1.0 or newer.
+- Try: `Run the probe for the next unchecked criterion in this phase and show me its receipt.`
+
 ## bstack 0.12.0 (2026-11-16)
 
 - A product phase spec is now its ideal state: three levels (Done, Good, Surprising), criteria and anti-criteria with ids (`C1`, `A1`), and the probe that would prove each one false. A person confirms Done and Good before building starts, and the spec stays after the phase is done.

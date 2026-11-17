@@ -144,18 +144,6 @@ shorter prompts, not new behavior.
 **Prioritize when:** before the next round of beau-mode tuning (R10), so edits land on the
 current text.
 
-### R21. A receipt for every criterion
-**What:** `verify-work` and each project's `verify-<app>` skill write one ledger entry per
-criterion they probe (`P1-C3`: pass or fail, the probe that ran, the evidence). The Opening a
-PR playbook renders those entries as a receipt table in the PR body, and the Product phase
-playbook checks a spec box only when a receipt backs it. Nothing reaches the human on a
-self-review: the receipt says which checks ran and which didn't.
-**Why not done:** Needs the criterion ids that bstack 0.11.0 added, and a `data` convention
-for criterion results in agent-ledger (its IDEAS.md, "Criterion receipts"). Design the
-convention once, from one real phase.
-**Prioritize when:** the next product phase reaches Building on the new spec format.
-Context: [intent over steps](https://github.com/lyddonb/agent-ledger/blob/main/docs/notes/intent-over-steps.md).
-
 ### R22. Spec drift gate: CI first, then a hook
 **What:** `check-product.py --base REF` fails a PR that changes source files but neither
 changes a phase spec nor cites a criterion id (`P1-C3`) in its commits or body. Ship it as a
@@ -164,7 +152,8 @@ CI step in the scaffold templates so it holds in every tool. Then, behind agentf
 the active spec.
 **Why not done:** The rule needs criterion ids (now in place) and a tuned list of paths that
 count as source. A hook alone would only hold in Claude Code (see R6).
-**Prioritize when:** a merged PR changes behavior a spec doesn't describe, or R21 lands.
+**Prioritize when:** a merged PR changes behavior a spec doesn't describe. Criterion receipts, which
+this was waiting on, shipped in bstack 0.13.0.
 
 ### R23. Rejections sharpen the criteria
 **What:** When the human rejects work whose checks passed, the agent records a `rejection`
