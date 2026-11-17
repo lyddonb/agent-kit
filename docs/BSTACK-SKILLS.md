@@ -173,16 +173,16 @@ It reads only the current project's transcripts. To resume one specific session 
 |---|---|
 | Use for | Starting a product repo, or adopting an existing repo that predates this workflow: "scaffold this repo", "adopt pkb into beau-mode". |
 | Needs | For a new product, answers about the problem and goals. For an existing repo, its code and history. |
-| Returns | `docs/VISION.md` (goals G1, G2...), `docs/DECISIONS.md`, phase specs in `docs/phases/`, `ROADMAP.md`, `HUMAN_TASKS.md`, `IDEAS.md`, an AGENTS.md that names the `verify-<app>` skill, and the output of `scaffold-product/scripts/check-product.py`. In adopt mode, also a table mapping old docs to new ones. |
+| Returns | `docs/VISION.md` (goals G1, G2...), `docs/DECISIONS.md`, phase specs in `docs/phases/` (each an ideal state with three levels, criteria and anti-criteria with probes), `ROADMAP.md`, `HUMAN_TASKS.md`, `IDEAS.md`, an AGENTS.md that names the `verify-<app>` skill, and the output of `scaffold-product/scripts/check-product.py`. In adopt mode, also a table mapping old docs to new ones. It also upgrades a repo whose specs use the older `## Acceptance` format. |
 | Example | `/scaffold-product adopt this repo. it predates beau-mode.` |
 
 ### Product phase (a beau-mode playbook)
 
 | | |
 |---|---|
-| Use for | Moving one phase one step: Not started → Specced → Planned → Building → Gated → Done. |
+| Use for | Moving one phase one step: Not started → Specced → Planned → Building → Gated → Done, working from the spec's failing criteria. Also adding a feature to a done phase as new criteria. |
 | Needs | A repo with the scaffold-product layout. Without one, it runs scaffold-product first. |
-| Returns | The next step only: a spec, a plan (via Multi-phase plan), a PR, or the gate closed with evidence, and `ROADMAP.md` updated to match. |
+| Returns | The next step only: a spec, a plan (via Multi-phase plan), a PR, or the gate closed, with each criterion it moved and its evidence, the criteria still failing, and `ROADMAP.md` updated to match. |
 | Example | `/beau-mode advance docs/phases/P2-digests.md` |
 
 ## Review and trails

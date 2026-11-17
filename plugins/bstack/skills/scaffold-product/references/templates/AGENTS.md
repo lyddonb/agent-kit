@@ -6,7 +6,7 @@ Instructions for coding agents building {{product}}. `CLAUDE.md` imports this fi
 
 1. [README.md](README.md) for what this is and how to run it.
 2. [docs/VISION.md](docs/VISION.md) for the goals (G1, G2, ...) and non-goals.
-3. The phase spec you are working on, in `docs/phases/`, and its plan in `docs/plans/` if one exists.
+3. The phase spec you are working on, in `docs/phases/`: its ideal state, criteria and anti-criteria are what done means. Then its plan in `docs/plans/` if one exists.
 4. [docs/DECISIONS.md](docs/DECISIONS.md) before you change anything it covers. To reverse a decision, add a new one. Don't edit the old one.
 
 ## How to work a phase
@@ -17,7 +17,8 @@ Use beau-mode's **Product phase** playbook:
 /beau-mode advance docs/phases/P1-{{first-slug}}.md
 ```
 
-- The phase spec is **what** to build and how we know it works. The plan is **how**: small PRs, each with evidence.
+- The phase spec is **what** done looks like and the probe for each criterion. The plan is **how**: small PRs, each with evidence. Plans are deleted when the phase is done; specs stay.
+- A new feature in a done phase's area is new unchecked criteria in that spec, not a task list.
 - Every PR proves its behavior through the `verify-{{app}}` skill and puts its output in the PR body.
 - If the spec is wrong or silent, fix the spec in the same PR and say why. Don't build past a gap.
 - Product or preference questions go to a person with options. Settle anything you can observe (behavior, cost, timing) by running something.
@@ -41,5 +42,6 @@ Use beau-mode's **Product phase** playbook:
 - Lint, types and tests pass.
 - `verify-{{app}}` passes and its output is in the PR body.
 - New behavior has a test. A bug fix has a test that failed first.
-- Docs updated in the same PR: the phase spec's acceptance boxes, `ROADMAP.md` status, and `docs/DECISIONS.md` if you made a call.
+- The PR body lists the criteria it moves (`P1-C3`, `P1-A1`) with the evidence for each, and the spec checks those boxes with `Evidence:`.
+- Docs updated in the same PR: the phase spec, `ROADMAP.md` status, and `docs/DECISIONS.md` if you made a call.
 - `python3 <scaffold-product skill folder>/scripts/check-product.py .` reports 0 problems.

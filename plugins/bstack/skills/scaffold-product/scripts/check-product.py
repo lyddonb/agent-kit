@@ -11,7 +11,7 @@ The layout (see the skill's references/layout.md):
   AGENTS.md, README.md, ROADMAP.md, HUMAN_TASKS.md, IDEAS.md
   docs/VISION.md      goals table with G ids, and non-goals
   docs/DECISIONS.md   numbered decisions, append-only
-  docs/phases/<id>-<slug>.md   one spec per phase, with an acceptance checklist
+  docs/phases/<id>-<slug>.md   one spec per phase: ideal state, criteria and anti-criteria with probes
   docs/plans/         temporary plans; deleted when their phase is done
   a verify-<app> skill that AGENTS.md names
 """
@@ -23,7 +23,15 @@ from pathlib import Path
 
 REQUIRED_FILES = ["AGENTS.md", "README.md", "ROADMAP.md", "HUMAN_TASKS.md", "IDEAS.md",
                   "docs/VISION.md", "docs/DECISIONS.md"]
-ACCEPTANCE = re.compile(r"^#{2,3} Acceptance\b", re.M)
+LEGACY_ACCEPTANCE = re.compile(r"^#{2,3} Acceptance\b", re.M)
+HEADING = re.compile(r"^#{2,3} (.+?)\s*$")
+LEVEL = re.compile(r"^\s*\d\.\s+\*\*(Done|Good|Surprising)\.\*\*")
+CONFIRMED = re.compile(r"^\*\*Confirmed\.\*\*(.*)$")
+ITEM_ID = re.compile(r"^\s*- (?:\[[ xX]\] )?(?:~~)?\*\*([A-Z]\d+)\.\*\*")
+STRUCK = re.compile(r"^\s*- ~~\*\*[A-Z]\d+\.\*\*")
+PROBE = re.compile(r"\bProbe:", re.I)
+EVIDENCE = re.compile(r"\bEvidence:", re.I)
+NEEDS_CONFIRMATION = ("planned", "building", "in progress", "gated")
 STATUSES = ("not started", "specced", "planned", "building", "in progress", "gated", "done", "parked")
 DECISION = re.compile(r"^### D(\d+)\.\s+\S")
 DECISION_STATUS = re.compile(r"^\*(Accepted|Proposed|Superseded|Rejected)\b")
@@ -72,6 +80,21 @@ def check(repo: Path) -> list[str]:
             if not DECISION_STATUS.match(nxt.strip()):
                 out.append(f"docs/DECISIONS.md:{i + 1}: D{n} has no status line (*Accepted YYYY-MM-DD.*) under its heading")
 
+    roadmap = repo / "ROADMAP.md"
+    in_roadmap: dict[str, str] = {}
+    roadmap_lines: dict[str, int] = {}
+    if roadmap.is_file():
+        for i, l in enumerate(lines(roadmap)):
+            m = ROADMAP_ROW.match(l)
+            if not m:
+                continue
+            pid, status = m.group(1), m.group(2).strip().strip("*").strip().lower()
+            in_roadmap[pid] = status
+            roadmap_lines[pid] = i + 1
+            if not status.startswith(STATUSES):
+                out.append(f"ROADMAP.md:{i + 1}: {pid} status '{m.group(2).strip()[:40]}' should start with one of: "
+                           + ", ".join(s.capitalize() for s in STATUSES))
+
     phases_dir = repo / "docs/phases"
     specs: dict[str, Path] = {}
     if not phases_dir.is_dir() or not any(phases_dir.glob("*.md")):
@@ -83,35 +106,12 @@ def check(repo: Path) -> list[str]:
                 out.append(f"docs/phases/{spec.name}: name it P<n>-<slug>.md (for example P1-first-slice.md)")
                 continue
             specs[m.group(1)] = spec
-            text = spec.read_text(encoding="utf-8")
-            if "**Outcome.**" not in text:
-                out.append(f"docs/phases/{spec.name}:1: no `**Outcome.**` line saying what a user will notice when it ships")
-            for i, l in enumerate(text.splitlines()):
-                if l.startswith("**Serves.**"):
-                    cited = re.findall(r"\bG\d+\b", l.split("**Depends on.**")[0])
-                    for g in cited:
-                        if goals and g not in goals:
-                            out.append(f"docs/phases/{spec.name}:{i + 1}: serves {g}, which is not a goal in docs/VISION.md")
-            parts = ACCEPTANCE.split(text)
-            if len(parts) == 1:
-                out.append(f"docs/phases/{spec.name}:1: no '## Acceptance' section")
-            elif not any(BOX.match(l) for part in parts[1:] for l in part.splitlines()):
-                out.append(f"docs/phases/{spec.name}:1: Acceptance has no '- [ ]' boxes; each criterion must be checkable")
+            out += check_spec(spec, goals, in_roadmap.get(m.group(1), ""))
 
-    roadmap = repo / "ROADMAP.md"
-    in_roadmap: dict[str, str] = {}
+    for pid, line in roadmap_lines.items():
+        if specs and pid not in specs:
+            out.append(f"ROADMAP.md:{line}: {pid} has no spec in docs/phases/")
     if roadmap.is_file():
-        for i, l in enumerate(lines(roadmap)):
-            m = ROADMAP_ROW.match(l)
-            if not m:
-                continue
-            pid, status = m.group(1), m.group(2).strip().strip("*").strip().lower()
-            in_roadmap[pid] = status
-            if not status.startswith(STATUSES):
-                out.append(f"ROADMAP.md:{i + 1}: {pid} status '{m.group(2).strip()[:40]}' should start with one of: "
-                           + ", ".join(s.capitalize() for s in STATUSES))
-            if specs and pid not in specs:
-                out.append(f"ROADMAP.md:{i + 1}: {pid} has no spec in docs/phases/")
         for pid, spec in specs.items():
             if pid not in in_roadmap:
                 out.append(f"docs/phases/{spec.name}: {pid} is not in ROADMAP.md's phase table")
@@ -139,6 +139,110 @@ def check(repo: Path) -> list[str]:
         for name in named:
             if not any((repo / d / name / "SKILL.md").is_file() for d in (".agents/skills", ".claude/skills", "skills")):
                 out.append(f"AGENTS.md:1: names {name}, but no {name}/SKILL.md under .agents/skills, .claude/skills or skills")
+    return out
+
+
+def sections(text: list[str]) -> dict[str, tuple[int, list[str]]]:
+    """Each `## Heading` (lowercased) mapped to (its line number, the lines under it)."""
+    found: dict[str, tuple[int, list[str]]] = {}
+    current = None
+    for i, l in enumerate(text):
+        m = HEADING.match(l)
+        if m:
+            current = m.group(1).lower()
+            found[current] = (i + 1, [])
+        elif current:
+            found[current][1].append(l)
+    return found
+
+
+def items(start: int, body: list[str]) -> list[tuple[int, str]]:
+    """Top-level list items with their line numbers; an indented line continues the item above it."""
+    found: list[tuple[int, str]] = []
+    for i, l in enumerate(body):
+        if l.startswith("- "):
+            found.append((start + i + 1, l))
+        elif found and l.startswith((" ", "\t")) and l.strip():
+            found[-1] = (found[-1][0], found[-1][1] + " " + l.strip())
+    return found
+
+
+def check_spec(spec: Path, goals: set[str], status: str) -> list[str]:
+    """A phase spec: outcome, goals served, ideal state, criteria and anti-criteria with probes."""
+    out: list[str] = []
+    name = f"docs/phases/{spec.name}"
+    text = spec.read_text(encoding="utf-8")
+    body = text.splitlines()
+    if "**Outcome.**" not in text:
+        out.append(f"{name}:1: no `**Outcome.**` line saying what a user will notice when it ships")
+    for i, l in enumerate(body):
+        if l.startswith("**Serves.**"):
+            for g in re.findall(r"\bG\d+\b", l.split("**Depends on.**")[0]):
+                if goals and g not in goals:
+                    out.append(f"{name}:{i + 1}: serves {g}, which is not a goal in docs/VISION.md")
+    if LEGACY_ACCEPTANCE.search(text):
+        line = next(i + 1 for i, l in enumerate(body) if LEGACY_ACCEPTANCE.match(l))
+        out.append(f"{name}:{line}: older spec format ('## Acceptance'); upgrade it to an ideal state, criteria and "
+                   f"anti-criteria (scaffold-product's 'Upgrade a repo on the older spec format')")
+        return out
+    parts = sections(body)
+
+    ideal = parts.get("ideal state")
+    if not ideal:
+        out.append(f"{name}:1: no '## Ideal state' section with the levels Done, Good and Surprising")
+    else:
+        levels = {m.group(1) for l in ideal[1] if (m := LEVEL.match(l))}
+        missing = [lv for lv in ("Done", "Good", "Surprising") if lv not in levels]
+        if missing:
+            out.append(f"{name}:{ideal[0]}: ideal state has no level " + ", ".join(f"**{lv}.**" for lv in missing))
+        confirmed = next(((ideal[0] + i + 1, m.group(1).strip()) for i, l in enumerate(ideal[1])
+                          if (m := CONFIRMED.match(l.strip()))), None)
+        if confirmed is None:
+            out.append(f"{name}:{ideal[0]}: ideal state has no `**Confirmed.**` line "
+                       f"(write 'Not yet' until a person confirms levels 1 and 2)")
+        elif status.startswith(NEEDS_CONFIRMATION):
+            line, said = confirmed
+            if not said or said.lower().startswith("not yet") or "(draft" in said:
+                out.append(f"{name}:{line}: the phase is {next(s for s in NEEDS_CONFIRMATION if status.startswith(s)).capitalize()} but no person has confirmed "
+                           f"levels 1 and 2 of its ideal state; get that before building")
+
+    seen: dict[str, int] = {}
+    unchecked = 0
+    for section, prefix, word in (("criteria", "C", "criterion"), ("anti-criteria", "A", "anti-criterion")):
+        part = parts.get(section)
+        if not part:
+            out.append(f"{name}:1: no '## {section.capitalize()}' section")
+            continue
+        boxes = 0
+        for line, item in items(*part):
+            m = ITEM_ID.match(item)
+            if STRUCK.match(item):
+                if m:
+                    seen.setdefault(m.group(1), line)
+                continue
+            if not BOX.match(item):
+                continue
+            boxes += 1
+            if not m:
+                out.append(f"{name}:{line}: {word} has no id; start it with **{prefix}<n>.**")
+                continue
+            cid = m.group(1)
+            if not cid.startswith(prefix):
+                out.append(f"{name}:{line}: {cid} is under {section.capitalize()}; ids there start with {prefix}")
+            if cid in seen:
+                out.append(f"{name}:{line}: {cid} is used twice in this spec (first at line {seen[cid]}); ids are never reused")
+            seen.setdefault(cid, line)
+            if not PROBE.search(item):
+                out.append(f"{name}:{line}: {cid} names no 'Probe:' (the run, test or measurement that would prove it false)")
+            checked = item.startswith(("- [x]", "- [X]"))
+            if checked and not EVIDENCE.search(item):
+                out.append(f"{name}:{line}: {cid} is checked without 'Evidence:'")
+            unchecked += not checked
+        if boxes == 0:
+            out.append(f"{name}:{part[0]}: {section.capitalize()} has no '- [ ] **{prefix}1.**' boxes")
+    if status.startswith("done") and unchecked:
+        out.append(f"{name}:1: the phase is Done but {unchecked} box(es) are unchecked; prove them, or move the "
+                   f"ROADMAP row back to Building")
     return out
 
 

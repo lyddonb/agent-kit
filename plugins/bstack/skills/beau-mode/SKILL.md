@@ -176,7 +176,7 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - **Opening a PR** (`playbooks/opening-a-pr.md`). The last step of every playbook that changes code.
 - **Pause safely** (`playbooks/pause-safely.md`). An explicit request to pause, going offline, a restart, or imminent context compaction. Never on "keep going".
 - **Perf issue** (`playbooks/perf-issue.md`). A measured slowness to trace and improve against a baseline.
-- **Product phase** (`playbooks/product-phase.md`). Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, or closing it at its gate. Also the entry point for starting a product.
+- **Product phase** (`playbooks/product-phase.md`). Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, adding a feature to a phase that is done, or closing it at its gate. Also the entry point for starting a product.
 - **Prototype** (`playbooks/prototype.md`). A throwaway sketch to make a design or behavior decision cheaply, or to settle a factual question by observing it instead of asking.
 - **Refactoring** (`playbooks/refactoring.md`). A behavior-preserving change to structure: rename, extract, inline, dedupe, move, reshape an API.
 - **Session pickup** (`playbooks/session-pickup.md`). Resuming or taking over another agent's in-flight work from a transcript, a handoff note, or a pushed branch.

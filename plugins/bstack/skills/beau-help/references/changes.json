@@ -1,6 +1,19 @@
 {
   "entries": [
     {
+      "id": "bstack@0.11.0",
+      "date": "2026-11-16",
+      "plugin": "bstack",
+      "version": "0.11.0",
+      "changes": [
+        "A product phase spec is now its ideal state: three levels (Done, Good, Surprising), criteria and anti-criteria with ids (`C1`, `A1`), and the probe that would prove each one false. A person confirms Done and Good before building starts, and the spec stays after the phase is done.",
+        "The Product phase playbook works from the spec's failing criteria, runs each probe before and after a change, lists the criteria a PR moves with evidence (`P1-C3`), and adds a feature to a done phase as new unchecked criteria that reopen it. When you reject work whose criteria passed, it adds the missing criterion first.",
+        "`check-product.py` checks the new spec: the three levels and a `**Confirmed.**` line, a probe on every criterion and anti-criterion, unique ids, `Evidence:` on every checked box, a confirmation before a phase is Planned, Building, In progress or Gated, and no unchecked box in a Done phase.",
+        "Breaking for product repos: specs with an `## Acceptance` checklist fail `check-product.py` until upgraded. scaffold-product has an upgrade mode that converts them in one PR."
+      ],
+      "try": "/scaffold-product upgrade this repo's phase specs to the ideal-state format"
+    },
+    {
       "id": "bstack@0.10.2",
       "date": "2026-11-15",
       "plugin": "bstack",

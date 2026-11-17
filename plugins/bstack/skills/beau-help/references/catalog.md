@@ -30,7 +30,7 @@ Twenty-four named engineering principles (prove it works, fix root causes, subtr
 
 - `principles`: Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof.
 
-## bstack 0.10.2
+## bstack 0.11.0
 
 Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), improvement (reflect, correct, unslop), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
 
@@ -49,7 +49,7 @@ Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the
   - playbook **Opening a PR** (`playbooks/opening-a-pr.md`). The last step of every playbook that changes code.
   - playbook **Pause safely** (`playbooks/pause-safely.md`). An explicit request to pause, going offline, a restart, or imminent context compaction. Never on "keep going".
   - playbook **Perf issue** (`playbooks/perf-issue.md`). A measured slowness to trace and improve against a baseline.
-  - playbook **Product phase** (`playbooks/product-phase.md`). Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, or closing it at its gate. Also the entry point for starting a product.
+  - playbook **Product phase** (`playbooks/product-phase.md`). Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, adding a feature to a phase that is done, or closing it at its gate. Also the entry point for starting a product.
   - playbook **Prototype** (`playbooks/prototype.md`). A throwaway sketch to make a design or behavior decision cheaply, or to settle a factual question by observing it instead of asking.
   - playbook **Refactoring** (`playbooks/refactoring.md`). A behavior-preserving change to structure: rename, extract, inline, dedupe, move, reshape an API.
   - playbook **Session pickup** (`playbooks/session-pickup.md`). Resuming or taking over another agent's in-flight work from a transcript, a handoff note, or a pushed branch.

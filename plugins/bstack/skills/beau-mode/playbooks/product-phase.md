@@ -1,22 +1,25 @@
 ---
 id: product-phase
 title: Product phase
-when: "Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, or closing it at its gate. Also the entry point for starting a product."
+when: "Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, adding a feature to a phase that is done, or closing it at its gate. Also the entry point for starting a product."
 ---
 
 # Product phase
 
-**You own the phase from spec to gate.** A phase is a slice of product that serves a goal in `docs/VISION.md` and is done only when its acceptance boxes are checked with evidence. The layout and lifecycle are in the **scaffold-product** skill's `references/layout.md`.
+**You own the phase from spec to gate, and you work from what done looks like, not from a task list.** A phase spec is the ideal state for one slice of product: three levels (Done, Good, Surprising), criteria (`C1`, `C2`...) and anti-criteria (`A1`, `A2`...), each with the probe that would prove it false. The phase is done only when every box is checked with evidence. The spec outlives the work. The layout and lifecycle are in the **scaffold-product** skill's `references/layout.md`.
 
-1. **Orient.** Read `AGENTS.md`, `docs/VISION.md`, `ROADMAP.md`, `HUMAN_TASKS.md`, the phase spec and its plan. Run **recall** on the phase if someone worked it recently. If the repo has no `docs/VISION.md`, run **scaffold-product** first and stop at its PR.
-2. **Find where the phase is** in the lifecycle (Not started, Specced, Planned, Building, Gated, Done) and do only the next step:
-   - **Not started → Specced.** Write `docs/phases/P<n>-<slug>.md` from the template: outcome, the goals it serves, scope in and out, behavior, cost, acceptance boxes. Settle facts by running something (the Prototype playbook). Put product and preference calls to the human as options, and record each answer in `docs/DECISIONS.md`. Stop for the human to accept the spec.
-   - **Specced → Planned.** Run the Multi-phase plan playbook with the spec as the design. The plan lives at `docs/plans/P<n>-<slug>.md` and its live lanes go through the project's `verify-<app>` skill. Stop for the human's go.
-   - **Planned → Building.** Work the plan's next PR with the Feature, Bug fix or Refactoring playbook. Each PR ticks the spec's boxes it proves and updates `ROADMAP.md`.
-   - **Building → Gated.** When every build box is checked, the remaining boxes are gates that take time or the human (a week of clean runs, a review). Move the row to Gated and put each gate the human owns in `HUMAN_TASKS.md`.
-   - **Gated → Done.** When every box is checked with evidence, mark the row Done, delete the plan, and update the spec's goals if what you learned changes them.
-3. **Keep the spec true.** If the spec is wrong or silent, fix it in the same PR and say why in the PR body. Don't build past a gap. A reversed decision gets a new entry that supersedes the old one.
-4. **Check the repo** with `python3 <scaffold-product skill folder>/scripts/check-product.py .` before each PR, and fix every line it prints.
-5. Run **Opening a PR** for any change.
+1. **Orient.** Read `AGENTS.md`, `docs/VISION.md`, `ROADMAP.md`, `HUMAN_TASKS.md`, the phase spec and its plan. Run **recall** on the phase if someone worked it recently. If the repo has no `docs/VISION.md`, run **scaffold-product** first and stop at its PR. If the checker reports the older spec format, run scaffold-product's upgrade first and stop at its PR.
+2. **Find the failing criteria.** List each unchecked criterion and anti-criterion with its probe. That list is the work. Anything you'd do that moves none of them is outside the phase: put it in `IDEAS.md` or ask.
+3. **Find where the phase is** in the lifecycle (Not started, Specced, Planned, Building, Gated, Done) and do only the next step:
+   - **Not started → Specced.** Write `docs/phases/P<n>-<slug>.md` from the template. Draft the three levels first, then the criteria and anti-criteria that would prove levels 1 and 2. Every criterion names its probe. If you can't name one, the criterion is too vague: split it or ask. Anti-criteria come from the AGENTS.md rules, past bugs in this area and what a user would never forgive (lost data, a duplicate charge, a leaked secret). When the direction is fuzzy, ask the human open questions before you write criteria for the uncertain part. Settle facts by running something (the Prototype playbook). Put product and preference calls to the human as options, and record each answer in `docs/DECISIONS.md`. Stop for the human to confirm levels 1 and 2 and accept the spec.
+   - **Specced → Planned.** Only once the `**Confirmed.**` line names the person who confirmed levels 1 and 2. Run the Multi-phase plan playbook with the spec as the design. Each unit of the plan names the criteria it moves. The plan lives at `docs/plans/P<n>-<slug>.md` and its live lanes go through the project's `verify-<app>` skill. Stop for the human's go.
+   - **Planned → Building.** Work the plan's next PR with the Feature, Bug fix or Refactoring playbook. Run each criterion's probe before the change and see it fail, then after and see it pass. The PR body lists the criteria it moves (`P<n>-C3`) with the evidence for each. The spec checks those boxes with `Evidence:`, and `ROADMAP.md` is updated.
+   - **Building → Gated.** When every box that a PR can prove is checked, the rest are gates that take time or a person (a week of clean runs, a review). Move the row to Gated and put each gate the human owns in `HUMAN_TASKS.md`.
+   - **Gated → Done.** When every criterion and anti-criterion is checked with evidence, mark the row Done and delete the plan. Keep the spec. If what you learned changes the goals, propose the change.
+   - **Done, with new work in its area.** A feature that extends a done phase's outcome is new unchecked criteria in that spec. Add them, move the row back to Building, and get levels 1 and 2 confirmed again if the feature changes them. A new outcome is a new phase. A change that touches a done phase's area reruns that phase's probes.
+4. **Keep the spec true.** If the spec is wrong or silent, fix it in the same PR and say why in the PR body. Don't build past a gap. Never renumber or delete a criterion: strike it through with a reason (`- ~~**C4.** ...~~ Dropped: <why>.`). A reversed decision gets a new entry that supersedes the old one.
+5. **When the human rejects work whose criteria passed,** a criterion or probe is missing. Name it, add it to the spec unchecked, and show its probe failing on the rejected work before you fix anything. Sharpen the criteria, not the prompt.
+6. **Check the repo** with `python3 <scaffold-product skill folder>/scripts/check-product.py .` before each PR, and fix every line it prints.
+7. Run **Opening a PR** for any change.
 
-**Reply:** the phase, where it moved in the lifecycle and the evidence that moved it, decisions made or waiting on the human, and the next step.
+**Reply:** the phase, where it moved in the lifecycle, each criterion it moved with its evidence, the criteria still failing, decisions made or waiting on the human, and the next step.
