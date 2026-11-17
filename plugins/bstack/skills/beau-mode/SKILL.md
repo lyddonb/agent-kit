@@ -42,6 +42,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | Why it's that way, where a number came from | **why** |
 | The user wants to understand it, not just get an answer | **teach** |
 | Resuming the user's own recent work on a topic | **recall** |
+| A bug's root cause in code nobody fully understands, or after two failed theories | **root-cause** |
 | Proving a change works | **verify-work** |
 | A project has no scripted way to drive the app | **create-verification-skill**, then **maintain-verification-skill** daily |
 | Starting a product, or adopting an existing repo into this workflow | **scaffold-product** |

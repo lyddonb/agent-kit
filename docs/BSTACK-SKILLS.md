@@ -71,6 +71,17 @@ It searches every connected source in parallel, so a full run is slow. Narrow it
 
 It reads only the current project's transcripts. To resume one specific session instead, use beau-mode's Session pickup playbook.
 
+### root-cause
+
+| | |
+|---|---|
+| Use for | A bug or regression in code nobody fully understands (agent-written, unfamiliar), or after two theories have failed: "root-cause the p99 regression". |
+| Needs | Python 3.10+. A control: where the bug doesn't happen (flag off, the previous build, a healthy host). A subagent in the `reviewers` role, on a different model, for the three review gates. |
+| Returns | A case file (`.rootcause/<case>.jsonl`) and a report: the root cause, every fact with its citation, each ruled-out hypothesis with the fact that sank it, tactics tried, layers the agent couldn't reach, the reviews. `recheck` turns the case into a regression or deploy gate. |
+| Example | `/root-cause the importer drops rows only on the Tuesday batch` |
+
+It never names a cause while two hypotheses fit the facts. When it stalls, it asks for more facts or one layer down, not a cleverer theory. Based on Cindy Sridharan's debugging framework for code you no longer read.
+
 ## Prove it works
 
 ### verify-work
