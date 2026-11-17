@@ -1,10 +1,10 @@
 {
   "name": "bstack",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "dependencies": [
     "principles"
   ],
-  "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), improvement (reflect, correct, unslop), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week) do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
+  "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), debugging (root-cause finds a bug's cause from facts, not from reading the code), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), improvement (reflect, correct, unslop), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week) do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
   "author": {
     "name": "Beau Lyddon",
     "url": "https://github.com/lyddonb"

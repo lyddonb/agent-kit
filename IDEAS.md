@@ -46,6 +46,14 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
 - **Mode for reviewing other people's PRs.** A playbook that reviews a teammate's PR the way
   you would, using `interrogate` plus your team's conventions from the KB.
 
+## From "How to effectively debug with agents when you no longer read or understand the code" (2026-11-16)
+Cindy Sridharan's framework is built as the `root-cause` skill. Tuning it and default data
+collection are on the roadmap (R21, R22). Not committed to:
+- **Develop in production.** Read-only production telemetry is fine today; anything more needs its
+  own charter and the `deploy` gate.
+- **Ledger the case.** Write each case event into agent-ledger too, so `ledger scan` checks it.
+  Wait for an unattended debugging run that needs it.
+
 ## From "Steering AI Beyond Automation" (2026-11-15)
 
 Ideas from Narayanan and Unger's [essay](https://www.normaltech.ai/p/steering-ai-beyond-automation) on collaboration over full automation.
