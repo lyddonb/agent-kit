@@ -10,7 +10,7 @@ source: pstack/skills/poteto-mode/playbooks/perf-issue.md @ ccb5507
 **You own the measurement story.** Tie every fix to a measurement. Don't read source instead of measuring.
 
 1. Capture a baseline on the real path (profile, trace, or timed end-to-end run). Take enough samples to see the spread; the **swarm** skill can run interleaved baseline and change lanes in parallel. Vet it, and every later number, with the benchmark checklist in the **principles** skill (`references/checklists/benchmark.md`, per `explain-the-number`).
-2. Ground hypotheses with **how**. Then try fixes cheapest first, and stop when one meets the target:
+2. Ground hypotheses with **how**. If the limiter isn't clear from the profile, or the code is agent-written and you can't tell which theory is right, run **root-cause** on the regression first, with the baseline as the control. Then try fixes cheapest first, and stop when one meets the target:
    1. Don't do it: stop work whose result nothing uses.
    2. Do it, but don't do it again.
    3. Do it less.

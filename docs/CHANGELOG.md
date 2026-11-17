@@ -3,6 +3,13 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.11.0 (2026-11-16)
+
+- New `root-cause` skill finds a bug's root cause from facts instead of from reading the code, for agent-written or unfamiliar code. `rootcause.py` keeps the case (facts against a control, hypotheses, and the matrix between them), says the one next step, refuses a new hypothesis before the tactics are tried or while several survive, and refuses a root cause until exactly one hypothesis explains every fact and an adversarial review on another model has passed it.
+- `rootcause.py report` writes the evidence, what was ruled out and by which fact, and the layers the agent couldn't reach as infrastructure work. `rootcause.py recheck` reruns each fact's check and fails while a bug-only signal still holds, so a solved case can gate a deploy.
+- The Bug fix and Perf issue playbooks send the agent to `root-cause` when the code is unfamiliar or two theories have failed.
+- Try: `root-cause the p99 regression that started when the export flag went on`
+
 ## bstack 0.10.2 (2026-11-15)
 
 - The weekly quality brief no longer stops in a Claude Code cloud session: it checks GitHub access with a real `gh api` call, not `gh auth status`, which fails there even when access works. It also says what to do when every artifact download is refused.

@@ -230,3 +230,31 @@ be shaped by one real round of fixes.
 **Prioritize when:** `explainer-video` is merged and the first real video needs changes that
 are awkward to describe in prose.
 **Effort:** about a day with the skill text and the scene-list step (a guess).
+
+---
+
+# root-cause
+
+## P1
+
+### R21. Tune `root-cause` from real cases
+**What:** Run `root-cause` on at least three real bugs in agent-written code, then adjust two
+first guesses from the evidence. (1) What counts as a strong signal: today one fitting
+hypothesis, or at most a third of the live ones. (2) The gate 1 (signals) and gate 2 (matrix)
+reviews: today they are reminders from `next`, and only the validation review blocks a root
+cause. Make them blocking if agents skip them.
+**Why not done:** Both thresholds need real cases to set. Beau chose soft reviews for now
+(November 2026).
+**Prioritize when:** the third real case closes, or an agent reaches a root cause that a
+skipped gate 1 or 2 review would have caught.
+
+## P2
+
+### R22. Default data collection for debugging
+**What:** Have each project's `verify-<app>` skill capture traces, config snapshots and timing
+on every run, so the first facts of the next bug are already on disk. Today a fact's
+`--check` only re-collects what a case already found.
+**Why not done:** Which data is worth capturing by default depends on the project; it belongs in
+`create-verification-skill`'s template once real cases show what was missing.
+**Prioritize when:** two `root-cause` cases record a `gap` or start with a gather step that
+default capture would have covered.
