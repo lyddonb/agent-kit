@@ -170,11 +170,43 @@ class ReceiptChecksTest(ReceiptsBase):
         h.commit(self.repo, "tick C1")
         self.assertProblem(self.check(), "P1-C1", "spec_sha256")
 
-    def test_receipt_commit_missing_from_the_repo(self):
-        self.write_ledger(receipt_entry("P1-C1", "f" * 40, self.base_spec))
-        self.write_spec(self.tick(self.base_spec))
+    def test_a_receipt_commit_this_clone_does_not_have_says_so(self):
+        self.ticked_with_receipt()
+        self.write_ledger(receipt_entry("P1-C1", "0" * 40, self.base_spec))
         h.commit(self.repo, "tick C1")
-        self.assertProblem(self.check(), "P1-C1", "has no docs/phases/P1-first-slice.md in this repo")
+        self.assertProblem(self.check(), "P1-C1", "is not in this clone", "re-run its probe")
+
+    def test_a_criterion_rewritten_after_its_receipt_is_not_backed(self):
+        ticked = self.ticked_with_receipt()
+        line = next(l for l in ticked.splitlines() if l.startswith("- [x] **C1.**"))
+        self.write_spec(ticked.replace(line, "- [x] **C1.** Payments never double-charge. Probe: `./load-test.sh`. Evidence: ran it."))
+        h.commit(self.repo, "tick C1 and change what it claims")
+        self.assertProblem(self.check(), "P1-C1", "text or probe changed after its receipt")
+
+    def test_updating_the_roadmap_and_other_records_does_not_make_it_stale(self):
+        self.ticked_with_receipt()
+        for rel in ("ROADMAP.md", "HUMAN_TASKS.md", "IDEAS.md", "docs/DECISIONS.md"):
+            with (self.repo / rel).open("a") as f:
+                f.write("\nA line the playbook adds with the tick.\n")
+        h.commit(self.repo, "tick C1 and update the records")
+        self.assertNotIn("stale", self.check().stderr)
+
+    def test_renaming_a_spec_makes_no_box_newly_checked(self):
+        self.write_spec(self.tick(self.base_spec))
+        self.base = h.commit(self.repo, "C1 checked on main")
+        self.write_ledger()
+        h.git(self.repo, "mv", SPEC, "docs/phases/P1-renamed.md")
+        h.commit(self.repo, "rename the spec")
+        self.assertIn("receipts: 0 newly checked, 0 backed", self.check().stdout)
+
+    def test_a_base_spec_that_is_not_utf8_is_read_without_a_traceback(self):
+        (self.repo / SPEC).write_bytes(self.base_spec.encode() + b"\xff\xfe\n")
+        self.base = h.commit(self.repo, "odd bytes on main")
+        self.ticked_with_receipt()
+        h.commit(self.repo, "tick C1")
+        done = self.check()
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertIn("receipts: 1 newly checked", done.stdout)
 
     def test_source_committed_after_the_probe_makes_it_stale(self):
         self.ticked_with_receipt()

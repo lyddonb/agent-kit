@@ -1,6 +1,7 @@
 """Tests for bstack's receipt writer (plugins/bstack/skills/verify-work/scripts/receipt.py)."""
 import importlib.util
 import json
+import re
 import sys
 import unittest
 
@@ -107,6 +108,14 @@ class RefusalTest(ReceiptBase):
         self.assertNotIn("VERIFIED", done.stdout)
 
 
+class BookkeepingListTest(unittest.TestCase):
+    def test_both_scripts_agree_on_which_files_are_records_not_source(self):
+        found = [re.search(r"^BOOKKEEPING = \((.*?)\)", p.read_text(), re.M | re.S).group(1).split()
+                 for p in (h.RECEIPT_PY, h.CHECK_PRODUCT_PY)]
+        self.assertEqual(found[0], found[1])
+        self.assertIn('"ROADMAP.md",', found[0])
+
+
 @unittest.skipUnless(REAL, "needs agent-ledger 1.1.0 (set AGENT_LEDGER_SRC to its src folder)")
 class RealLedgerTest(ReceiptBase):
     def setUp(self):
@@ -191,14 +200,54 @@ class RealLedgerTest(ReceiptBase):
         self.go(["sh", "-c", "echo changed > src.txt"])
         self.assertEqual(self.last()["data"]["verdict"], "INCONCLUSIVE")
 
-    def test_dirt_under_audit_in_the_spec_and_untracked_files_does_not_count(self):
+    def test_dirt_under_audit_and_a_ticked_box_does_not_count(self):
         (self.repo / h.SPEC).write_text(h.SPEC_TEXT.replace("- [ ] **C8.**", "- [x] **C8.**"))
-        (self.repo / "scratch.txt").write_text("untracked\n")
         self.go(["true"], criterion="C9")
         self.assertEqual(self.last()["data"]["verdict"], "VERIFIED")
         self.go(["true"])  # the first append left tracked .audit changes, which don't count either
         data = self.last()["data"]
         self.assertEqual((data["verdict"], data["receipt"]["dirty"]), ("VERIFIED", False))
+
+    def test_an_untracked_file_present_before_the_probe_makes_it_inconclusive(self):
+        (self.repo / "extra.txt").write_text("two\n")  # in no commit, yet the probe below passes because of it
+        self.go(["grep", "-q", "two", "extra.txt"])
+        data = self.last()["data"]
+        self.assertEqual((data["verdict"], data["receipt"]["dirty"]), ("INCONCLUSIVE", True))
+
+    def test_a_file_the_probe_itself_leaves_behind_does_not_count(self):
+        self.go(["sh", "-c", "echo cache > probe-output.tmp"])
+        self.assertEqual(self.last()["data"]["verdict"], "VERIFIED")
+
+    def test_updating_the_roadmap_before_the_probe_does_not_count(self):
+        (self.repo / "ROADMAP.md").write_text("| P2e | Building |\n")
+        h.commit(self.repo, "a roadmap")
+        (self.repo / "ROADMAP.md").write_text("| P2e | Gated |\n")
+        self.go(["true"])
+        self.assertEqual(self.last()["data"]["verdict"], "VERIFIED")
+
+    def test_two_criteria_ticked_one_after_the_other_both_hash_the_committed_spec(self):
+        committed = h.sha256_file(self.repo / h.SPEC)
+        self.go(["true"])
+        (self.repo / h.SPEC).write_text(h.SPEC_TEXT.replace("- [ ] **C8.**", "- [x] **C8.**"))
+        self.go(["true"], criterion="C9")
+        self.assertEqual([e["data"]["receipt"]["spec_sha256"] for e in self.entries()[-2:]], [committed, committed])
+
+    def test_a_criterion_that_is_not_committed_yet_is_refused(self):
+        before = len(self.entries())
+        (self.repo / h.SPEC).write_text(h.SPEC_TEXT + "\n- [ ] **C12.** New and uncommitted. Probe: `true`.\n")
+        done = self.go(["true"], criterion="C12")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("must be committed first", done.stderr)
+        self.assertEqual(len(self.entries()), before)
+
+    def test_evidence_folder_that_cannot_be_made_is_refused_before_the_probe_runs(self):
+        (self.repo / ".evidence").write_text("a file where the folder should be\n")
+        before = len(self.entries())
+        done = self.go(["sh", "-c", "echo ran > probe-ran.txt"])
+        self.assertEqual(done.returncode, 2)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertFalse((self.repo / "probe-ran.txt").exists())
+        self.assertEqual(len(self.entries()), before)
 
     def test_an_uncommitted_edit_to_another_phase_spec_does_not_count(self):
         other = self.repo / "docs/phases/P3-other.md"
@@ -208,11 +257,6 @@ class RealLedgerTest(ReceiptBase):
         self.go(["true"])
         data = self.last()["data"]
         self.assertEqual((data["verdict"], data["receipt"]["dirty"]), ("VERIFIED", False))
-
-    def test_spec_hash_is_of_the_spec_when_the_probe_ran(self):
-        (self.repo / h.SPEC).write_text(h.SPEC_TEXT + "\nedited\n")
-        self.go(["true"])
-        self.assertEqual(self.last()["data"]["receipt"]["spec_sha256"], h.sha256_file(self.repo / h.SPEC))
 
     def test_root_flag_runs_the_probe_at_that_root(self):
         done = self.go(["sh", "-c", "pwd"], extra=["--root", str(self.repo)], cwd=self.tmp)

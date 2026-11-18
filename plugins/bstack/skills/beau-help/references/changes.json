@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.13.1",
+      "date": "2026-11-16",
+      "plugin": "bstack",
+      "version": "0.13.1",
+      "changes": [
+        "`check-product.py --receipts` no longer accepts a receipt for a criterion whose text or probe was rewritten afterward, and `receipt.py` records INCONCLUSIVE when an untracked file was present before the probe.",
+        "Ticking two boxes in turn, updating `ROADMAP.md` and the other record files, or renaming a spec no longer makes a receipt fail. A receipt whose commit is missing from the clone now says to run the probe again."
+      ]
+    },
+    {
       "id": "bstack@0.13.0",
       "date": "2026-11-16",
       "plugin": "bstack",
