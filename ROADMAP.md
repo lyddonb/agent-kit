@@ -9,6 +9,10 @@ says why it was deferred and what would trigger doing it.
 Items needing a person (accounts, publishing, decisions) live in
 [HUMAN_TASKS.md](HUMAN_TASKS.md), not here.
 
+Plans that span the runtime's repos (agent-kit, agent-ledger, agentfiles and the private books)
+live in the private repo `lyddonb/agent-runtime` under `plans/`. Read the plan there before
+starting work it covers, and update it by pull request.
+
 ---
 
 ## P0

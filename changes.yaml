@@ -7,6 +7,13 @@
 # kitgen renders this into docs/CHANGELOG.md and into the beau-help skill, which shows
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
+- date: 2026-11-17
+  plugin: bstack
+  version: 0.13.1
+  changes:
+    - "The Multi-phase plan playbook puts every plan in git on a branch with a pull request, so agents and collaborators on other machines can work from it. A one-repo plan goes at `docs/plans/<slug>.md`; a cross-repo or private plan goes in the workspace's plans repo. It no longer tells you to write the plan outside the repo or to delete it when the work lands."
+  try: "plan this migration as a multi-phase plan and open the PR for the plan"
+
 - date: 2026-11-16
   plugin: bstack
   version: 0.13.0

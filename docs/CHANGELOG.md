@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.13.1 (2026-11-17)
+
+- The Multi-phase plan playbook puts every plan in git on a branch with a pull request, so agents and collaborators on other machines can work from it. A one-repo plan goes at `docs/plans/<slug>.md`; a cross-repo or private plan goes in the workspace's plans repo. It no longer tells you to write the plan outside the repo or to delete it when the work lands.
+- Try: `plan this migration as a multi-phase plan and open the PR for the plan`
+
 ## bstack 0.13.0 (2026-11-16)
 
 - A checked spec criterion now has a receipt: a ledger entry saying which probe ran, on which commit, and what came back. verify-work's `scripts/receipt.py` runs the probe and writes it, so the verdict comes from the exit code.
