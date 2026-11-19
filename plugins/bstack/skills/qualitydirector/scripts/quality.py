@@ -164,11 +164,19 @@ report takes its numbers from. With --json it is one object with sorted keys and
 numbers only. Per repo, `by_kind` holds all four kinds, each with `tests`, `total_ms`, `caught_on_pr`
 and `failed_on_main` (the last two count distinct tests). A median of an even count is the lower of the two middle values.
 
+With adopted job books (both files exist), each listed repo also has `lifecycle`: where the week's CI time went
+outside the test suite, from `jobs.csv` and `steps.csv`, or null when the repo has no job rows that week. Without
+the files the key is absent and the output is what it was before. The repos listed are still those with `runs.csv`
+rows in the week, so a repo with job rows and no run rows that week is not listed. Times have one second
+resolution. Skipped jobs and empty (not measured) times are left out of every median, p95, max and sum. A p95 is the
+nearest rank, `percentile95`. `with_suite` covers the runs that have both timed jobs and `runs.csv` rows: its
+`outside_suite_ms` is their job time minus their suite wall time, never below 0. See SKILL.md for each key.
+
 Standard library only; needs Python 3.10 or later (run it through uv).
 
 Shape: `Books` is loaded once (the CSV tables with line numbers; the job books only when the files exist). Each entry in `CHECKS`
 takes a `Books` and yields `Problem`s. A new check is a new entry in that registry. Ingest
-and summary read the checked tables as typed rows (`RunRow`, `FailureRow`, `WeeklyRow`).
+and summary read the checked tables as typed rows (`RunRow`, `FailureRow`, `WeeklyRow`, `KindRow`, `JobRow`, `StepRow`).
 """
 import sys
 
@@ -1398,11 +1406,45 @@ class WeeklyRow(NamedTuple):
     max_ms: int
 
 
+class JobRow(NamedTuple):
+    created: str
+    repo: str
+    sha: str
+    event: str
+    workflow: str
+    job: str
+    job_id: int
+    conclusion: str
+    queue_ms: int | None  # None: not measured (an empty cell), never 0
+    total_ms: int | None
+    failed_step_number: int | None
+    evidence: str
+
+
+class StepRow(NamedTuple):
+    started: str
+    repo: str
+    job_id: int
+    number: int
+    step: str
+    conclusion: str
+    ms: int | None
+    evidence: str
+
+
 def _typed_rows(books: Books, rel: str, cls) -> list:
-    """The rows of a table that passed `check`, as typed tuples."""
+    """The rows of a table that passed `check`, as typed tuples. An `int | None` column is None for an empty cell."""
     ints = {name for name, kind in cls.__annotations__.items() if kind is int}
-    return [cls(*(int(r.cells[name]) if name in ints else r.cells[name] for name in cls._fields))
-            for r in books.tables[rel].rows]
+    maybe = {name for name, kind in cls.__annotations__.items() if kind == (int | None)}
+
+    def cell(r: Row, name: str):
+        text = r.cells[name]
+        if name in ints:
+            return int(text)
+        if name in maybe:
+            return int(text) if text else None
+        return text
+    return [cls(*(cell(r, name) for name in cls._fields)) for r in books.tables[rel].rows]
 
 
 def week_of(stamp: str) -> str:
@@ -2185,6 +2227,13 @@ def median(values: list[int]) -> int:
     return ordered[(len(ordered) - 1) // 2]
 
 
+def percentile95(values: list[int]) -> int:
+    """Nearest rank: the value at 1-based rank ceil(0.95 * n) of the sorted values, so it is always a value one
+    run had. Integer arithmetic only. `values` is never empty."""
+    ordered = sorted(values)
+    return ordered[-(-95 * len(ordered) // 100) - 1]
+
+
 def _slowest(rows: list[WeeklyRow]) -> list[dict]:
     ranked = sorted(rows, key=lambda w: (-(w.total_ms // w.runs), w.test_id, w.repo))
     return [{"max_ms": w.max_ms, "mean_ms": w.total_ms // w.runs, "repo": w.repo, "runs": w.runs, "test_id": w.test_id}
@@ -2259,8 +2308,74 @@ def _by_kind(rules: dict[str, str], here: list[WeeklyRow], on_pr: Iterable[Failu
     return {kind: {k: len(v) if isinstance(v, set) else v for k, v in entry.items()} for kind, entry in out.items()}
 
 
+def _spread(values: list[int], *, top: bool = False) -> dict | None:
+    """median and p95 (and max when `top`) of measured values; None when nothing was measured."""
+    if not values:
+        return None
+    out = {"median": median(values), "p95": percentile95(values)}
+    if top:
+        out["max"] = max(values)
+    return out
+
+
+def _epoch_ms(stamp: str) -> int:
+    return int(datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()) * 1000
+
+
+def _lifecycle(repo: str, week: str, runs: list[RunRow], jobs: list[JobRow], steps: list[StepRow]) -> dict | None:
+    """Where a week's CI time went outside the test suite, from the job books; None with no job rows this week."""
+    here = [j for j in jobs if j.repo == repo and week_of(j.created) == week]
+    if not here:
+        return None
+    timed = [j for j in here if j.conclusion != "skipped" and j.total_ms is not None]
+    by_run: dict[str, list[JobRow]] = {}
+    for j in timed:
+        by_run.setdefault(j.evidence, []).append(j)
+    run_ms = []
+    for group in by_run.values():
+        ends = [_epoch_ms(j.created) + j.queue_ms + j.total_ms for j in group if j.queue_ms is not None]
+        if ends:  # a job with no measured queue time has no known end
+            run_ms.append(max(ends) - min(_epoch_ms(j.created) for j in group))
+    suite = {}
+    for r in runs:
+        if r.repo == repo:
+            suite[r.evidence] = suite.get(r.evidence, 0) + r.wall_ms
+    both = [e for e in by_run if e in suite]
+    job_ms = sum(j.total_ms for e in both for j in by_run[e])
+    suite_ms = sum(suite[e] for e in both)
+    timed_ids = {(j.evidence, j.job_id) for j in timed}
+    by_name: dict[str, list[int]] = {}
+    for st in steps:
+        if st.repo == repo and st.ms is not None and (st.evidence, st.job_id) in timed_ids:
+            by_name.setdefault(st.step, []).append(st.ms)
+    ranked = sorted(by_name.items(), key=lambda kv: (-median(kv[1]), -percentile95(kv[1]), kv[0]))
+    step_name = {(st.evidence, st.job_id, st.number): st.step for st in steps if st.repo == repo}
+    failed: dict[str, int] = {}
+    for j in here:
+        if j.failed_step_number is not None:
+            name = step_name[(j.evidence, j.job_id, j.failed_step_number)]
+            failed[name] = failed.get(name, 0) + 1
+    return {
+        "billed_ms": sum(j.total_ms for j in timed),
+        "failed_steps": [{"count": n, "step": name} for name, n in sorted(failed.items(), key=lambda kv: (-kv[1], kv[0]))],
+        "job_ms": _spread([j.total_ms for j in timed]),
+        "jobs": len(here),
+        "jobs_skipped": sum(j.conclusion == "skipped" for j in here),
+        "jobs_untimed": sum(j.conclusion != "skipped" and j.total_ms is None for j in here),
+        "queue_ms": _spread([j.queue_ms for j in timed if j.queue_ms is not None], top=True),
+        "resolution_ms": 1000,
+        "run_ms": _spread(run_ms),
+        "runs": len({j.evidence for j in here}),
+        "slowest_steps": [{"median": median(v), "p95": percentile95(v), "runs": len(v), "step": name}
+                          for name, v in ranked[:5]],
+        "with_suite": {"job_ms": job_ms, "outside_suite_ms": max(0, job_ms - suite_ms), "runs": len(both),
+                       "suite_ms": suite_ms},
+    }
+
+
 def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow],
-                  kind_rules: dict[str, str]) -> dict:
+                  kind_rules: dict[str, str], jobs: list[JobRow] | None = None,
+                  steps: list[StepRow] | None = None) -> dict:
     mine = [r for r in runs if r.repo == repo]
     this = [r for r in mine if week_of(r.started) == week]
     walls = [r.wall_ms for r in this]
@@ -2281,7 +2396,7 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
              if event_of.get((f.evidence, f.python)) == "pull_request"]
     on_main = [f for f in sorted(fails, key=lambda f: (f.test_id, f.evidence, f.python))
                if event_of.get((f.evidence, f.python)) == "push"]
-    return {
+    out = {
         "by_kind": _by_kind(kind_rules, here, on_pr, on_main),
         "caught_on_pr": {"count": len({f.test_id for f in on_pr}),
                          "failures": [{"evidence": f.evidence, "outcome": f.outcome, "python": f.python, "sha": f.sha,
@@ -2302,21 +2417,41 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
         "tests_added": sorted(ids - before) if before is not None else [],
         "tests_removed": sorted(before - ids) if before is not None else [],
     }
+    if jobs is not None:  # adopted job books only: without them the output is what it always was
+        out["lifecycle"] = _lifecycle(repo, week, runs, jobs, steps or [])
+    return out
 
 
 def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow], week: str,
-              kinds: Iterable[KindRow] = ()) -> dict:
-    """The week's numbers as plain data: integers, strings, lists and dicts, nothing else."""
+              kinds: Iterable[KindRow] = (), jobs: list[JobRow] | None = None,
+              steps: list[StepRow] | None = None) -> dict:
+    """The week's numbers as plain data: integers, strings, lists and dicts, nothing else. `jobs` and `steps` are
+    given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle`."""
     repos = sorted({r.repo for r in runs if week_of(r.started) == week})
     kinds = list(kinds)
     rules = {repo: {k.prefix: k.kind for k in kinds if k.repo == repo} for repo in repos}
     return {
         "generated_from": {"failures": len(failures), "runs": len(runs), "weekly_rows": len(weekly)},
-        "repos": {repo: _repo_summary(repo, week, runs, failures, weekly, rules[repo]) for repo in repos},
+        "repos": {repo: _repo_summary(repo, week, runs, failures, weekly, rules[repo], jobs, steps)
+                  for repo in repos},
         "slowest_tests": _slowest([w for w in weekly if w.week == week and w.repo in repos]),
         "thresholds": {"suite_median_ms": SUITE_MEDIAN_THRESHOLD_MS},
         "week": week,
     }
+
+
+def _render_lifecycle(lc: dict) -> list[str]:
+    def spread(d: dict | None, what: str) -> str:
+        return f"{what} median {d['median']} ms (p95 {d['p95']})" if d else f"{what} not measured"
+    w = lc["with_suite"]
+    lines = [f"  lifecycle: {lc['runs']} runs, {lc['jobs']} jobs ({lc['jobs_skipped']} skipped, {lc['jobs_untimed']} untimed); "
+             + spread(lc["run_ms"], "run") + "; " + spread(lc["queue_ms"], "queue"),
+             f"  outside the suite: {w['outside_suite_ms']} ms of {w['job_ms']} ms job time over {w['runs']} runs "
+             f"(suite {w['suite_ms']} ms)"]
+    if lc["slowest_steps"]:
+        t = lc["slowest_steps"][0]
+        lines.append(f"  slowest step: {printable(t['step'])} median {t['median']} ms over {t['runs']} runs")
+    return lines
 
 
 def render_summary(s: dict) -> str:
@@ -2335,6 +2470,8 @@ def render_summary(s: dict) -> str:
                                                 for kind, k in r["by_kind"].items()))
         for t in r["slowest_tests"][:3]:
             lines.append(f"  slow: {printable(t['test_id'])} mean {t['mean_ms']} ms over {t['runs']} runs")
+        if r.get("lifecycle"):
+            lines.extend(_render_lifecycle(r["lifecycle"]))
     lines.append(f"threshold: suite median above {s['thresholds']['suite_median_ms']} ms")
     return "\n".join(lines)
 
@@ -2357,8 +2494,10 @@ def cmd_summary(args: argparse.Namespace) -> int:
     if week is None:
         print("no runs in the books; pass --week to summarize an empty week", file=sys.stderr)
         return 1
+    job_rows = _typed_rows(books, JOBS, JobRow) if adopted(books) else None
+    step_rows = _typed_rows(books, STEPS, StepRow) if adopted(books) else None
     result = summarize(runs, _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), week,
-                       _typed_rows(books, KINDS, KindRow))
+                       _typed_rows(books, KINDS, KindRow), job_rows, step_rows)
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_summary(result))
     return 0
 

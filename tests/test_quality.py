@@ -1769,5 +1769,170 @@ class JobBooksAppendOnlyTest(JobBooksCase):
         self.assertCheckClean(7, "--base", "HEAD")
 
 
+# ---------------------------------------------------------------------------
+# summary: the lifecycle of a week, from the job books
+# ---------------------------------------------------------------------------
+
+def _link(repo: str, run: int) -> str:
+    return f"https://github.com/example/{repo}/actions/runs/{run}/attempts/1"
+
+
+def _job(repo, run, job_id, created, queue, total, conclusion="success", failed="", name="validate"):
+    return [created, repo, "fedcba9876543210fedcba9876543210fedcba98", "push", "ci", name, str(job_id), conclusion,
+            queue, total, failed, _link(repo, run)]
+
+
+def _step(repo, run, job_id, number, name, ms, conclusion="success"):
+    return [f"2026-11-16T09:00:0{number}Z", repo, str(job_id), str(number), name, conclusion, ms, _link(repo, run)]
+
+
+def _run_row(repo, run, python, wall, started):
+    return [started, repo, "fedcba9876543210fedcba9876543210fedcba98", "push", "ci", python, "10", "0", "0", str(wall),
+            "0", _link(repo, run)]
+
+
+W47 = "2026-W47"
+A, B, C = "2026-11-16T09:00:00Z", "2026-11-16T10:00:00Z", "2026-11-16T11:00:00Z"
+JOB_LINES = [
+    # run 201: a matrix of three jobs and a skipped one; two pythons in runs.csv
+    _job("agentfiles", 201, 1, A, "2000", "150000"),
+    _job("agentfiles", 201, 2, A, "4000", "160000", "failure", "2"),
+    _job("agentfiles", 201, 3, A, "1000", "30000", "failure", "2"),
+    _job("agentfiles", 201, 4, A, "", "0", "skipped"),
+    # run 202: a job with no queue time, a cancelled job with no total
+    _job("agentfiles", 202, 5, B, "5000", "60000"),
+    _job("agentfiles", 202, 6, "2026-11-16T10:00:10Z", "", "20000"),
+    _job("agentfiles", 202, 7, B, "1000", "", "cancelled"),
+    # run 203 has job rows and no runs.csv row
+    _job("agentfiles", 203, 8, C, "1000", "10000", "failure", "1"),
+    # last week's job, and another repo's
+    _job("agentfiles", 204, 9, "2026-11-15T23:59:59Z", "1000", "999999"),
+    _job("other", 301, 10, A, "0", "5000"),
+]
+STEP_LINES = [
+    _step("agentfiles", 201, 1, 1, "Set up job", "2000"), _step("agentfiles", 201, 1, 2, "Run tests", "100000"),
+    _step("agentfiles", 201, 1, 3, "Y", "2000"), _step("agentfiles", 201, 1, 4, "Z", "2000"),
+    _step("agentfiles", 201, 1, 5, "W", "1"),
+    _step("agentfiles", 201, 2, 1, "Set up job", "3000"),
+    _step("agentfiles", 201, 2, 2, "Run tests", "120000", "failure"),
+    _step("agentfiles", 201, 3, 1, "Set up job", "1000"), _step("agentfiles", 201, 3, 2, "Run tests", "20000", "failure"),
+    _step("agentfiles", 202, 5, 1, "Run tests", "40000"),
+    _step("agentfiles", 202, 6, 1, "Run tests", ""),
+    _step("agentfiles", 202, 7, 1, "Run tests", "999999"),
+    _step("agentfiles", 203, 8, 1, "Checkout", "5000", "failure"),
+    _step("agentfiles", 204, 9, 1, "Old", "777777"),
+    _step("other", 301, 10, 1, "Run tests", "777"),
+]
+
+
+class LifecycleSummaryTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name) / "books-repo"
+        shutil.copytree(FIXTURE, self.dir)
+
+    def write(self, rel: str, rows) -> None:
+        (self.dir / rel).write_text(",".join(quality.TABLE_SCHEMAS[rel]) + "\n" + "".join(quality._csv_line(r) for r in rows))
+
+    def adopt(self, jobs=JOB_LINES, steps=STEP_LINES, walls=(100000, 120000, 50000)) -> None:
+        self.write(quality.RUNS, [
+            _run_row("agentfiles", 201, "3.11", walls[0], A), _run_row("agentfiles", 201, "3.12", walls[1], A),
+            _run_row("agentfiles", 202, "3.12", walls[2], B), _run_row("other", 301, "3.12", 1, A)])
+        self.write(quality.FAILURES, [])
+        self.write(quality.WEEKLY, [])
+        (self.dir / quality.WATCHED).write_text("repo,github,workflow\nagentfiles,example/agentfiles,ci\nother,example/other,ci\n")
+        self.write(quality.JOBS, jobs)
+        self.write(quality.STEPS, steps)
+
+    def summary(self, *extra) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = quality.main(["summary", str(self.dir), *extra])
+        return code, out.getvalue()
+
+    def lifecycle(self, repo="agentfiles", **kw) -> dict:
+        self.adopt(**kw)
+        code, out = self.summary("--json", "--week", W47)
+        self.assertEqual(code, 0, out)
+        return json.loads(out)["repos"][repo]["lifecycle"]
+
+    def test_known_books_give_exactly_the_expected_lifecycle(self):
+        self.assertEqual(self.lifecycle(), {
+            "billed_ms": 430000,
+            "failed_steps": [{"count": 2, "step": "Run tests"}, {"count": 1, "step": "Checkout"}],
+            "job_ms": {"median": 30000, "p95": 160000},
+            "jobs": 8, "jobs_skipped": 1, "jobs_untimed": 1,
+            "queue_ms": {"max": 5000, "median": 2000, "p95": 5000},
+            "resolution_ms": 1000,
+            "run_ms": {"median": 65000, "p95": 164000},
+            "runs": 3,
+            "slowest_steps": [{"median": 40000, "p95": 120000, "runs": 4, "step": "Run tests"},
+                              {"median": 5000, "p95": 5000, "runs": 1, "step": "Checkout"},
+                              {"median": 2000, "p95": 3000, "runs": 3, "step": "Set up job"},
+                              {"median": 2000, "p95": 2000, "runs": 1, "step": "Y"},
+                              {"median": 2000, "p95": 2000, "runs": 1, "step": "Z"}],
+            "with_suite": {"job_ms": 420000, "outside_suite_ms": 150000, "runs": 2, "suite_ms": 270000}})
+
+    def test_another_repo_and_another_week_are_not_counted_and_a_zero_queue_is_a_value(self):
+        other = self.lifecycle("other")
+        self.assertEqual((other["jobs"], other["billed_ms"], other["queue_ms"]), (1, 5000, {"max": 0, "median": 0, "p95": 0}))
+        self.assertEqual(other["with_suite"], {"job_ms": 5000, "outside_suite_ms": 4999, "runs": 1, "suite_ms": 1})
+
+    def test_percentile95_is_the_nearest_rank(self):
+        for n, want in ((1, 1), (2, 2), (20, 19), (21, 20), (100, 95)):
+            with self.subTest(n=n):
+                self.assertEqual(quality.percentile95(list(range(n, 0, -1))), want)
+
+    def test_outside_the_suite_is_never_below_zero(self):
+        lc = self.lifecycle(walls=(900000, 900000, 900000))
+        self.assertEqual(lc["with_suite"], {"job_ms": 420000, "outside_suite_ms": 0, "runs": 2, "suite_ms": 2700000})
+
+    def test_a_listed_repo_with_no_job_rows_this_week_has_a_null_lifecycle(self):
+        for rel in quality.JOB_BOOKS:
+            (self.dir / rel).write_text(",".join(quality.TABLE_SCHEMAS[rel]) + "\n")
+        code, out = self.summary("--json")
+        self.assertEqual(code, 0, out)
+        repos = json.loads(out)["repos"]
+        self.assertEqual(list(repos), ["agentfiles"])
+        self.assertIsNone(repos["agentfiles"]["lifecycle"])
+        self.assertNotIn("lifecycle:", self.summary()[1])
+
+    def test_books_that_are_not_adopted_have_no_lifecycle_anywhere(self):
+        code, out = self.summary("--json")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("lifecycle", out)
+        text = self.summary()[1]
+        for line in ("lifecycle", "outside the suite", "slowest step"):
+            self.assertNotIn(line, text)
+
+    def test_the_text_gains_lifecycle_lines_when_adopted(self):
+        self.adopt()
+        code, text = self.summary("--week", W47)
+        self.assertEqual(code, 0, text)
+        lines = text.splitlines()
+        i = lines.index("  lifecycle: 3 runs, 8 jobs (1 skipped, 1 untimed); run median 65000 ms (p95 164000); "
+                        "queue median 2000 ms (p95 5000)")
+        self.assertEqual(lines[i + 1:i + 3], ["  outside the suite: 150000 ms of 420000 ms job time over 2 runs (suite 270000 ms)",
+                                              "  slowest step: Run tests median 40000 ms over 4 runs"])
+
+    def test_the_json_is_the_same_bytes_every_time_and_holds_only_integers(self):
+        self.adopt()
+        first, second = self.summary("--json", "--week", W47)[1], self.summary("--json", "--week", W47)[1]
+        self.assertEqual(first, second)
+
+        def walk(value):
+            if isinstance(value, dict):
+                for v in value.values():
+                    walk(v)
+            elif isinstance(value, list):
+                for v in value:
+                    walk(v)
+            else:
+                self.assertIn(type(value), (int, str, type(None)), value)
+        for repo in json.loads(first)["repos"].values():
+            walk(repo["lifecycle"])
+
+
 if __name__ == "__main__":
     unittest.main()
