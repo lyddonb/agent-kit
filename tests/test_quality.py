@@ -1098,7 +1098,7 @@ class FileProblemsTest(CheckCase):
 
 class RunsRulesTest(CheckCase):
     BAD = {
-        "started": ["2026-11-16 09:30:00", "2026-11-16T09:30:00+00:00", "2026-13-45T09:30:00Z", ""],
+        "started": ["2026-11-16 09:30:00", "2026-11-16T09:30:00+00:00", "2026-13-45T09:30:00Z", "", "2026-11-16T09:30:0٥Z"],
         "repo": ["Agent_Files", "-lead", ""],
         "sha": ["abc123", "0123456789ABCDEF0123456789ABCDEF01234567", "0123456789abcdef0123456789abcdef0123456g", ""],
         "event": [""],

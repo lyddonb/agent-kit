@@ -800,7 +800,7 @@ def adopted(books: Books) -> bool:
 Check = Callable[[Books], Iterable[Problem]]
 
 _REPO = re.compile(r"[a-z0-9][a-z0-9-]*")
-_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+_STAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")  # ASCII digits only: \d also matches other scripts' digits
 _SHA = re.compile(r"[0-9a-f]{40}")
 _PYTHON = re.compile(r"3\.(0|[1-9][0-9]?)")
 _WEEK = re.compile(r"([0-9]{4})-W([0-9]{2})")
