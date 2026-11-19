@@ -136,7 +136,7 @@ def check(repo: Path) -> list[str]:
             if pid and in_roadmap.get(pid.group(1), "").startswith("done"):
                 out.append(f"docs/plans/{plan.name}: {pid.group(1)} is done; delete its plan (plans don't stay in the repo)")
 
-    layout_files = [repo / rel for rel in REQUIRED_FILES] + list(specs.values())
+    layout_files = [repo / rel for rel in [*REQUIRED_FILES, "REVIEW.md"]] + list(specs.values())
     for f in layout_files:
         if f.is_file():
             for i, l in enumerate(lines(f)):
