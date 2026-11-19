@@ -4,7 +4,7 @@ description: The Quality Director measures what a repo's tests cost and what the
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Quality Director
@@ -78,6 +78,8 @@ uv run --python 3.12 <skill dir>/scripts/quality.py ingest BOOKS_DIR OUT_DIR [--
 - all its artifacts are already booked.
 
 An expired artifact, a failed call, an unsafe archive (a member that climbs out of the folder, is absolute, a link, or over 8 MB), a run with more than 12 `test-results-` artifacts, an archive that unpacks to more than 16 MB, a run whose archives unpack to more than 32 MB together (counted as the bytes are written, never from the archive's own sizes) or an artifact name that is not a plain `test-results-NAME` is reported with `FAILED RUN_ID: why`, the rest carries on, and `fetch` exits 1; a run over a count or size cap fails as a whole run and nothing of it is left in `OUT_DIR`. Exit 2 is bad usage, no `gh`, or an `OUT_DIR` inside `BOOKS_DIR`. The last line says how many runs were fetched, listed, and skipped and why. `--since` filters on a run's creation date, so a run older than the 3-day window (or the 7 days with nothing booked) needs an explicit `--since`, and so does a re-run of an old run.
+
+**Jobs.** Once `books/jobs.csv` exists in the books repo (a header with an `evidence` column is enough; without that column `fetch` exits 2), `fetch` also stores what GitHub's Actions jobs API reports for each run it does not skip, as `OUT_DIR/<repo>/<run_id>/jobs.json`: `v`, `run_id`, `run_attempt`, and for each job `id, name, conclusion, created, started, completed` and its `steps` (`number, name, conclusion, started, completed`), sorted by id and by number. A null or missing timestamp or conclusion is written as `""`, so a skipped job and a cancelled step are kept as reported. Jobs are fetched for a run with no `test-results-` artifact and for a run whose test record is already booked, and not for a run whose `evidence` is already in `jobs.csv`. It costs one more `gh` call per run (the jobs listing for that attempt). Caps: 64 jobs per run and 100 steps per job; a run over a cap is refused whole. A failed jobs call, a malformed job or step, or a run over a cap prints `FAILED RUN_ID: jobs WHY`, writes no `jobs.json` and makes `fetch` exit 1, and that run's artifacts are still fetched. The per-run line then ends with the job count (or reads `jobs only (N jobs)`), and the last line adds `N runs with jobs (M jobs)`. A run whose artifacts fail as a whole (over a count or size cap) is refused as before, but with `books/jobs.csv` its `manifest.json` and stored `jobs.json` stay. Without `books/jobs.csv` none of this happens: the calls, the files and the output are as before. Job and step names are text a pull request controls, so `fetch` stores them as they are and anything it prints is escaped; whatever books them later must judge them.
 
 **`ingest`** reads that layout and prints one line per file (`booked`, `skipped, already booked`, `skipped, duplicate of ...`, `no artifacts`, or `rejected: <file>: <reason>`), then a totals line.
 

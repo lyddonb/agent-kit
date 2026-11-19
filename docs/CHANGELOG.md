@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.16.0 (2026-11-18)
+
+- `quality.py fetch` now stores what GitHub reports for each run's jobs and steps as `jobs.json`, once the books have a `books/jobs.csv`. Without that file nothing changes. A failed jobs call fails only that run's jobs and never stops its test artifacts.
+
 ## bstack 0.15.0 (2026-11-18)
 
 - Every commit an agent writes now says how it was checked, in a `Verified:` git trailer: `receipt <run-id>`, `verify-work`, `tests` or `none <reason>`. The Opening a PR playbook defines the values, and beau-agent and verify-work carry the rule.
