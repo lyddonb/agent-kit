@@ -51,7 +51,8 @@ kept sorted) and books/watched.csv (the repos to book: `repo,github,workflow`, f
 (`repo,prefix,kind`, edited by hand, sorted by repo then prefix) names the tests that are not unit
 tests. `prefix` is a module, `module.Class` or a whole test id; a test takes the `kind` (`unit`, `e2e`,
 `property` or `differential`) of the row with the longest prefix that matches it on whole dotted segments,
-and `unit` when no row matches. Books without the file are valid. Only `check` reads its form;
+and `unit` when no row matches. A `setUpClass (mod.Class)` or `setUpModule (mod)` row and an import failure
+`unittest.loader._FailedTest.mod` are matched as the class or module they name. Books without the file are valid. Only `check` reads its form;
 `ingest` never writes it.
 
 Trust: CI runs pull-request code, so anyone who can get a workflow to run can write any recorder
@@ -77,7 +78,7 @@ and for each run `gh api --paginate "repos/O/N/actions/runs/ID/artifacts?per_pag
 each artifact, `gh api repos/O/N/actions/artifacts/ID/zip`. `--since` filters on a run's creation
 date, so a re-run of an old run needs an earlier --since.
 
-`check` validates the four files and prints one `path:line: message` line per problem (path
+`check` validates the files (the four books and kinds.csv when it exists) and prints one `path:line: message` line per problem (path
 relative to BOOKS_DIR), then `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when
 there are problems, 2 on bad usage. With --base REF, runs.csv and failures.csv must be
 append-only against REF. It also checks across the files: every failures row belongs to a run,
@@ -1961,10 +1962,26 @@ def _flaky(repo_runs: list[RunRow], repo_failures: list[FailureRow], week: str) 
     return out
 
 
+_SETUP_ID = re.compile(r"(?:setUpClass|tearDownClass|setUpModule|tearDownModule) \((.+)\)")
+_IMPORT_FAILURE = "unittest.loader._FailedTest."
+
+
+def _kind_subject(test_id: str) -> str:
+    """The dotted name a kind row is matched against. The recorder books a class whose setup raises as
+    `setUpClass (mod.Class)` and a module that fails to import as `unittest.loader._FailedTest.mod`; both
+    belong to the class or module they name, so a break in an e2e module is a catch of the e2e kind."""
+    m = _SETUP_ID.fullmatch(test_id)
+    if m:
+        return m.group(1)
+    if test_id.startswith(_IMPORT_FAILURE) and len(test_id) > len(_IMPORT_FAILURE):
+        return test_id[len(_IMPORT_FAILURE):]
+    return test_id
+
+
 def kind_of(rules: dict[str, str], test_id: str) -> str:
     """The kind of a test: the row with the longest prefix that is the id or ends where a dotted segment of it ends.
     `rules` maps a prefix to a kind (one repo's rows); a test with no such row is a unit test."""
-    parts = test_id.split(".")
+    parts = _kind_subject(test_id).split(".")
     for n in range(len(parts), 0, -1):
         kind = rules.get(".".join(parts[:n]))
         if kind is not None:

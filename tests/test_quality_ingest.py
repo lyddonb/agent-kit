@@ -1640,6 +1640,17 @@ class KindsSummaryTest(SummaryCase):
         weekly = [self.wr(test_id="t.a", total_ms=7)]
         self.assertEqual(self.by_kind((), weekly), self.by_kind(None, weekly))
 
+    def test_a_setup_error_or_import_failure_counts_for_the_class_or_module_it_names(self):
+        ids = ["setUpClass (srv.ServerTest)", "tearDownClass (srv.ServerTest)", "setUpModule (srv)", "tearDownModule (srv)",
+               "unittest.loader._FailedTest.srv", "unittest.loader._FailedTest.srv_other", "setUpClass (other.T)",
+               "unittest.loader._FailedTest.", "setUpClass ()", "setUpClass (srv.ServerTest) x"]
+        got = self.counts([("demo", "srv", "e2e")], ids)
+        self.assertEqual(got, {"e2e": 5, "unit": 5})
+        pr = run_row(2, event="pull_request", sha=SHA_B)
+        caught = self.by_kind([("demo", "srv", "e2e")], [], [run_row(1), pr],
+                              [failure_row(pr, "setUpClass (srv.ServerTest)"), failure_row(pr, "unittest.loader._FailedTest.srv")])
+        self.assertEqual((caught["e2e"]["caught_on_pr"], caught["unit"]["caught_on_pr"]), (2, 0))
+
     def test_a_week_with_no_tests_still_has_all_four_kinds(self):
         got = self.by_kind([("demo", "t", "e2e")], [])
         self.assertEqual(got, {k: ZERO_KIND for k in ("unit", "e2e", "property", "differential")})
