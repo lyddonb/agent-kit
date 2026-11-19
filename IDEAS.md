@@ -48,7 +48,7 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
 
 ## From "How to effectively debug with agents when you no longer read or understand the code" (2026-11-16)
 Cindy Sridharan's framework is built as the `root-cause` skill. Tuning it and default data
-collection are on the roadmap (R21, R22). Not committed to:
+collection are on the roadmap (R36, R37). Not committed to:
 - **Develop in production.** Read-only production telemetry is fine today; anything more needs its
   own charter and the `deploy` gate.
 - **Ledger the case.** Write each case event into agent-ledger too, so `ledger scan` checks it.
@@ -99,3 +99,26 @@ in the roadmap carry the next parts.
   serves. Keep the content out of this public repo.
 - **The surprising level as an eval target.** Collect the "Surprising" lines from shipped
   specs and see which ones actually happened, to learn whether level 3 steers anything.
+
+## From "How the Claude Code team thinks about verification" (2026-11-16)
+
+Addy Osmani's post on how the Claude Code team verifies agent-written code. What we committed
+to is in the roadmap's Verification loops section (R27 to R35). Not committed to:
+
+- **Checks written by code owners.** The owner of a path writes the check for it and tunes it
+  until it flags what they would. Worth it with more than one owner. One person owns
+  everything here today.
+- **A daily reviewer eval.** The post's team replays past incidents against the reviewer every
+  day. R34 replays when an escape is booked, which fits this volume.
+- **`/goal` as the cheap-checks loop.** Lighter than R32's Stop hook, but a small model reading
+  the transcript decides when the goal is met. The kit takes verdicts from exit codes.
+- **Pre-existing means not the author's problem.** The post's reviewer doesn't hold an author
+  to a bug that was already there. beau-mode's "green means every check" is stricter and stays;
+  R33 only tags such findings so the fix gets its own PR.
+- **Deleting a flaky test outright.** The post lets the agent delete a flake it can't
+  root-cause and write down why. Here that is at most a proposal (R35).
+- **Rounds to green in the books.** CI attempts per PR head and how often the first push is
+  red. Needs the branch or PR number in `runs.csv`, a books layout change, so wait until R32
+  needs the number.
+- **Verify-skill health in the books.** Duration and pass rate of each `verify-<app>` run,
+  read from receipts, once R27's skills have run for a few weeks.
