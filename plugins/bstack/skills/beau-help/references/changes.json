@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "id": "bstack@0.17.0",
+      "date": "2026-11-19",
+      "plugin": "bstack",
+      "version": "0.17.0",
+      "changes": [
+        "`quality.py summary --json` now groups each repo's tests, their cost and their catches by test kind (`unit`, `e2e`, `property`, `differential`) under `by_kind`. Kinds come from an optional hand-edited `books/kinds.csv` (`repo,prefix,kind`, longest dotted prefix wins); books without it are valid and every test is `unit`. `check` validates the file's form only."
+      ]
+    },
+    {
       "id": "bstack@0.16.0",
       "date": "2026-11-18",
       "plugin": "bstack",

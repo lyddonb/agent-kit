@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.17.0 (2026-11-19)
+
+- `quality.py summary --json` now groups each repo's tests, their cost and their catches by test kind (`unit`, `e2e`, `property`, `differential`) under `by_kind`. Kinds come from an optional hand-edited `books/kinds.csv` (`repo,prefix,kind`, longest dotted prefix wins); books without it are valid and every test is `unit`. `check` validates the file's form only.
+
 ## bstack 0.16.0 (2026-11-18)
 
 - `quality.py fetch` now stores what GitHub reports for each run's jobs and steps as `jobs.json`, once the books have a `books/jobs.csv`. Without that file nothing changes. A failed jobs call fails only that run's jobs and never stops its test artifacts.
