@@ -1279,6 +1279,101 @@ class CrossFileTest(CheckCase):
         self.assertEqual(len(lines), 2, lines)
 
 
+class KindsFileTest(CheckCase):
+    """books/kinds.csv: optional, and checked for its form only."""
+    HEADER = "repo,prefix,kind\n"
+
+    def setUp(self):
+        super().setUp()
+        (self.dir / quality.WATCHED).write_text("repo,github,workflow\nagentfiles,example/agentfiles,ci\nagent-ledger,example/agent-ledger,ci\n")
+
+    def kinds(self, *rows: str, header: str | None = None) -> None:
+        (self.dir / quality.KINDS).write_text((self.HEADER if header is None else header) + "".join(r + "\n" for r in rows))
+
+    def test_books_without_the_file_are_clean_and_it_is_not_created(self):
+        self.assertEqual(self.check(), (0, ["ok, 9 rows, 0 problems"]))
+        self.assertFalse((self.dir / quality.KINDS).exists())
+
+    def test_a_header_only_file_is_clean(self):
+        self.kinds()
+        self.assertEqual(self.check(), (0, ["ok, 9 rows, 0 problems"]))
+
+    def test_valid_rows_are_clean_and_counted(self):
+        self.kinds("agent-ledger,test_canon,property", "agent-ledger,test_canon.GoldenLedgerTest,differential",
+                   "agent-ledger,test_canon.GoldenLedgerTest.test_one,unit", "agentfiles,tests.e2e,e2e")
+        self.assertEqual(self.check(), (0, ["ok, 13 rows, 0 problems"]))
+
+    def test_wrong_header(self):
+        self.kinds("agentfiles,tests.e2e,e2e", header="repo,prefix,type\n")
+        self.assertFlags(quality.KINDS, 1, "header does not match the schema: expected repo,prefix,kind")
+
+    def test_empty_file(self):
+        (self.dir / quality.KINDS).write_text("")
+        self.assertFlags(quality.KINDS, 1, "empty file")
+
+    def test_wrong_column_count(self):
+        self.kinds("agentfiles,tests.e2e")
+        self.assertFlags(quality.KINDS, 2, "2 columns, expected 3")
+
+    def test_an_unknown_kind(self):
+        for bad in ("slow", "Property", "", "integration"):
+            with self.subTest(bad):
+                self.kinds(f"agentfiles,tests.e2e,{bad}")
+                self.assertFlags(quality.KINDS, 2, "kind must be one of unit, e2e, property, differential")
+
+    def test_a_repo_that_is_not_watched(self):
+        self.kinds("elsewhere,tests.e2e,e2e")
+        self.assertFlags(quality.KINDS, 2, "repo 'elsewhere' is not in books/watched.csv")
+
+    def test_a_malformed_repo_or_prefix(self):
+        for repo, prefix in (("Bad Repo", "tests.e2e"), ("agentfiles", ""), ("agentfiles", "tests..e2e"), ("agentfiles", ".tests"),
+                             ("agentfiles", "tests."), ("agentfiles", "tests e2e"), ("agentfiles", "=tests.e2e")):
+            with self.subTest((repo, prefix)):
+                self.kinds(f'{repo},"{prefix}",e2e')
+                code, lines = self.check()
+                self.assertEqual(code, 1, lines)
+                self.assertTrue(any(l.startswith(f"{quality.KINDS}:2: ") for l in lines), lines)
+
+    def test_a_duplicate_repo_and_prefix(self):
+        self.kinds("agentfiles,tests.e2e,e2e", "agentfiles,tests.e2e,property")
+        self.assertFlags(quality.KINDS, 3, "duplicate of line 2 (same repo and prefix)")
+
+    def test_the_same_prefix_in_two_repos_is_not_a_duplicate(self):
+        self.kinds("agent-ledger,tests.e2e,e2e", "agentfiles,tests.e2e,e2e")
+        self.assertEqual(self.check()[0], 0)
+
+    def test_rows_out_of_order(self):
+        for rows in (("agentfiles,tests.e2e,e2e", "agent-ledger,test_canon,property"),
+                     ("agentfiles,tests.z,e2e", "agentfiles,tests.a,e2e")):
+            with self.subTest(rows):
+                self.kinds(*rows)
+                self.assertFlags(quality.KINDS, 3, "not sorted by repo, prefix")
+
+    def test_a_prefix_that_matches_no_booked_test_is_not_a_problem(self):
+        self.kinds("agentfiles,no.such.module,e2e")
+        self.assertEqual(self.check()[0], 0)
+
+    def test_crlf_and_bom_are_named_once(self):
+        good = (self.HEADER + "agentfiles,tests.e2e,e2e\n").encode()
+        (self.dir / quality.KINDS).write_bytes(good.replace(b"\n", b"\r\n"))
+        self.assertEqual(self.check(), (1, [f"{quality.KINDS}:1: CRLF line endings; the books use LF", "1 problems"]))
+        (self.dir / quality.KINDS).write_bytes(b"\xef\xbb\xbf" + good)
+        code, lines = self.check()
+        self.assertEqual((code, len(lines)), (1, 2))
+        self.assertRegex(lines[0], r"^books/kinds.csv:1: starts with a UTF-8 BOM")
+
+    def test_a_kinds_file_that_cannot_be_read_is_a_problem_not_a_crash(self):
+        (self.dir / quality.KINDS).mkdir()
+        code, lines = self.check()
+        self.assertEqual(code, 1)
+        self.assertTrue(lines[0].startswith("books/kinds.csv:1: cannot read file"), lines)
+
+    def test_an_unreadable_watch_list_does_not_flag_every_kinds_row(self):
+        (self.dir / quality.WATCHED).unlink()
+        self.kinds("agentfiles,tests.e2e,e2e")
+        self.assertEqual(self.check(), (1, ["books/watched.csv:1: missing file", "1 problems"]))
+
+
 class AppendOnlyTest(CheckCase):
     def git(self, *args):
         return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", str(self.dir), *args],
