@@ -17,7 +17,9 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H9 | Share the Poteto posts | **Done** (the pstack guide parts 1 and 2) |
 | H10 | Review and merge the bstack branch | **Done** |
 | H11 | Review and merge the verification and planning branch | 🚧 **BLOCKER** for agentfiles picking it up |
-| H12 | Create a verification skill in one real app | 🚧 **BLOCKER** for ROADMAP R18 |
+| H12 | Create a verification skill in one real app | 🚧 **BLOCKER** for ROADMAP R18, R27 |
+| H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
+| H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 
 ---
 
@@ -110,3 +112,23 @@ which app goes first.
 3. Use it for a week: `/beau-mode` bug fixes and features will verify through it.
 4. Schedule `/maintain-verification-skill` daily for that repo with your tool's scheduler
    (for example a Claude Code scheduled task or a Cursor automation).
+
+**Shortcut (November 2026):** R27 proposes agent-ledger as the first app, then agent-kit and
+the quality books. None needs test accounts or seed data from you. Saying "go on R27" is the
+decision; reviewing and merging the three PRs is the rest.
+
+### H13. Protect workflow files and checker pins
+**Why a human:** Rulesets and CODEOWNERS need repo admin, and you choose who may approve.
+**Steps:**
+1. Read R29's audit table once it merges (`docs/ARCHITECTURE.md`). It lists each gate a PR can
+   currently change for itself.
+2. For each repo it names, add a ruleset or CODEOWNERS entry so a change under
+   `.github/workflows/**` (and the pinned checker SHA in the books repos) needs your review.
+
+### H14. Allow hooks in agentfiles — 🚧 BLOCKER for R32
+**Why a human:** A hook runs code on every matching event in every session. Turning that on is
+your call, per machine.
+**Steps:**
+1. Read R32's charter when it is written. It lists the two hooks and what each runs.
+2. Add `hooks` to `allow:` in your agentfiles profile, starting with the gate in `observe`.
+3. After a week of observe logs with no false block, decide whether to move to `enforce`.
