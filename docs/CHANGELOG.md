@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.15.0 (2026-11-18)
+
+- Every commit an agent writes now says how it was checked, in a `Verified:` git trailer: `receipt <run-id>`, `verify-work`, `tests` or `none <reason>`. The Opening a PR playbook defines the values, and beau-agent and verify-work carry the rule.
+- `git log --format='%h %(trailers:key=Verified,valueonly)'` lists the stamp beside each commit, so unverified commits can be counted.
+- Try: `Show me how each commit on this branch was verified.`
+
 ## bstack 0.14.0 (2026-11-18)
 
 - `quality.py summary --json` now lists, per repo, `caught_on_pr`: the tests that failed in a pull request run that week, with the evidence link for each failure and a count of distinct tests, beside `failed_on_main`. The books and their checks are unchanged.
