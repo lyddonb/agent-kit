@@ -5,7 +5,7 @@ book them into the quality books, check the books, and summarize a week.
 Usage:
     uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
     uv run --python 3.12 quality.py fetch BOOKS_DIR OUT_DIR [--since YYYY-MM-DD] [--repo SLUG]
-    uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json]
+    uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
     uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json]
 
@@ -53,7 +53,8 @@ tests. `prefix` is a module, `module.Class` or a whole test id; a test takes the
 `property` or `differential`) of the row with the longest prefix that matches it on whole dotted segments,
 and `unit` when no row matches. A `setUpClass (mod.Class)` or `setUpModule (mod)` row and an import failure
 `unittest.loader._FailedTest.mod` are matched as the class or module they name. Books without the file are valid. Only `check` reads its form;
-`ingest` never writes it.
+`ingest` never writes it. Two more files, books/jobs.csv and books/steps.csv (one row per CI job and per step, both
+append only), are optional until adopted: see "The job books" below.
 
 Trust: CI runs pull-request code, so anyone who can get a workflow to run can write any recorder
 file, and runs.csv and failures.csv cannot be edited afterwards. Who a run is therefore comes from
@@ -78,8 +79,7 @@ and for each run `gh api --paginate "repos/O/N/actions/runs/ID/artifacts?per_pag
 each artifact, `gh api repos/O/N/actions/artifacts/ID/zip`. `--since` filters on a run's creation
 date, so a re-run of an old run needs an earlier --since.
 
-Jobs. Once BOOKS_DIR/books/jobs.csv exists (a header with an `evidence` column is enough; without that
-column fetch exits 2), `fetch` also stores what GitHub's Actions jobs API reports for each run it does not
+Jobs. Once BOOKS_DIR/books/jobs.csv exists (and then books/steps.csv too: see "The job books"), `fetch` also stores what GitHub's Actions jobs API reports for each run it does not
 skip: OUT_DIR/<repo>/<run_id>/jobs.json, with `v`, `run_id`, `run_attempt` and per job `id, name, conclusion,
 created, started, completed` and its `steps` (`number, name, conclusion, started, completed`), sorted by id
 and number. A missing or null timestamp or conclusion is written as "": a skipped job and a cancelled step
@@ -90,9 +90,9 @@ per run and 100 steps per job; a run over a cap is refused whole. A failed jobs 
 step, or a run over a cap prints `FAILED RUN_ID: jobs WHY`, writes no jobs.json and makes fetch exit 1, and
 the run's artifacts are still fetched. A run whose artifacts fail as a whole keeps the manifest and the
 jobs it stored. Without books/jobs.csv none of this happens: the calls, files and
-output are the same as before. Names in jobs.json are text a pull request controls; ingest must judge them.
+output are the same as before. Names in jobs.json are text a pull request controls; ingest judges them.
 
-`check` validates the files (the four books and kinds.csv when it exists) and prints one `path:line: message` line per problem (path
+`check` validates the files (the four books, kinds.csv when it exists, and the two job books when they exist) and prints one `path:line: message` line per problem (path
 relative to BOOKS_DIR), then `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when
 there are problems, 2 on bad usage. With --base REF, runs.csv and failures.csv must be
 append-only against REF. It also checks across the files: every failures row belongs to a run,
@@ -101,6 +101,19 @@ rules (RUN_RULES, FAILURE_RULES, WEEKLY_RULES, WATCHED_RULES, KINDS_RULES): stam
 `python` as 3.0 to 3.99 without leading zeros, cells of at most 1000 characters, and no cell that
 starts with = + - @ tab or CR (a spreadsheet would run it) or holds a control character other than
 newline and tab (a terminal would obey it).
+
+The job books. books/jobs.csv (`started,repo,sha,event,workflow,job,job_id,conclusion,queue_ms,total_ms,
+failed_step,evidence`) has one row per job, books/steps.csv (`started,repo,job_id,number,step,conclusion,ms,
+evidence`) one row per step. They are optional until adopted, because books written before they existed have
+neither: with neither file, `check`, `ingest`, `fetch` and `summary` print, return and write exactly what they did
+before. Exactly one of the two is a `check` problem on the missing file (so every command that refuses books that
+fail check refuses it). With both, they are held to `JOB_RULES` and `STEP_RULES` (one set of functions used by
+`check` and by `ingest`, like `RUN_RULES`): the header, stamps in 2020 to 2099, `job_id` and `number` as positive
+integers without leading zeros, `conclusion` matching [a-z_]{0,30}, `queue_ms`, `total_ms` and `ms` empty or a
+non-negative integer, the text hygiene and the 1000 characters of every other file, uniqueness on `(evidence,
+job_id)` and `(evidence, job_id, number)`, and that every step has a job with the same `(evidence, job_id)` and
+`repo`. `ok, N rows` counts their rows, and with --base both are append only (a file missing at REF is new and
+may have any rows).
 
 `ingest` reads the layout `fetch` writes. For each <repo>/<run_id>/manifest.json: it must agree with
 its folder, the repo must be on the watch list with the same github and workflow, `fork` must be false,
@@ -119,6 +132,25 @@ ingest (the rest are counted and named, not read, and ingest exits 1). The three
 memory, checked, and written only if the result passes, all or none. Anything artifact-derived that is
 printed has its non-printable characters escaped.
 
+Jobs in ingest, only once the job books are adopted (otherwise jobs.json files are not looked at). A run
+folder's `jobs.json` is booked when its evidence is not yet in jobs.csv; its identity needs a valid manifest, and
+repo, sha, event, workflow and evidence come from the manifest, never from the file. The file is read strictly (4 MB,
+64 jobs, 100 steps, no unknown or missing key), and its `run_id` and `run_attempt` must be the manifest's. Every
+job the API reported is booked, `skipped` and `cancelled` ones and ones with no steps included. `started` is the
+job's `created` stamp and is required. `queue_ms` is the job's started minus created and `total_ms` completed minus
+started, `ms` of a step likewise; each is empty when a stamp it needs is missing and 0 when the difference is
+negative. `failed_step` names the lowest-numbered step whose conclusion is `failure`. A job or step name is text a
+pull request controls: one that is empty, fails text hygiene or is over 1000 characters is booked as
+`(unprintable name)` and never blocks the run's timings. A stamp that is not empty and not a valid stamp, or a
+conclusion outside its rule, rejects that jobs.json by name and blocks nothing else, not the run's test record
+and not other runs. A folder with a manifest, a jobs.json and no artifacts books its jobs and prints no `no
+artifacts` line. Per jobs file it prints `booked jobs REPO/RUN: N jobs, M steps`, `skipped jobs REPO/RUN: already
+booked` or `rejected: REPO/RUN/jobs.json: why`, and a rejection makes ingest exit 1. The totals line and the
+--json totals gain `jobs_booked`, `jobs_already_booked`, `jobs_rejected`, `job_rows` and `step_rows`. New job rows
+are ordered by (started, evidence, job_id) and step rows by (their job's started, evidence, job_id, number).
+`--only jobs` books only jobs and steps: it reads no artifact and leaves runs.csv, failures.csv and
+tests-weekly.csv alone; without adopted books it exits 2.
+
 `summary` prints the numbers of one ISO week from books that pass `check`: the one place a
 report takes its numbers from. With --json it is one object with sorted keys and integer
 numbers only. Per repo, `by_kind` holds all four kinds, each with `tests`, `total_ms`, `caught_on_pr`
@@ -126,7 +158,7 @@ and `failed_on_main` (the last two count distinct tests). A median of an even co
 
 Standard library only; needs Python 3.10 or later (run it through uv).
 
-Shape: `Books` is loaded once (the CSV tables with line numbers). Each entry in `CHECKS`
+Shape: `Books` is loaded once (the CSV tables with line numbers; the job books only when the files exist). Each entry in `CHECKS`
 takes a `Books` and yields `Problem`s. A new check is a new entry in that registry. Ingest
 and summary read the checked tables as typed rows (`RunRow`, `FailureRow`, `WeeklyRow`).
 """

@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.19.0 (2026-11-19)
+
+- `quality.py ingest` now books each run's `jobs.json` into `books/jobs.csv` and `books/steps.csv`, and `check` holds both files to rules, once the books have both files. `ingest --only jobs` books just the jobs and steps. Without the two files nothing changes: books written before them check, ingest, fetch and summarize exactly as before.
+
 ## bstack 0.18.0 (2026-11-19)
 
 - `interrogate` gives every adversary the repo's `REVIEW.md`, read from the default branch, so a change can't rewrite the guide it is reviewed by. Claude Code Review reads the same file.
