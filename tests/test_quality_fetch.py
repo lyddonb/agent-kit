@@ -655,5 +655,261 @@ class TwoRoundsTest(FetchCase):
         self.assertEqual([f["test_id"] for f in repo["failed_on_main"]], ["t.A.test_a"])
 
 
+def job_obj(job_id: int, name: str = "validate", **over) -> dict:
+    """A job as the Actions API reports it (shape from a real answer), with three steps."""
+    job = {"id": job_id, "run_id": 1, "name": name, "status": "completed", "conclusion": "success",
+           "created_at": "2026-11-14T10:00:01Z", "started_at": "2026-11-14T10:00:04Z", "completed_at": "2026-11-14T10:01:10Z",
+           "html_url": "https://example.invalid/job", "labels": ["ubuntu-latest"],
+           "steps": [{"name": f"step {n}", "status": "completed", "conclusion": "success", "number": n,
+                      "started_at": f"2026-11-14T10:00:{4 + n:02d}Z", "completed_at": f"2026-11-14T10:00:{5 + n:02d}Z"} for n in (1, 2, 3)]}
+    job.update(over)
+    return job
+
+
+class JobsTest(FetchCase):
+    JOBS_ENDPOINT = "repos/lyddonb/agentfiles/actions/runs/{run}/attempts/1/jobs?per_page=100"
+
+    def adopt(self, header: str = "started,repo,evidence\n", rows: str = "") -> None:
+        (self.books / "books/jobs.csv").write_text(header + rows)
+
+    def serve_jobs(self, run_id: int, *jobs: dict, pages: int = 1) -> None:
+        per = max(1, -(-len(jobs) // pages))
+        chunks = [list(jobs[i:i + per]) for i in range(0, len(jobs), per)] or [[]]
+        self.put(f"repos/lyddonb/agentfiles/actions/runs/{run_id}/attempts/1/jobs",
+                 "".join(dumps({"total_count": len(jobs), "jobs": c}) for c in chunks))
+
+    def jobs_file(self, run_id: int) -> dict:
+        return json.loads((self.out / "agentfiles" / str(run_id) / "jobs.json").read_text())
+
+    def jobs_calls(self) -> list[str]:
+        return [e for e in self.endpoints() if "/attempts/" in e]
+
+    def test_without_jobs_csv_nothing_about_jobs_is_called_written_or_printed(self):
+        run = self.run_with_artifact(601, event="pull_request")
+        self.serve_jobs(601, job_obj(6010))
+        self.runs([run, run_obj(602)])
+        self.artifacts(602, artifact_obj(6020, "coverage"))
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.jobs_calls(), [])
+        self.assertEqual(sorted(tree(self.out)), ["agentfiles/601/artifacts/test-results-agentfiles/test-results.jsonl", "agentfiles/601/manifest.json"])
+        self.assertEqual(out, "agentfiles (lyddonb/agentfiles, ci): runs created since 2026-11-08\n"
+                              "  fetched 601: pull_request feat/x attempt 1, 1 artifact\n"
+                              "fetched 1 runs (1 artifacts); listed 2; skipped 0 forks, 0 pushes to a non-default branch, "
+                              "0 already booked, 1 without test-results artifacts; 0 failed\n")
+
+    def test_a_jobs_csv_without_an_evidence_column_is_a_usage_error_and_nothing_is_called(self):
+        self.adopt(header="started,repo\n")
+        self.runs([self.run_with_artifact(601)])
+        code, out = self.fetch()
+        self.assertEqual(code, 2, out)
+        self.assertIn("evidence", out)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_run_with_an_artifact_gets_the_artifact_the_manifest_and_jobs_json(self):
+        self.adopt()
+        self.runs([self.run_with_artifact(601, event="pull_request")])
+        self.serve_jobs(601, job_obj(6012, "lint"), job_obj(6011, "validate"))
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(tree(self.out)), ["agentfiles/601/artifacts/test-results-agentfiles/test-results.jsonl",
+                                                  "agentfiles/601/jobs.json", "agentfiles/601/manifest.json"])
+        steps = [{"number": n, "name": f"step {n}", "conclusion": "success",
+                  "started": f"2026-11-14T10:00:{4 + n:02d}Z", "completed": f"2026-11-14T10:00:{5 + n:02d}Z"} for n in (1, 2, 3)]
+        job = {"conclusion": "success", "created": "2026-11-14T10:00:01Z", "started": "2026-11-14T10:00:04Z",
+               "completed": "2026-11-14T10:01:10Z", "steps": steps}
+        self.assertEqual(self.jobs_file(601), {"v": 1, "run_id": 601, "run_attempt": 1,
+                                               "jobs": [dict(job, id=6011, name="validate"), dict(job, id=6012, name="lint")]})
+        self.assertIn("  fetched 601: pull_request feat/x attempt 1, 1 artifact, 2 jobs\n", out)
+        self.assertIn("0 without test-results artifacts; 1 runs with jobs (2 jobs); 0 failed\n", out)
+
+    def test_a_run_without_artifacts_still_gets_the_manifest_and_jobs_json(self):
+        self.adopt()
+        self.artifacts(601, artifact_obj(6010, "coverage"))
+        self.serve_jobs(601, job_obj(6011))
+        self.runs([run_obj(601)])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(tree(self.out)), ["agentfiles/601/jobs.json", "agentfiles/601/manifest.json"])
+        self.assertEqual(self.manifest(601)["run_id"], 601)
+        self.assertIn("  fetched 601: jobs only (1 job)\n", out)
+        self.assertIn("1 without test-results artifacts; 1 runs with jobs (1 jobs); 0 failed\n", out)
+
+    def test_a_run_whose_test_record_is_booked_but_not_its_jobs_gets_jobs_without_artifacts(self):
+        self.adopt()
+        run = self.run_with_artifact(601)
+        self.write_books("agentfiles,lyddonb/agentfiles,ci\n", WhatIsAlreadyBookedTest.BOOKED.format(s="a" * 40, run=601))
+        self.serve_jobs(601, job_obj(6011))
+        self.runs([run])
+        code, out = self.fetch("--since", "2026-11-01")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(tree(self.out)), ["agentfiles/601/jobs.json", "agentfiles/601/manifest.json"])
+        self.assertIn("1 already booked", out)
+        self.assertIn("  fetched 601: jobs only (1 job)\n", out)
+        self.assertNotIn("repos/lyddonb/agentfiles/actions/artifacts/6010/zip", self.endpoints())
+
+    def test_a_run_whose_evidence_is_in_jobs_csv_is_not_asked_about_its_jobs(self):
+        link = "https://github.com/lyddonb/agentfiles/actions/runs/601/attempts/1"
+        self.adopt(header="evidence,started\n", rows=f"{link},2026-11-14T10:00:00Z\nshort\n")
+        self.serve_jobs(601, job_obj(6011))
+        self.serve_jobs(602, job_obj(6021))
+        self.runs([self.run_with_artifact(601), self.run_with_artifact(602)])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.jobs_calls(), [self.JOBS_ENDPOINT.format(run=602)])
+        self.assertFalse((self.out / "agentfiles/601/jobs.json").exists())
+        self.assertTrue((self.out / "agentfiles/601/manifest.json").exists())
+        self.assertTrue((self.out / "agentfiles/602/jobs.json").exists())
+
+    def test_a_fork_and_a_push_to_a_non_default_branch_get_nothing(self):
+        self.adopt()
+        fork = self.run_with_artifact(601, head_repository__full_name="evil/agentfiles")
+        push = self.run_with_artifact(602, event="push", head_branch="dev")
+        self.serve_jobs(601, job_obj(6011))
+        self.serve_jobs(602, job_obj(6021))
+        self.runs([fork, push])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.jobs_calls(), [])
+        self.assertFalse(self.out.exists() and any(self.out.rglob("*.json")))
+        self.assertIn("0 runs with jobs (0 jobs)", out)
+
+    def test_skipped_jobs_and_cancelled_steps_are_written_as_reported_with_empty_text_for_null(self):
+        self.adopt()
+        skipped = job_obj(6011, "release", conclusion="skipped", steps=[])
+        cancelled = job_obj(6012, "tests", conclusion="cancelled", started_at=None, completed_at=None)
+        del cancelled["created_at"]
+        cancelled["steps"][2].update(conclusion=None, completed_at=None)
+        cancelled["steps"][1].update(conclusion="cancelled")
+        self.artifacts(601)
+        self.serve_jobs(601, cancelled, skipped)
+        self.runs([run_obj(601)])
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        jobs = self.jobs_file(601)["jobs"]
+        self.assertEqual([j["id"] for j in jobs], [6011, 6012])
+        self.assertEqual((jobs[0]["conclusion"], jobs[0]["steps"]), ("skipped", []))
+        self.assertEqual((jobs[1]["created"], jobs[1]["started"], jobs[1]["completed"], jobs[1]["conclusion"]), ("", "", "", "cancelled"))
+        self.assertEqual([(s["conclusion"], s["completed"]) for s in jobs[1]["steps"][1:]], [("cancelled", "2026-11-14T10:00:07Z"), ("", "")])
+
+    def test_names_are_stored_as_they_are_and_printed_only_escaped(self):
+        self.adopt()
+        evil = "x\x1b[31m\nFAKE"
+        self.artifacts(601)
+        self.serve_jobs(601, job_obj(6011, evil))
+        self.put("repos/lyddonb/agentfiles/actions/runs/602/attempts/1/jobs", dumps({"jobs": [job_obj(6021, 5)]}))
+        self.artifacts(602)
+        self.runs([run_obj(601), run_obj(602)])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self.jobs_file(601)["jobs"][0]["name"], evil)
+        self.assertNotIn("\x1b", out)
+
+    def test_a_failed_jobs_call_fails_the_run_s_jobs_only_and_its_artifacts_are_still_fetched(self):
+        self.adopt()
+        self.runs([self.run_with_artifact(601)])  # no jobs answer: the fake gh says 404
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^  FAILED 601: jobs .*404")
+        self.assertEqual(sorted(tree(self.out)), ["agentfiles/601/artifacts/test-results-agentfiles/test-results.jsonl", "agentfiles/601/manifest.json"])
+        self.assertIn("  fetched 601: pull_request feat/x attempt 1, 1 artifact\n", out)
+        self.assertIn("0 runs with jobs (0 jobs); 1 failed", out)
+
+    def test_a_failed_jobs_call_for_a_run_without_artifacts_leaves_nothing_behind(self):
+        self.adopt()
+        self.artifacts(601)
+        self.runs([run_obj(601), run_obj(602)])
+        self.serve_jobs(602, job_obj(6021))
+        self.artifacts(602)
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertFalse((self.out / "agentfiles/601").exists())
+        self.assertTrue((self.out / "agentfiles/602/jobs.json").exists())
+
+    def test_a_malformed_job_or_step_fails_the_run_s_jobs_whole(self):
+        bad_job = [job_obj(6011), job_obj("7")]
+        no_name = [job_obj(6011), {k: v for k, v in job_obj(6012).items() if k != "name"}]
+        bad_step = job_obj(6013)
+        bad_step["steps"][1]["number"] = "2"
+        nameless_step = job_obj(6014)
+        del nameless_step["steps"][0]["name"]
+        for n, jobs in enumerate([bad_job, no_name, [bad_step], [nameless_step]], start=1):
+            with self.subTest(n=n):
+                shutil.rmtree(self.out, ignore_errors=True)
+                self.artifacts(601)
+                self.serve_jobs(601, *jobs)
+                self.adopt()
+                self.runs([run_obj(601)])
+                code, out = self.fetch()
+                self.assertEqual(code, 1, out)
+                self.assertRegex(out, r"(?m)^  FAILED 601: jobs ")
+                self.assertFalse((self.out / "agentfiles/601").exists())
+
+    def test_sixty_four_jobs_are_stored_and_sixty_five_are_refused_whole(self):
+        self.adopt()
+        self.artifacts(601)
+        self.serve_jobs(601, *[job_obj(6000 + n) for n in range(64)], pages=2)
+        self.artifacts(602)
+        self.serve_jobs(602, *[job_obj(7000 + n) for n in range(65)], pages=2)
+        self.runs([run_obj(601), run_obj(602)])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertEqual(len(self.jobs_file(601)["jobs"]), 64)
+        self.assertRegex(out, r"(?m)^  FAILED 602: jobs .*64")
+        self.assertFalse((self.out / "agentfiles/602").exists())
+
+    def test_a_hundred_steps_are_stored_and_a_hundred_and_one_refuse_the_run_whole(self):
+        def steps(count):
+            return [{"name": f"s{n}", "conclusion": "success", "number": n, "started_at": None, "completed_at": None} for n in range(count, 0, -1)]
+        self.adopt()
+        self.artifacts(601)
+        self.serve_jobs(601, job_obj(6011, steps=steps(100)))
+        self.artifacts(602)
+        self.serve_jobs(602, job_obj(7011), job_obj(7012, steps=steps(101)))
+        self.runs([run_obj(601), run_obj(602)])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertEqual([s["number"] for s in self.jobs_file(601)["jobs"][0]["steps"]], list(range(1, 101)))
+        self.assertRegex(out, r"(?m)^  FAILED 602: jobs .*100")
+        self.assertFalse((self.out / "agentfiles/602").exists())
+
+    def test_a_jobs_answer_without_a_jobs_list_is_a_failure_not_an_empty_run(self):
+        self.adopt()
+        self.artifacts(601)
+        self.put("repos/lyddonb/agentfiles/actions/runs/601/attempts/1/jobs", dumps({"message": "odd"}))
+        self.runs([run_obj(601)])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^  FAILED 601: jobs ")
+        self.assertFalse((self.out / "agentfiles/601").exists())
+
+    def test_a_run_with_too_many_test_artifacts_fails_but_keeps_the_jobs_it_stored(self):
+        self.adopt()
+        run = run_obj(601)
+        self.artifacts(601, *[artifact_obj(6100 + n, f"test-results-{n}") for n in range(13)])
+        self.serve_jobs(601, job_obj(6011))
+        self.runs([run])
+        code, out = self.fetch()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^  FAILED 601: has 13 test-results artifacts")
+        self.assertEqual(sorted(tree(self.out)), ["agentfiles/601/jobs.json", "agentfiles/601/manifest.json"])
+
+    def test_exactly_one_gh_call_is_added_per_run(self):
+        runs = [self.run_with_artifact(601), self.run_with_artifact(602)]
+        self.runs(runs)
+        self.fetch()
+        before = len(self.calls())
+        (self.data / "calls.log").unlink()
+        shutil.rmtree(self.out)
+        self.adopt()
+        self.serve_jobs(601, job_obj(6011))
+        self.serve_jobs(602, job_obj(6021))
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(self.calls()), before + 2)
+        self.assertEqual(sorted(self.jobs_calls()), [self.JOBS_ENDPOINT.format(run=601), self.JOBS_ENDPOINT.format(run=602)])
+        self.assertTrue(all(c[1] == "--paginate" for c in self.calls() if any("/jobs" in a for a in c)))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -72,6 +72,20 @@ and for each run `gh api --paginate "repos/O/N/actions/runs/ID/artifacts?per_pag
 each artifact, `gh api repos/O/N/actions/artifacts/ID/zip`. `--since` filters on a run's creation
 date, so a re-run of an old run needs an earlier --since.
 
+Jobs. Once BOOKS_DIR/books/jobs.csv exists (a header with an `evidence` column is enough; without that
+column fetch exits 2), `fetch` also stores what GitHub's Actions jobs API reports for each run it does not
+skip: OUT_DIR/<repo>/<run_id>/jobs.json, with `v`, `run_id`, `run_attempt` and per job `id, name, conclusion,
+created, started, completed` and its `steps` (`number, name, conclusion, started, completed`), sorted by id
+and number. A missing or null timestamp or conclusion is written as "": a skipped job and a cancelled step
+are written as reported. It is fetched for a run with no test-results artifact and for a run whose test
+record is already booked, and not for a run whose `evidence` is already in jobs.csv. This costs one more
+`gh api --paginate "repos/O/N/actions/runs/ID/attempts/ATTEMPT/jobs?per_page=100"` per run. Caps: 64 jobs
+per run and 100 steps per job; a run over a cap is refused whole. A failed jobs call, a malformed job or
+step, or a run over a cap prints `FAILED RUN_ID: jobs WHY`, writes no jobs.json and makes fetch exit 1, and
+the run's artifacts are still fetched. A run whose artifacts fail as a whole keeps the manifest and the
+jobs it stored. Without books/jobs.csv none of this happens: the calls, files and
+output are the same as before. Names in jobs.json are text a pull request controls; ingest must judge them.
+
 `check` validates the four files and prints one `path:line: message` line per problem (path
 relative to BOOKS_DIR), then `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when
 there are problems, 2 on bad usage. With --base REF, runs.csv and failures.csv must be
@@ -151,6 +165,7 @@ RUNS = "books/runs.csv"
 FAILURES = "books/failures.csv"
 WEEKLY = "books/tests-weekly.csv"
 WATCHED = "books/watched.csv"
+JOBS = "books/jobs.csv"  # not in SCHEMAS yet: while it exists, `fetch` stores jobs, and it reads only `evidence`
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
 FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "evidence")
@@ -2004,9 +2019,14 @@ def cmd_summary(args: argparse.Namespace) -> int:
 # under OUT_DIR only, never under BOOKS_DIR. What it writes is what `ingest` reads:
 #   OUT_DIR/<repo>/<run_id>/manifest.json             the API's account of the run (see Manifest)
 #   OUT_DIR/<repo>/<run_id>/artifacts/<name>/*.jsonl  the run's test-results-* artifacts, unzipped
+#   OUT_DIR/<repo>/<run_id>/jobs.json                 the API's jobs and steps of the run (see JobsFile), only
+#                                                     once BOOKS_DIR/books/jobs.csv exists
 # The artifacts are downloaded as they are and believed only by `ingest`, and only for what they measured.
 
 ARTIFACT_PREFIX = "test-results-"
+JOBS_FILE = "jobs.json"
+MAX_JOBS_PER_RUN = 64
+MAX_STEPS_PER_JOB = 100
 _ARTIFACT_NAME = re.compile(r"test-results-[A-Za-z0-9._-]{1,100}")
 MAX_ARTIFACTS_PER_RUN = 12
 MAX_ZIP_BYTES = 32 << 20  # one downloaded archive
@@ -2016,6 +2036,73 @@ MAX_RUN_UNPACKED_BYTES = 32 << 20  # what all the archives of one run unpack to
 SINCE_OVERLAP_DAYS = 3  # the default --since lists this many days before the latest booked start again
 GH_TIMEOUT_SECONDS = 300
 LOOKBACK_DAYS = 7  # how far back a repo with nothing booked yet is listed
+
+
+def _api_text(value: object, what: str) -> str:
+    """An API timestamp or conclusion: null or missing is "", any other non-text is malformed."""
+    if value is None:
+        return ""
+    if type(value) is not str:
+        raise Rejected(f"has a job or step whose {what} is not text")
+    return value
+
+
+class Step(NamedTuple):
+    number: int
+    name: str
+    conclusion: str
+    started: str
+    completed: str
+
+
+class Job(NamedTuple):
+    id: int
+    name: str
+    conclusion: str
+    created: str
+    started: str
+    completed: str
+    steps: tuple[Step, ...]
+
+
+class JobsFile(NamedTuple):
+    """What the Actions jobs API reported for one run attempt, as `fetch` writes it to jobs.json."""
+    v: int
+    run_id: int
+    run_attempt: int
+    jobs: tuple[Job, ...]
+
+    @staticmethod
+    def from_api(manifest: Manifest, pages: list[dict]) -> "JobsFile":
+        """Raises Rejected for a malformed job or step, or a run over a cap (the whole run is refused)."""
+        if not pages or not all(isinstance(page.get("jobs"), list) for page in pages):
+            raise Rejected("answered without a jobs list")
+        raw = [j for page in pages for j in page["jobs"]]
+        if len(raw) > MAX_JOBS_PER_RUN:
+            raise Rejected(f"has more than {MAX_JOBS_PER_RUN} jobs; none stored")
+        jobs = []
+        for j in raw:
+            if not isinstance(j, dict) or type(j.get("id")) is not int or type(j.get("name")) is not str:
+                raise Rejected("has a job without an integer id or a text name")
+            raw_steps = j.get("steps") if j.get("steps") is not None else []
+            if not isinstance(raw_steps, list):
+                raise Rejected(f"job {j['id']} has steps that are not a list")
+            if len(raw_steps) > MAX_STEPS_PER_JOB:
+                raise Rejected(f"job {j['id']} has more than {MAX_STEPS_PER_JOB} steps; none stored")
+            steps = []
+            for s in raw_steps:
+                if not isinstance(s, dict) or type(s.get("number")) is not int or type(s.get("name")) is not str:
+                    raise Rejected(f"job {j['id']} has a step without an integer number or a text name")
+                steps.append(Step(s["number"], s["name"], _api_text(s.get("conclusion"), "conclusion"),
+                                  _api_text(s.get("started_at"), "started_at"), _api_text(s.get("completed_at"), "completed_at")))
+            jobs.append(Job(j["id"], j["name"], _api_text(j.get("conclusion"), "conclusion"), _api_text(j.get("created_at"), "created_at"),
+                            _api_text(j.get("started_at"), "started_at"), _api_text(j.get("completed_at"), "completed_at"),
+                            tuple(sorted(steps, key=lambda s: s.number))))
+        return JobsFile(RECORD_VERSION, manifest.run_id, manifest.run_attempt, tuple(sorted(jobs, key=lambda j: j.id)))
+
+    def to_json(self) -> dict:
+        return {"v": self.v, "run_id": self.run_id, "run_attempt": self.run_attempt,
+                "jobs": [{**j._asdict(), "steps": [s._asdict() for s in j.steps]} for j in self.jobs]}
 
 
 class GhError(Exception):
@@ -2151,6 +2238,9 @@ class FetchTally:
     booked: int = 0
     empty: int = 0
     failed: int = 0
+    jobs_adopted: bool = False  # books/jobs.csv exists: the totals line says what was stored
+    jobs_runs: int = 0  # runs with a jobs.json written
+    jobs: int = 0
 
     def fail(self, where: str, why: str) -> None:
         self.failed += 1
@@ -2195,7 +2285,7 @@ def _manifest_of(run: dict, repo: str, github: str, workflow: str, default_branc
 
 
 def fetch_repo(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, since: str,
-               tally: FetchTally, booked: dict[str, int]) -> None:
+               tally: FetchTally, booked: dict[str, int], booked_jobs: set[str] | None) -> None:
     print(f"{repo} ({github}, {workflow}): runs created since {since}")
     try:
         listing = gh.pages(f"repos/{github}/actions/runs?status=completed&per_page=100&created=%3E%3D{since}")
@@ -2217,11 +2307,28 @@ def fetch_repo(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, sinc
         tally.fail("default branch", f"gh api repos/{github} did not name one")
         return
     for run in runs:
-        fetch_run(gh, out_dir, repo, github, workflow, default_branch, run, tally, booked)
+        fetch_run(gh, out_dir, repo, github, workflow, default_branch, run, tally, booked, booked_jobs)
+
+
+def fetch_jobs(gh: Gh, out_dir: str, manifest: Manifest, tally: FetchTally) -> JobsFile | None:
+    """Store the jobs of one run attempt as jobs.json (and the manifest beside it). On any failure, say so,
+    write nothing and return None: the run's artifacts are fetched all the same."""
+    try:
+        pages = gh.pages(f"repos/{manifest.github}/actions/runs/{manifest.run_id}/attempts/{manifest.run_attempt}/jobs?per_page=100")
+        found = JobsFile.from_api(manifest, pages)
+    except (GhError, Rejected) as e:
+        tally.fail(str(manifest.run_id), f"jobs {e}")
+        return None
+    folder = os.path.join(out_dir, manifest.repo, str(manifest.run_id))
+    _write_json(os.path.join(folder, MANIFEST), manifest._asdict())
+    _write_json(os.path.join(folder, JOBS_FILE), found.to_json())
+    tally.jobs_runs += 1
+    tally.jobs += len(found.jobs)
+    return found
 
 
 def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, default_branch: str, run: dict,
-              tally: FetchTally, booked: dict[str, int]) -> None:
+              tally: FetchTally, booked: dict[str, int], booked_jobs: set[str] | None) -> None:
     run_id = run["id"]
     if run.get("status") != "completed":
         print(f"  skipped {run_id}: not completed ({printable(str(run.get('status')))}); it is listed again next time")
@@ -2238,18 +2345,40 @@ def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, defau
         return
     try:
         manifest = _manifest_of(run, repo, github, workflow, default_branch)
-        artifacts = [a for page in gh.pages(f"repos/{github}/actions/runs/{run_id}/artifacts?per_page=100")
-                     for a in page.get("artifacts", []) if isinstance(a, dict)]
-    except (Rejected, GhError) as e:
+    except Rejected as e:
         tally.fail(str(run_id), str(e))
         return
+    jobs = None
+    if booked_jobs is not None and manifest.evidence(manifest.run_attempt) not in booked_jobs:
+        jobs = fetch_jobs(gh, out_dir, manifest, tally)
+    got = fetch_artifacts(gh, out_dir, manifest, run_id, tally, booked, jobs is not None)
+    suffix = f", {len(jobs.jobs)} job{'s' * (len(jobs.jobs) != 1)}" if jobs is not None else ""
+    if got:
+        tally.runs += 1
+        tally.artifacts += got
+        print(f"  fetched {run_id}: {printable(str(run.get('event')))} {printable(branch)} attempt {manifest.run_attempt}, "
+              f"{got} artifact{'s' * (got != 1)}{suffix}")
+    elif jobs is not None:
+        print(f"  fetched {run_id}: jobs only ({len(jobs.jobs)} job{'s' * (len(jobs.jobs) != 1)})")
+
+
+def fetch_artifacts(gh: Gh, out_dir: str, manifest: Manifest, run_id: int, tally: FetchTally, booked: dict[str, int],
+                    has_jobs: bool) -> int:
+    """Download the run's test-results artifacts. Returns how many were fetched; failures are tallied."""
+    github, repo = manifest.github, manifest.repo
+    try:
+        artifacts = [a for page in gh.pages(f"repos/{github}/actions/runs/{run_id}/artifacts?per_page=100")
+                     for a in page.get("artifacts", []) if isinstance(a, dict)]
+    except GhError as e:
+        tally.fail(str(run_id), str(e))
+        return 0
     wanted = [a for a in artifacts if str(a.get("name", "")).startswith(ARTIFACT_PREFIX)]
     if not wanted:
         tally.empty += 1  # counted in the totals line; most runs (a docs-only change) have none
-        return
+        return 0
     if len(wanted) > MAX_ARTIFACTS_PER_RUN:
         tally.fail(str(run_id), f"has {len(wanted)} test-results artifacts, more than the {MAX_ARTIFACTS_PER_RUN} a run may have; nothing fetched")
-        return
+        return 0
     fresh = []
     for a in wanted:
         name = str(a.get("name"))
@@ -2260,13 +2389,14 @@ def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, defau
         else:
             fresh.append(a)
     if not fresh:
-        return
+        return 0
     if booked.get(manifest.evidence(manifest.run_attempt), 0) >= len(fresh):
         tally.booked += 1
         print(f"  skipped {run_id}: already booked")
-        return
+        return 0
     folder = os.path.join(out_dir, repo, str(run_id))
-    _write_json(os.path.join(folder, MANIFEST), manifest._asdict())
+    if not has_jobs:  # fetch_jobs wrote the manifest already
+        _write_json(os.path.join(folder, MANIFEST), manifest._asdict())
     got, run_left = 0, [MAX_RUN_UNPACKED_BYTES]
     for a in fresh:
         name = a["name"]
@@ -2279,16 +2409,40 @@ def fetch_run(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, defau
             extract_archive(raw, os.path.join(folder, ARTIFACTS, name), run_left)
             got += 1
         except OverCap as e:
-            shutil.rmtree(folder, ignore_errors=True)
+            shutil.rmtree(os.path.join(folder, ARTIFACTS) if has_jobs else folder, ignore_errors=True)
             tally.fail(str(run_id), f"artifact {name} ({a['id']}) {e}; the run is not fetched")
-            return
+            return 0
         except (Rejected, GhError, OSError) as e:
             tally.fail(str(run_id), f"artifact {name} ({a['id']}) not fetched: {e if not isinstance(e, OSError) else e.strerror}")
-    if got:
-        tally.runs += 1
-        tally.artifacts += got
-        print(f"  fetched {run_id}: {printable(str(run.get('event')))} {printable(branch)} attempt {manifest.run_attempt}, "
-              f"{got} artifact{'s' * (got != 1)}")
+    return got
+
+
+def booked_jobs_evidence(books_dir: str) -> set[str] | None:
+    """The evidence links in BOOKS_DIR/books/jobs.csv, or None when the file does not exist (jobs are not
+    adopted). Only the `evidence` column is read, and a short or odd row is skipped. Raises Rejected when the
+    file cannot be read or its header has no `evidence` column."""
+    path = os.path.join(books_dir, JOBS)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace", newline="") as f:
+            reader = csv.reader(f)
+            header = next(reader, None) or []
+            if "evidence" not in header:
+                raise Rejected(f"{JOBS} has no `evidence` column in its header")
+            at, links = header.index("evidence"), set()
+            while True:
+                try:
+                    row = next(reader)
+                except StopIteration:
+                    break
+                except csv.Error:
+                    continue
+                if len(row) > at:
+                    links.add(row[at])
+            return links
+    except OSError as e:
+        raise Rejected(f"cannot read {JOBS}: {e.strerror}") from None
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -2312,6 +2466,11 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         _print_problems(problems)
         print(f"{len(problems)} problems; refusing to fetch with books that fail check")
         return 1
+    try:
+        booked_jobs = booked_jobs_evidence(args.books_dir)
+    except Rejected as e:
+        print(f"quality.py: {e}", file=sys.stderr)
+        return 2
     watched = [(r.cells["repo"], r.cells["github"], r.cells["workflow"]) for r in books.tables[WATCHED].rows]
     if args.repo is not None:
         watched = [w for w in watched if w[0] == args.repo]
@@ -2322,14 +2481,14 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print("nothing to fetch: books/watched.csv lists no repos")
         return 0
     os.makedirs(args.out_dir, exist_ok=True)
-    gh, tally, booked = Gh(exe), FetchTally(), _booked_per_run(books)
+    gh, tally, booked = Gh(exe), FetchTally(jobs_adopted=booked_jobs is not None), _booked_per_run(books)
     for repo, github, workflow in watched:
         since = args.since or _latest_started(books, repo) or (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
-        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked)
+        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs)
     t = tally
     print(f"fetched {t.runs} runs ({t.artifacts} artifacts); listed {t.listed}; skipped {t.forks} forks, "
-          f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts; "
-          f"{t.failed} failed")
+          f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts"
+          + (f"; {t.jobs_runs} runs with jobs ({t.jobs} jobs)" if t.jobs_adopted else "") + f"; {t.failed} failed")
     return 1 if t.failed else 0
 
 
