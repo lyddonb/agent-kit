@@ -122,3 +122,19 @@ to is in the roadmap's Verification loops section (R27 to R35). Not committed to
   needs the number.
 - **Verify-skill health in the books.** Duration and pass rate of each `verify-<app>` run,
   read from receipts, once R27's skills have run for a few weeks.
+
+## From "Our Claude skills and guidance, six months later" (2026-11-19)
+
+Akshay's [post](https://akshay.co/posts/our-claude-skills-and-guidance-six-months-later/) on
+running a skill marketplace like production code. What we committed to is in the roadmap's
+Skill ops section (R38 to R41, and R25's method). Not committed to:
+
+- **A judge model for the verdicts a rule can't decide.** The post scores some criteria with a
+  judge. R38 leaves those rows `unjudged`, and verdicts here come from rules and exit codes
+  until Beau says otherwise.
+- **A per-skill health score.** One number per skill and a dashboard. At this size one section
+  in the weekly brief is enough.
+- **Auto-merged maintenance PRs.** The post's maintenance job pushes new rules onto old skills.
+  The Quality Director proposes and never acts.
+- **A nightly verdict on every invocation.** R38 runs weekly and deterministic first. Go nightly
+  only if a week turns out to be too slow to catch a harmful skill.
