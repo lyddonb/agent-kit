@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.14.0 (2026-11-18)
+
+- `quality.py summary --json` now lists, per repo, `caught_on_pr`: the tests that failed in a pull request run that week, with the evidence link for each failure and a count of distinct tests, beside `failed_on_main`. The books and their checks are unchanged.
+
 ## bstack 0.13.1 (2026-11-16)
 
 - `check-product.py --receipts` no longer accepts a receipt for a criterion whose text or probe was rewritten afterward, and `receipt.py` records INCONCLUSIVE when an untracked file was present before the probe.

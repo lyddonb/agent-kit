@@ -1917,7 +1917,12 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
     earlier = [w.week for w in rows if w.week < week]
     before = {w.test_id for w in rows if w.week == max(earlier)} if earlier else None
     ids = {w.test_id for w in here}
+    on_pr = [f for f in sorted(fails, key=lambda f: (f.test_id, f.evidence, f.python))
+             if event_of.get((f.evidence, f.python)) == "pull_request"]
     return {
+        "caught_on_pr": {"count": len({f.test_id for f in on_pr}),
+                         "failures": [{"evidence": f.evidence, "outcome": f.outcome, "python": f.python, "sha": f.sha,
+                                       "test_id": f.test_id} for f in on_pr]},
         "ci_wall_ms": sum(walls),
         "failed_on_main": [{"evidence": f.evidence, "outcome": f.outcome, "python": f.python, "sha": f.sha,
                             "test_id": f.test_id}
@@ -1959,7 +1964,8 @@ def render_summary(s: dict) -> str:
                      f"{r['suite_ms']['median']} ms (max {r['suite_ms']['max']}), "
                      + ("no prior weeks" if change is None else f"{change:+d} ms vs the prior weeks")
                      + (", OVER THRESHOLD" if r["over_threshold"] else ""))
-        lines.append(f"  failed on a push: {len(r['failed_on_main'])}; flaky: {len(r['flaky'])}; "
+        lines.append(f"  failed on a push: {len(r['failed_on_main'])}; caught on a pull request: "
+                     f"{r['caught_on_pr']['count']} tests; flaky: {len(r['flaky'])}; "
                      f"tests added {len(r['tests_added'])}, removed {len(r['tests_removed'])}; CI time {r['ci_wall_ms']} ms")
         for t in r["slowest_tests"][:3]:
             lines.append(f"  slow: {printable(t['test_id'])} mean {t['mean_ms']} ms over {t['runs']} runs")
