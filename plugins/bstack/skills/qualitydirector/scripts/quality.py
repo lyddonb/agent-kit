@@ -113,7 +113,7 @@ integers without leading zeros, `conclusion` matching [a-z_]{0,30}, `queue_ms`, 
 non-negative integer, the text hygiene and the 1000 characters of every other file, uniqueness on `(evidence,
 job_id)` and `(evidence, job_id, number)`, and that every step has a job with the same `(evidence, job_id)` and
 `repo`. `ok, N rows` counts their rows, and with --base both are append only (a file missing at REF is new and
-may have any rows).
+may have any rows; one that exists at REF and is gone now is `removed since REF`).
 
 `ingest` reads the layout `fetch` writes. For each <repo>/<run_id>/manifest.json: it must agree with
 its folder, the repo must be on the watch list with the same github and workflow, `fork` must be false,
@@ -1265,6 +1265,9 @@ def _append_only(books: Books, rel: str) -> Iterator[Problem]:
         return
     if not listed.stdout.strip():
         return  # the file did not exist at the base
+    if rel in JOB_BOOKS and not books.tables[rel].present:
+        yield Problem(rel, 1, f"removed since {ref}")  # a job book that was adopted at the base, now gone
+        return
     shown = _git(books.dir, "show", f"{ref}:./{rel}")
     if shown.returncode != 0:
         yield Problem(rel, 1, f"cannot check against {ref}: git show failed")

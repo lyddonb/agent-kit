@@ -1673,56 +1673,69 @@ class JobRowRulesTest(JobBooksCase):
 
 
 class JobBooksAppendOnlyTest(JobBooksCase):
-    def git(self, *args):
-        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", str(self.dir), *args],
+    """Adopted books committed once (git init is the slow part); each test works on its own copy."""
+
+    template: Path
+    _template_tmp: tempfile.TemporaryDirectory
+
+    @classmethod
+    def git_in(cls, folder: Path, *args):
+        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", str(folder), *args],
                               check=True, capture_output=True, text=True).stdout
 
-    def commit(self) -> None:
-        self.git("add", "-A")
-        self.git("commit", "-q", "-m", "books")
+    @classmethod
+    def setUpClass(cls):
+        cls._template_tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls._template_tmp.cleanup)
+        cls.template = Path(cls._template_tmp.name) / "books-repo"
+        shutil.copytree(FIXTURE, cls.template)
+        for rel in quality.JOB_BOOKS:
+            (cls.template / rel).write_text(",".join(quality.TABLE_SCHEMAS[rel]) + "\n" + ",".join(JOB_ROWS[rel][k] for k in quality.TABLE_SCHEMAS[rel]) + "\n")
+        cls.git_in(cls.template, "init", "-q")
+        cls.git_in(cls.template, "add", "-A")
+        cls.git_in(cls.template, "commit", "-q", "-m", "books")
+
+    def git(self, *args):
+        return self.git_in(self.dir, *args)
 
     def setUp(self):
-        super().setUp()
-        self.git("init", "-q")
-        self.adopt(jobs=2, steps=2)
-        self.commit()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name) / "books-repo"
+        shutil.copytree(self.template, self.dir)
 
     def test_appended_rows_pass(self):
         self.add(quality.JOBS, job_id="8000")
         self.add(quality.STEPS, number="9")
-        self.assertCheckClean(7 + 3 + 3, "--base", "HEAD")
+        self.assertCheckClean(7 + 2 + 2, "--base", "HEAD")
 
-    def test_an_edited_earlier_row_fails_on_its_line_in_each_file(self):
-        for rel, column in ((quality.JOBS, "failure"), (quality.STEPS, "failure")):
-            with self.subTest(rel):
-                path = self.dir / rel
-                good = path.read_text()
-                path.write_text(good.replace(f",{column},", ",success,", 1))
-                code, lines = self.check("--base", "HEAD")
-                self.assertEqual(code, 1, lines)
-                self.assertIn(f"{rel}:2: changed since HEAD", lines)
-                path.write_text(good)
-
-    def test_a_removed_row_fails_in_each_file(self):
+    def test_an_edited_earlier_row_or_a_removed_row_fails_on_its_line_in_each_file(self):
         for rel in quality.JOB_BOOKS:
-            with self.subTest(rel):
-                path = self.dir / rel
-                good = path.read_text()
-                path.write_text("".join(good.splitlines(keepends=True)[:2]))
-                self.assertIn(f"{rel}:3: removed since HEAD", self.check("--base", "HEAD")[1])
-                path.write_text(good)
+            path = self.dir / rel
+            good = path.read_text()
+            with self.subTest(rel, change="edited"):
+                path.write_text(good.replace(",failure,", ",success,", 1))
+                self.assertIn(f"{rel}:2: changed since HEAD", self.check("--base", "HEAD")[1])
+            with self.subTest(rel, change="removed"):
+                path.write_text(good.splitlines(keepends=True)[0])
+                self.assertIn(f"{rel}:2: removed since HEAD", self.check("--base", "HEAD")[1])
+            path.write_text(good)
 
     def test_files_that_are_new_since_the_base_may_have_any_rows(self):
         self.git("rm", "-q", "--cached", quality.JOBS, quality.STEPS)
         self.git("commit", "-q", "-m", "drop the job books")
         self.add(quality.JOBS, job_id="1")
-        self.assertCheckClean(7 + 3 + 2, "--base", "HEAD")
+        self.assertCheckClean(7 + 2 + 1, "--base", "HEAD")
 
-    def test_books_without_the_job_files_pass_against_a_base_that_has_them_not(self):
-        self.git("rm", "-q", "--cached", quality.JOBS, quality.STEPS)
-        self.git("commit", "-q", "-m", "drop the job books")
+    def test_deleting_an_adopted_file_is_a_removal(self):
         for rel in quality.JOB_BOOKS:
             (self.dir / rel).unlink()
+        self.assertEqual(self.check("--base", "HEAD"), (1, ["books/jobs.csv:1: removed since HEAD",
+                                                            "books/steps.csv:1: removed since HEAD", "2 problems"]))
+
+    def test_books_that_never_had_the_job_files_pass_against_a_base_that_never_had_them(self):
+        self.git("rm", "-q", quality.JOBS, quality.STEPS)
+        self.git("commit", "-q", "-m", "drop the job books")
         self.assertCheckClean(7, "--base", "HEAD")
 
 
