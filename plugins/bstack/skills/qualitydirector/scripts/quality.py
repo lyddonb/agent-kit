@@ -165,12 +165,16 @@ numbers only. Per repo, `by_kind` holds all four kinds, each with `tests`, `tota
 and `failed_on_main` (the last two count distinct tests). A median of an even count is the lower of the two middle values.
 
 With adopted job books (both files exist), each listed repo also has `lifecycle`: where the week's CI time went
-outside the test suite, from `jobs.csv` and `steps.csv`, or null when the repo has no job rows that week. Without
-the files the key is absent and the output is what it was before. The repos listed are still those with `runs.csv`
-rows in the week, so a repo with job rows and no run rows that week is not listed. Times have one second
-resolution. Skipped jobs and empty (not measured) times are left out of every median, p95, max and sum. A p95 is the
-nearest rank, `percentile95`. `with_suite` covers the runs that have both timed jobs and `runs.csv` rows: its
-`outside_suite_ms` is their job time minus their suite wall time, never below 0. See SKILL.md for each key.
+outside the test suite, from `jobs.csv` and `steps.csv`, or null when no run of the repo belongs to that week.
+Without the files the key is absent and the output is what it was before. The repos listed are still those with
+`runs.csv` rows in the week, so a repo with job rows and no run rows that week is not listed. A run is one `evidence`
+link, so each attempt of a re-run is its own run. A run belongs to one week, whole: the week of its earliest job
+`created`, with all its jobs and steps. Times have one second resolution. Skipped jobs and empty (not measured)
+times are left out of every median, p95, max and sum. A p95 is the nearest rank, `percentile95`. `run_ms` counts a
+run only when every timed job has a `queue_ms`. `with_suite` counts a run only when it has timed jobs, no job that is
+neither skipped nor timed, and a `runs.csv` row (any week); `outside_suite_ms` is the sum over those runs of job time
+minus suite wall time, each floored at 0, and `runs_floored` says how many runs the floor acted on. See SKILL.md for
+each key.
 
 Standard library only; needs Python 3.10 or later (run it through uv).
 
@@ -2322,27 +2326,45 @@ def _epoch_ms(stamp: str) -> int:
     return int(datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()) * 1000
 
 
+def _timed(group: list[JobRow]) -> list[JobRow]:
+    """The jobs that were not skipped and have a measured total_ms."""
+    return [j for j in group if j.conclusion != "skipped" and j.total_ms is not None]
+
+
 def _lifecycle(repo: str, week: str, runs: list[RunRow], jobs: list[JobRow], steps: list[StepRow]) -> dict | None:
-    """Where a week's CI time went outside the test suite, from the job books; None with no job rows this week."""
-    here = [j for j in jobs if j.repo == repo and week_of(j.created) == week]
-    if not here:
-        return None
-    timed = [j for j in here if j.conclusion != "skipped" and j.total_ms is not None]
+    """Where a week's CI time went outside the test suite, from the job books. A run (one `evidence` link) belongs
+    to the week of its earliest job `created`, with all its jobs and steps. None when no run belongs to the week."""
     by_run: dict[str, list[JobRow]] = {}
-    for j in timed:
-        by_run.setdefault(j.evidence, []).append(j)
+    for j in jobs:
+        if j.repo == repo:
+            by_run.setdefault(j.evidence, []).append(j)
+    mine = {e: g for e, g in by_run.items() if week_of(min(j.created for j in g)) == week}
+    if not mine:
+        return None
+    here = [j for g in mine.values() for j in g]
+    timed = _timed(here)
     run_ms = []
-    for group in by_run.values():
-        ends = [_epoch_ms(j.created) + j.queue_ms + j.total_ms for j in group if j.queue_ms is not None]
-        if ends:  # a job with no measured queue time has no known end
-            run_ms.append(max(ends) - min(_epoch_ms(j.created) for j in group))
-    suite = {}
+    for g in mine.values():
+        t = _timed(g)
+        if t and all(j.queue_ms is not None for j in t):  # one job with no queue time leaves its end unknown
+            run_ms.append(max(_epoch_ms(j.created) + j.queue_ms + j.total_ms for j in t)
+                          - min(_epoch_ms(j.created) for j in t))
+    suite: dict[str, int] = {}
     for r in runs:
         if r.repo == repo:
             suite[r.evidence] = suite.get(r.evidence, 0) + r.wall_ms
-    both = [e for e in by_run if e in suite]
-    job_ms = sum(j.total_ms for e in both for j in by_run[e])
-    suite_ms = sum(suite[e] for e in both)
+    job_ms = suite_ms = outside = floored = 0
+    qualifying = 0
+    for e, g in mine.items():
+        t = _timed(g)
+        if not t or e not in suite or any(j.conclusion != "skipped" and j.total_ms is None for j in g):
+            continue  # an untimed job that was not skipped makes the run's job time incomplete
+        run_job = sum(j.total_ms for j in t)
+        qualifying += 1
+        job_ms += run_job
+        suite_ms += suite[e]
+        outside += max(0, run_job - suite[e])
+        floored += suite[e] > run_job
     timed_ids = {(j.evidence, j.job_id) for j in timed}
     by_name: dict[str, list[int]] = {}
     for st in steps:
@@ -2365,10 +2387,10 @@ def _lifecycle(repo: str, week: str, runs: list[RunRow], jobs: list[JobRow], ste
         "queue_ms": _spread([j.queue_ms for j in timed if j.queue_ms is not None], top=True),
         "resolution_ms": 1000,
         "run_ms": _spread(run_ms),
-        "runs": len({j.evidence for j in here}),
-        "slowest_steps": [{"median": median(v), "p95": percentile95(v), "runs": len(v), "step": name}
+        "runs": len(mine),
+        "slowest_steps": [{"median": median(v), "p95": percentile95(v), "step": name, "steps": len(v)}
                           for name, v in ranked[:5]],
-        "with_suite": {"job_ms": job_ms, "outside_suite_ms": max(0, job_ms - suite_ms), "runs": len(both),
+        "with_suite": {"job_ms": job_ms, "outside_suite_ms": outside, "runs": qualifying, "runs_floored": floored,
                        "suite_ms": suite_ms},
     }
 
@@ -2450,7 +2472,8 @@ def _render_lifecycle(lc: dict) -> list[str]:
              f"(suite {w['suite_ms']} ms)"]
     if lc["slowest_steps"]:
         t = lc["slowest_steps"][0]
-        lines.append(f"  slowest step: {printable(t['step'])} median {t['median']} ms over {t['runs']} runs")
+        name = json.dumps(printable(t["step"]), ensure_ascii=False)  # quoted: a PR controls the name
+        lines.append(f"  slowest step: {name} median {t['median']} ms over {t['steps']} steps")
     return lines
 
 

@@ -5,7 +5,7 @@ What changed in each plugin release, newest first. In an agent, ask for `beau-he
 
 ## bstack 0.20.0 (2026-11-19)
 
-- `quality.py summary --json` now reports where CI time goes outside the test suite: a `lifecycle` object per repo (run and queue times, time outside the suite, slowest and failing steps), from the job books. It appears only once the job books are adopted; without them the output is unchanged.
+- `quality.py summary --json` now reports where CI time goes outside the test suite: a `lifecycle` object per repo (run and queue times, time outside the suite counted run by run, slowest and failing steps; a run counts in the week of its first job), from the job books. It appears only once the job books are adopted; without them the output is unchanged.
 
 ## bstack 0.19.0 (2026-11-19)
 
