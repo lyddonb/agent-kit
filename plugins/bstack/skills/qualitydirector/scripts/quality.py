@@ -172,7 +172,8 @@ RUNS = "books/runs.csv"
 FAILURES = "books/failures.csv"
 WEEKLY = "books/tests-weekly.csv"
 WATCHED = "books/watched.csv"
-JOBS = "books/jobs.csv"  # not in SCHEMAS yet: while it exists, `fetch` stores jobs, and it reads only `evidence`
+JOBS = "books/jobs.csv"  # optional until adopted together with STEPS: see check_adoption
+STEPS = "books/steps.csv"
 KINDS = "books/kinds.csv"  # optional: a book without it is valid and every test is a unit test
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
@@ -180,8 +181,14 @@ FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "ev
 WEEKLY_SCHEMA = ("week", "repo", "test_id", "runs", "failed", "total_ms", "max_ms")
 WATCHED_SCHEMA = ("repo", "github", "workflow")
 KINDS_SCHEMA = ("repo", "prefix", "kind")
+JOBS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "job", "job_id", "conclusion",
+               "queue_ms", "total_ms", "failed_step", "evidence")
+STEPS_SCHEMA = ("started", "repo", "job_id", "number", "step", "conclusion", "ms", "evidence")
 SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}  # the files every book has
-OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA}  # the files a book may leave out; ingest never writes them
+# The files a book may leave out. ingest never writes kinds.csv. The job books come as a pair: neither file means
+# they are not adopted and every command behaves as it did before they existed; exactly one is a check problem.
+OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA}
+JOB_BOOKS = (JOBS, STEPS)
 TABLE_SCHEMAS = {**SCHEMAS, **OPTIONAL_SCHEMAS}
 KIND_NAMES = ("unit", "e2e", "property", "differential")
 DEFAULT_KIND = "unit"
@@ -658,6 +665,7 @@ class Table:
     header: list[str] | None = None
     rows: list[Row] = field(default_factory=list)
     data: bytes = b""
+    present: bool = False  # the file exists (an optional file that is left out has no header and no rows)
     bad_format: bool = False  # bytes that cannot be compared line by line (already reported)
 
 
@@ -681,6 +689,7 @@ def _parse_table(rel: str, data: bytes | OSError | None, problems: list[Problem]
             return table  # no header, no rows, no problem
         problems.append(Problem(rel, 1, "missing file"))
         return table
+    table.present = True
     if isinstance(data, OSError):
         problems.append(Problem(rel, 1, f"cannot read file ({data.strerror or type(data).__name__})"))
         return table
@@ -741,6 +750,11 @@ def _read(path: str) -> bytes | OSError | None:
 
 def load(books_dir: str, base: str | None = None) -> Books:
     return books_from_bytes(books_dir, {rel: _read(os.path.join(books_dir, rel)) for rel in TABLE_SCHEMAS}, base)
+
+
+def adopted(books: Books) -> bool:
+    """The job books are in use: both files exist (an adopted book starts with header-only files)."""
+    return all(books.tables[rel].present for rel in JOB_BOOKS)
 
 
 Check = Callable[[Books], Iterable[Problem]]
@@ -953,6 +967,58 @@ KINDS_RULES: dict[str, Rule] = {
 }
 
 
+_POSITIVE = re.compile(r"[1-9][0-9]*")
+_CONCLUSION = re.compile(r"[a-z_]{0,30}")
+_OPTIONAL_COUNT = re.compile(r"(0|[1-9][0-9]*)?")
+
+
+def _optional_stamp_rule(cells: dict) -> Iterator[str]:
+    if cells["started"] and not _is_stamp(cells["started"]):
+        yield (f"started must be empty or look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
+               f"got {_show(cells['started'])}")
+
+
+def _positive_rule(*names: str) -> Rule:
+    def rule(cells: dict) -> Iterator[str]:
+        for name in names:
+            if not _POSITIVE.fullmatch(cells[name]):
+                yield f"{name} must be a positive integer without leading zeros, got {_show(cells[name])}"
+    return rule
+
+
+def _nonempty_rule(name: str) -> Rule:
+    def rule(cells: dict) -> Iterator[str]:
+        if not cells[name]:
+            yield f"{name} is empty"
+    return rule
+
+
+def _conclusion_rule(cells: dict) -> Iterator[str]:
+    if not _CONCLUSION.fullmatch(cells["conclusion"]):
+        yield f"conclusion must match [a-z_]{{0,30}}, got {_show(cells['conclusion'])}"
+
+
+def _optional_count_rule(*names: str) -> Rule:
+    def rule(cells: dict) -> Iterator[str]:
+        for name in names:
+            if not _OPTIONAL_COUNT.fullmatch(cells[name]):
+                yield f"{name} must be empty or a non-negative integer without leading zeros, got {_show(cells[name])}"
+    return rule
+
+
+JOB_RULES: dict[str, Rule] = {
+    "started": _stamp_rule, "repo": _repo_rule, "sha": _sha_rule, "event": _event_rule, "workflow": _workflow_rule,
+    "job": _nonempty_rule("job"), "job_id": _positive_rule("job_id"), "conclusion": _conclusion_rule,
+    "durations": _optional_count_rule("queue_ms", "total_ms"), "evidence": _evidence_rule,
+    "text": _text_rule("event", "workflow", "job", "failed_step", "evidence"),
+}
+STEP_RULES: dict[str, Rule] = {
+    "started": _optional_stamp_rule, "repo": _repo_rule, "job_id": _positive_rule("job_id"),
+    "number": _positive_rule("number"), "step": _nonempty_rule("step"), "conclusion": _conclusion_rule,
+    "ms": _optional_count_rule("ms"), "evidence": _evidence_rule, "text": _text_rule("step", "evidence"),
+}
+
+
 def rule_messages(rules: dict[str, Rule], cells: dict) -> Iterator[str]:
     for rule in rules.values():
         yield from rule(cells)
@@ -1077,6 +1143,47 @@ def check_kinds(books: Books) -> Iterator[Problem]:
         previous = key
 
 
+def check_adoption(books: Books) -> Iterator[Problem]:
+    """The two job files come together: one without the other is a problem on the missing one."""
+    for have, lack in ((JOBS, STEPS), (STEPS, JOBS)):
+        if books.tables[have].present and not books.tables[lack].present:
+            yield Problem(lack, 1, f"missing file; {have} exists, and the job books are adopted as a pair")
+
+
+def _unique_rows(books: Books, rel: str, key_of: Callable[[dict], tuple[str, ...]], what: str) -> Iterator[Problem]:
+    seen: dict[tuple[str, ...], int] = {}
+    for row in books.tables[rel].rows:
+        key = key_of(row.cells)
+        if key in seen:
+            yield Problem(rel, row.line, f"duplicate of line {seen[key]} (same {what})")
+        else:
+            seen[key] = row.line
+
+
+def check_jobs(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, JOBS, JOB_RULES)
+    yield from _unique_rows(books, JOBS, lambda c: (c["evidence"], c["job_id"]), "evidence and job_id")
+
+
+def check_steps(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, STEPS, STEP_RULES)
+    yield from _unique_rows(books, STEPS, lambda c: (c["evidence"], c["job_id"], c["number"]), "evidence, job_id and number")
+
+
+def check_steps_match_jobs(books: Books) -> Iterator[Problem]:
+    """Every step belongs to a job of the same run (same evidence and job_id) in the same repo."""
+    if not adopted(books) or any(p.path in (JOBS, STEPS) for p in books.load_problems):
+        return
+    jobs = {(r.cells["evidence"], r.cells["job_id"]): r for r in books.tables[JOBS].rows}
+    for row in books.tables[STEPS].rows:
+        c = row.cells
+        job = jobs.get((c["evidence"], c["job_id"]))
+        if job is None:
+            yield Problem(STEPS, row.line, f"no job in {JOBS} with evidence {_show(c['evidence'])} and job_id {_show(c['job_id'])}")
+        elif c["repo"] != job.cells["repo"]:
+            yield Problem(STEPS, row.line, f"repo {_show(c['repo'])} differs from {JOBS} line {job.line} ({_show(job.cells['repo'])})")
+
+
 def _base_problem(books: Books) -> Problem | None:
     ref = books.base
     try:
@@ -1114,7 +1221,7 @@ def check_append_only(books: Books) -> Iterator[Problem]:
         yield Problem(RUNS, 1, f"cannot check against {ref}: the books folder must be the top level of its git "
                                f"work tree, but {where}")
         return
-    for rel in APPEND_ONLY:
+    for rel in APPEND_ONLY + JOB_BOOKS:
         yield from _append_only(books, rel)
 
 
@@ -1149,6 +1256,10 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("weekly", check_weekly),
     ("watched", check_watched),
     ("kinds", check_kinds),
+    ("adoption", check_adoption),
+    ("jobs", check_jobs),
+    ("steps", check_steps),
+    ("steps-match-jobs", check_steps_match_jobs),
     ("append-only", check_append_only),
 )
 
@@ -1398,7 +1509,8 @@ def _clean_text(value: str, what: str) -> None:
         raise Rejected(f"{what} is not valid Unicode text") from None
 
 
-def _check_fields(obj: object, kinds: dict[str, type], what: str) -> dict:
+def _check_fields(obj: object, kinds: dict[str, type], what: str, free_text: tuple[str, ...] = ()) -> dict:
+    """`free_text` names string keys whose content is judged later (a name a pull request chose), not here."""
     if not isinstance(obj, dict):
         raise Rejected(f"{what} is not a JSON object")
     missing = [k for k in kinds if k not in obj]
@@ -1413,7 +1525,7 @@ def _check_fields(obj: object, kinds: dict[str, type], what: str) -> dict:
             raise Rejected(f"{what} {key} must be {kind.__name__}, got {_show(value)}")
         if kind is int and not 0 <= value <= MAX_NUMBER:
             raise Rejected(f"{what} {key} must be an integer from 0 to 2**53, got {_show(value)}")
-        if kind is str:
+        if kind is str and key not in free_text:
             _clean_text(value, f"{what} {key}")
     return obj
 
@@ -1597,18 +1709,21 @@ class Scan:
     reason: str = ""
 
 
-def _layout(root: str) -> tuple[dict[tuple[str, str], tuple[str | None, list[str]]], list[str]]:
-    """The run folders under root: (repo, run) -> (manifest path or None, artifact files), and the
-    *.jsonl files that are not under <repo>/<run_id>/artifacts/. All paths relative, sorted. Symlinked
-    directories are not entered."""
+def _layout(root: str) -> tuple[dict[tuple[str, str], tuple[str | None, list[str]]], list[str], dict[tuple[str, str], str]]:
+    """The run folders under root: (repo, run) -> (manifest path or None, artifact files), the
+    *.jsonl files that are not under <repo>/<run_id>/artifacts/, and (repo, run) -> the path of
+    <repo>/<run_id>/jobs.json. All paths relative, sorted. Symlinked directories are not entered."""
     runs: dict[tuple[str, str], list] = {}  # (repo, run) -> [manifest path or None, artifact files]
     stray = []
+    jobs_files: dict[tuple[str, str], str] = {}
     for folder, _, names in os.walk(root):
         for name in names:
             rel = os.path.relpath(os.path.join(folder, name), root)
             parts = rel.split(os.sep)
             if len(parts) == 3 and name == MANIFEST:
                 runs.setdefault((parts[0], parts[1]), [None, []])[0] = rel
+            elif len(parts) == 3 and name == JOBS_FILE:
+                jobs_files[(parts[0], parts[1])] = rel
             elif name.endswith(".jsonl"):
                 if len(parts) >= 4 and parts[2] == ARTIFACTS:
                     runs.setdefault((parts[0], parts[1]), [None, []])[1].append(rel)
@@ -1616,13 +1731,14 @@ def _layout(root: str) -> tuple[dict[tuple[str, str], tuple[str | None, list[str
                     stray.append(rel)
     for _, files in runs.values():
         files.sort()
-    return {key: (value[0], value[1]) for key, value in sorted(runs.items())}, sorted(stray)
+    return {key: (value[0], value[1]) for key, value in sorted(runs.items())}, sorted(stray), jobs_files
 
 
 @dataclass
 class Scanned:
     scans: list[Scan]
     unread: list[tuple[str, str]]  # (run folder, cap) left unread because a per-ingest budget was spent
+    jobs: list["JobScan"] = field(default_factory=list)  # one per jobs.json, only when the job books are adopted
 
 
 def _folder_bytes(root: str, artifacts: list[str]) -> int:
@@ -1652,13 +1768,20 @@ def _peek_key(path: str, m: Manifest) -> tuple[str, str] | None:
     return None
 
 
-def scan_fetched(root: str, watched: dict[str, tuple[str, str]], booked: set[tuple[str, str]] | None = None) -> Scanned:
+def scan_fetched(root: str, watched: dict[str, tuple[str, str]], booked: set[tuple[str, str]] | None = None,
+                 booked_jobs: set[str] | None = None, read_artifacts: bool = True) -> Scanned:
     """Read the run folders in order of the manifest's `started`, then run id, each under its own caps
     (MAX_RUN_FILES, MAX_RUN_BYTES, MAX_RECORDS_PER_RUN). A folder is read whole or not at all: one that
     the per-ingest budgets (MAX_FILES, MAX_INGEST_BYTES) cannot hold is named in `unread` and a later
-    ingest reads it. A folder whose files all claim a record that is booked already is not read and costs no budget."""
-    runs, stray = _layout(root)
+    ingest reads it. A folder whose files all claim a record that is booked already is not read and costs no budget.
+
+    `booked_jobs` is the evidence links already in jobs.csv, or None when the job books are not adopted: then
+    jobs.json files are not looked at. `read_artifacts` False (ingest --only jobs) reads no artifact and
+    reports nothing about them."""
+    runs, stray, jobs_files = _layout(root)
+    stray = stray if read_artifacts else []
     found = Scanned([Scan(rel, "rejected", reason="not inside <repo>/<run_id>/artifacts/ of a run folder") for rel in stray], [])
+    jobs_files = jobs_files if booked_jobs is not None else {}
     booked = booked or set()
     manifests: list[tuple[tuple, str, str, str | None, list[str], Manifest | None, str]] = []
     for (repo, run_id), (manifest_path, artifacts) in runs.items():
@@ -1671,15 +1794,20 @@ def scan_fetched(root: str, watched: dict[str, tuple[str, str]], booked: set[tup
         order = (m.started if m else "", m.run_id if m else (int(run_id) if run_id.isdigit() else 0), repo, run_id)
         manifests.append((order, repo, run_id, manifest_path, artifacts, m, why))
     manifests.sort(key=lambda x: x[0])
+    if booked_jobs is not None:
+        _scan_jobs(root, manifests, jobs_files, booked_jobs, found)
     files_read = bytes_read = 0
     for _, repo, run_id, manifest_path, artifacts, m, why in manifests:
         folder = f"{repo}/{run_id}"
+        if not read_artifacts:
+            continue
         if manifest_path is not None and m is None:
             note = f" ({len(artifacts)} artifact file{'s' * (len(artifacts) != 1)} not read)" if artifacts else ""
             found.scans.append(Scan(manifest_path, "rejected", reason=why + note))
             continue
         if m is not None and not artifacts:
-            found.scans.append(Scan(manifest_path, "no artifacts"))
+            if (repo, run_id) not in jobs_files:  # a run kept for its jobs alone is not news
+                found.scans.append(Scan(manifest_path, "no artifacts"))
             continue
         size = _folder_bytes(root, artifacts)
         if m is None:  # no manifest: each file is rejected unread, and the files are counted against the budget
@@ -1768,6 +1896,10 @@ class Plan:
     weekly_rows: int
 
 
+def _appended(data: bytes, text: str) -> bytes:
+    return data + (b"" if data.endswith(b"\n") or not data else b"\n") + text.encode("utf-8")
+
+
 def plan_ingest(books: Books, new: list[Scan]) -> Plan:
     """The books after booking `new`. runs.csv and failures.csv only grow by whole lines at the end."""
     old = {rel: books.tables[rel].data for rel in SCHEMAS}
@@ -1792,12 +1924,8 @@ def plan_ingest(books: Books, new: list[Scan]) -> Plan:
             touched.add(key)
     weekly_text = _csv_line(WEEKLY_SCHEMA) + "".join(_csv_line(k + tuple(v)) for k, v in sorted(weekly.items()))
 
-    def appended(rel: str, text: str) -> bytes:
-        data = old[rel]
-        return data + (b"" if data.endswith(b"\n") or not data else b"\n") + text.encode("utf-8")
-
     files: dict[str, bytes | None] = {rel: None for rel in SCHEMAS}
-    files.update({RUNS: appended(RUNS, runs_text), FAILURES: appended(FAILURES, failures_text),
+    files.update({RUNS: _appended(old[RUNS], runs_text), FAILURES: _appended(old[FAILURES], failures_text),
                   WEEKLY: weekly_text.encode("utf-8")})
     return Plan(files, len(new), failures, len(touched))
 
@@ -1856,21 +1984,28 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         _print_problems(problems)
         print(f"{len(problems)} problems; refusing to ingest into books that fail check")
         return 1
+    only_jobs = args.only == "jobs"
+    if only_jobs and not adopted(books):
+        print(f"quality.py: --only jobs needs the job books: create {JOBS} and {STEPS} (each with its header) in the books "
+              "folder first", file=sys.stderr)
+        return 2
     booked = {(r.evidence, r.python) for r in _typed_rows(books, RUNS, RunRow)}
-    found = scan_fetched(args.fetch_dir, watch_list(books), booked)
+    found = scan_fetched(args.fetch_dir, watch_list(books), booked, jobs_booked_evidence(books), read_artifacts=not only_jobs)
     scans = found.scans
     settle_duplicates(scans)
     new = choose_new_runs(scans, booked)
     plan = plan_ingest(books, new)
-    if new:
-        unchanged = {KINDS: books.tables[KINDS].data or None}
+    job_files = plan_jobs(books, found.jobs)
+    plan.files.update(job_files)
+    if new or job_files:
+        unchanged = {rel: books.tables[rel].data if books.tables[rel].present else None for rel in OPTIONAL_SCHEMAS}
         after = run_checks(books_from_bytes(args.books_dir, {**unchanged, **{rel: data if data is not None else books.tables[rel].data
                                                                               for rel, data in plan.files.items()}}))
         if after:
             _print_problems(after)
             print(f"{len(after)} problems; nothing written")
             return 1
-    wrote = bool(new) and not args.dry_run
+    wrote = bool(new or job_files) and not args.dry_run
     if wrote:
         try:
             commit_files(args.books_dir, plan.files)
@@ -1882,12 +2017,30 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     totals = {"files": len(scans), "booked": len(new), "already_booked": count("already"), "duplicates": count("duplicate"),
               "no_artifacts": count("no artifacts"), "rejected": count("rejected"), "unread": unread,
               "failures": plan.failures, "weekly_rows": plan.weekly_rows}
+    jobs_rejected = 0
+    if adopted(books):
+        jobs_rejected = sum(s.status == "rejected" for s in found.jobs)
+        booked_jobs = [s for s in found.jobs if s.status == "booked"]
+        totals.update(jobs_booked=len(booked_jobs), jobs_already_booked=sum(s.status == "already" for s in found.jobs),
+                      jobs_rejected=jobs_rejected, job_rows=sum(len(s.jobs.jobs) for s in booked_jobs),
+                      step_rows=sum(s.jobs.step_count for s in booked_jobs))
     if args.json:
-        print(json.dumps({"dry_run": args.dry_run, "files": [_scan_json(s) for s in scans], "totals": totals,
-                          "wrote": wrote}, sort_keys=True, indent=2))
+        out = {"dry_run": args.dry_run, "files": [_scan_json(s) for s in scans], "totals": totals, "wrote": wrote}
+        if adopted(books):
+            out["jobs"] = [_job_scan_json(s) for s in found.jobs]
+        print(json.dumps(out, sort_keys=True, indent=2))
     else:
-        _print_ingest(scans, totals, found, args.dry_run)
-    return 1 if totals["rejected"] or unread else 0
+        _print_ingest(scans, totals, found, args.dry_run, only_jobs)
+    return 1 if totals["rejected"] or unread or jobs_rejected else 0
+
+
+def _job_scan_json(scan: "JobScan") -> dict:
+    out = {"path": scan.path, "status": scan.status}
+    if scan.reason:
+        out["reason"] = scan.reason
+    if scan.status == "booked":
+        out.update(evidence=scan.jobs.evidence, jobs=len(scan.jobs.jobs), steps=scan.jobs.step_count)
+    return out
 
 
 def _scan_json(scan: Scan) -> dict:
@@ -1900,7 +2053,7 @@ def _scan_json(scan: Scan) -> dict:
     return out
 
 
-def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool) -> None:
+def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool, only_jobs: bool = False) -> None:
     for s in scans:
         name = _show(s.path, 200) if not s.path.isprintable() else s.path
         if s.status == "booked":
@@ -1915,15 +2068,33 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
             print(f"no artifacts: {name}")
         else:
             print(f"rejected: {name}: {s.reason}")
+    for s in found.jobs:
+        folder = s.path.rsplit("/", 1)[0]
+        name = _show(s.path, 200) if not s.path.isprintable() else s.path
+        folder = _show(folder, 200) if not folder.isprintable() else folder
+        if s.status == "booked":
+            print(f"{'would book' if dry_run else 'booked'} jobs {folder}: {len(s.jobs.jobs)} jobs, {s.jobs.step_count} steps")
+        elif s.status == "already":
+            print(f"skipped jobs {folder}: already booked")
+        else:
+            print(f"rejected: {name}: {s.reason}")
     for folder, cap in found.unread:
         print(f"left unread, the {cap}: {printable(folder)}")
     if found.unread:
         print(f"{len(found.unread)} run folder{'s' * (len(found.unread) != 1)} left unread: ingest again to book "
               f"{'it' if len(found.unread) == 1 else 'them'}")
-    print(f"{'would book' if dry_run else 'booked'} {totals['booked']} runs, {totals['failures']} failures, "
-          f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
-          f"{totals['duplicates']} duplicates; rejected {totals['rejected']} of {totals['files']} files")
-    if totals["rejected"] or totals["unread"]:
+    verb = "would book" if dry_run else "booked"
+    jobs_part = ""
+    if "jobs_booked" in totals:
+        jobs_part = (f"; {verb} jobs of {totals['jobs_booked']} runs ({totals['job_rows']} job rows, {totals['step_rows']} step rows), "
+                     f"skipped {totals['jobs_already_booked']} already booked, rejected {totals['jobs_rejected']}")
+    if only_jobs:
+        print(jobs_part[2:])
+    else:
+        print(f"{verb} {totals['booked']} runs, {totals['failures']} failures, "
+              f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
+              f"{totals['duplicates']} duplicates; rejected {totals['rejected']} of {totals['files']} files{jobs_part}")
+    if totals["rejected"] or totals["unread"] or totals.get("jobs_rejected"):
         print("some files were rejected or not read: the others were booked and ingest exits 1 so it is not missed"
               if not dry_run else "some files were rejected or not read; ingest exits 1")
 
@@ -2527,34 +2698,6 @@ def fetch_artifacts(gh: Gh, out_dir: str, manifest: Manifest, run_id: int, tally
     return got
 
 
-def booked_jobs_evidence(books_dir: str) -> set[str] | None:
-    """The evidence links in BOOKS_DIR/books/jobs.csv, or None when the file does not exist (jobs are not
-    adopted). Only the `evidence` column is read, and a short or odd row is skipped. Raises Rejected when the
-    file cannot be read or its header has no `evidence` column."""
-    path = os.path.join(books_dir, JOBS)
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, encoding="utf-8", errors="replace", newline="") as f:
-            reader = csv.reader(f)
-            header = next(reader, None) or []
-            if "evidence" not in header:
-                raise Rejected(f"{JOBS} has no `evidence` column in its header")
-            at, links = header.index("evidence"), set()
-            while True:
-                try:
-                    row = next(reader)
-                except StopIteration:
-                    break
-                except csv.Error:
-                    continue
-                if len(row) > at:
-                    links.add(row[at])
-            return links
-    except OSError as e:
-        raise Rejected(f"cannot read {JOBS}: {e.strerror}") from None
-
-
 def cmd_fetch(args: argparse.Namespace) -> int:
     if not os.path.isdir(args.books_dir):
         print(f"quality.py: not a directory: {args.books_dir}", file=sys.stderr)
@@ -2576,11 +2719,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         _print_problems(problems)
         print(f"{len(problems)} problems; refusing to fetch with books that fail check")
         return 1
-    try:
-        booked_jobs = booked_jobs_evidence(args.books_dir)
-    except Rejected as e:
-        print(f"quality.py: {e}", file=sys.stderr)
-        return 2
+    booked_jobs = jobs_booked_evidence(books)
     watched = [(r.cells["repo"], r.cells["github"], r.cells["workflow"]) for r in books.tables[WATCHED].rows]
     if args.repo is not None:
         watched = [w for w in watched if w[0] == args.repo]
@@ -2600,6 +2739,186 @@ def cmd_fetch(args: argparse.Namespace) -> int:
           f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts"
           + (f"; {t.jobs_runs} runs with jobs ({t.jobs} jobs)" if t.jobs_adopted else "") + f"; {t.failed} failed")
     return 1 if t.failed else 0
+
+
+# ---------------------------------------------------------------------------
+# ingest, jobs: jobs.json into books/jobs.csv and books/steps.csv
+# ---------------------------------------------------------------------------
+#
+# Only when the job books are adopted (both files exist). Identity (repo, sha, event, workflow, evidence) is the
+# manifest's, as for test records. jobs.json is believed for what the API measured: job and step names,
+# conclusions and timestamps. Names are text a pull request controls, so a name that is empty or would fail
+# text hygiene is booked as UNPRINTABLE and never blocks the run's timings; a bad timestamp or a conclusion
+# that does not fit its rule rejects the file, by name, and blocks nothing else.
+
+UNPRINTABLE = "(unprintable name)"
+MAX_JOBS_BYTES = 4 << 20
+JOBS_FILE_KINDS = {"v": int, "run_id": int, "run_attempt": int, "jobs": list}
+JOB_KINDS = {"id": int, "name": str, "conclusion": str, "created": str, "started": str, "completed": str, "steps": list}
+STEP_KINDS = {"number": int, "name": str, "conclusion": str, "started": str, "completed": str}
+
+
+def _name(text: str) -> str:
+    """A job or step name as it is booked: itself, or UNPRINTABLE when it is empty or a cell could not hold it."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:  # a lone surrogate
+        return UNPRINTABLE
+    return text if text and text_problem(text) is None else UNPRINTABLE
+
+
+def _span_ms(start: str, end: str) -> str:
+    """Milliseconds from one stamp to another, "" when either is missing, 0 when the end is before the start."""
+    if not start or not end:
+        return ""
+    stamp = lambda s: datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
+    return str(max(0, round((stamp(end) - stamp(start)).total_seconds() * 1000)))
+
+
+def _stamp_field(value: str, what: str, required: bool = False) -> None:
+    if value == "" and not required:
+        return
+    if not _is_stamp(value):
+        raise Rejected(f"{what} must look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
+                       f"got {_show(value)}")
+
+
+@dataclass(frozen=True)
+class BookedJobs:
+    """One run attempt's jobs and steps, under the identity of its manifest."""
+    manifest: Manifest
+    jobs: tuple[Job, ...]
+
+    @property
+    def evidence(self) -> str:
+        return self.manifest.evidence(self.manifest.run_attempt)
+
+    @property
+    def step_count(self) -> int:
+        return sum(len(j.steps) for j in self.jobs)
+
+    def entries(self) -> list[tuple[dict[str, str], list[dict[str, str]]]]:
+        """Each job's jobs.csv cells with its steps' steps.csv cells, jobs by id and steps by number."""
+        m, out = self.manifest, []
+        for job in sorted(self.jobs, key=lambda j: j.id):
+            steps = sorted(job.steps, key=lambda s: s.number)
+            failed = next((s for s in steps if s.conclusion == "failure"), None)
+            cells = _cells(JOBS_SCHEMA, started=job.created, repo=m.repo, sha=m.head_sha, event=m.event, workflow=m.workflow,
+                           job=_name(job.name), job_id=job.id, conclusion=job.conclusion,
+                           queue_ms=_span_ms(job.created, job.started), total_ms=_span_ms(job.started, job.completed),
+                           failed_step=_name(failed.name) if failed else "", evidence=self.evidence)
+            out.append((cells, [_cells(STEPS_SCHEMA, started=s.started, repo=m.repo, job_id=job.id, number=s.number,
+                                       step=_name(s.name), conclusion=s.conclusion, ms=_span_ms(s.started, s.completed),
+                                       evidence=self.evidence) for s in steps]))
+        return out
+
+    def gate(self) -> None:
+        """Hold every row this file would add to every row rule `check` has, and to uniqueness."""
+        messages: list[str] = []
+        ids = [j.id for j in self.jobs]
+        if len(set(ids)) != len(ids):
+            messages.append("a job id appears twice")
+        for job in self.jobs:
+            numbers = [s.number for s in job.steps]
+            if len(set(numbers)) != len(numbers):
+                messages.append(f"job {job.id} has a step number twice")
+        for job_cells, step_cells in self.entries():
+            for rules, cells in [(JOB_RULES, job_cells)] + [(STEP_RULES, c) for c in step_cells]:
+                if len(messages) <= 3:
+                    messages.extend(m for m in rule_messages(rules, cells) if m not in messages)
+        _fail_if(messages, "would fail check: ")
+
+
+def read_jobs_file(path: str, m: Manifest) -> BookedJobs:
+    """A run's jobs.json, strictly, under the identity of its manifest. Raises Rejected, naming what is wrong."""
+    obj = _check_fields(_load_json(_read_file(path, MAX_JOBS_BYTES), "jobs.json"), JOBS_FILE_KINDS, "jobs.json")
+    if obj["v"] != RECORD_VERSION:
+        raise Rejected(f"jobs.json v must be {RECORD_VERSION}, got {_show(obj['v'])}")
+    if (obj["run_id"], obj["run_attempt"]) != (m.run_id, m.run_attempt):
+        raise Rejected(f"run_id {obj['run_id']} and run_attempt {obj['run_attempt']} are not the manifest's "
+                       f"{m.run_id} and {m.run_attempt}")
+    if len(obj["jobs"]) > MAX_JOBS_PER_RUN:
+        raise Rejected(f"has more than {MAX_JOBS_PER_RUN} jobs")
+    jobs = []
+    for n, raw in enumerate(obj["jobs"], start=1):
+        j = _check_fields(raw, JOB_KINDS, f"job {n}", free_text=("name",))
+        where = f"job {j['id']}"
+        if j["id"] < 1:
+            raise Rejected(f"job {n} id must be at least 1, got {j['id']}")
+        if len(j["steps"]) > MAX_STEPS_PER_JOB:
+            raise Rejected(f"{where} has more than {MAX_STEPS_PER_JOB} steps")
+        _stamp_field(j["created"], f"{where} created", required=True)
+        _stamp_field(j["started"], f"{where} started")
+        _stamp_field(j["completed"], f"{where} completed")
+        steps = []
+        for k, raw_step in enumerate(j["steps"], start=1):
+            s = _check_fields(raw_step, STEP_KINDS, f"{where} step {k}", free_text=("name",))
+            _stamp_field(s["started"], f"{where} step {s['number']} started")
+            _stamp_field(s["completed"], f"{where} step {s['number']} completed")
+            steps.append(Step(s["number"], s["name"], s["conclusion"], s["started"], s["completed"]))
+        jobs.append(Job(j["id"], j["name"], j["conclusion"], j["created"], j["started"], j["completed"], tuple(steps)))
+    booked = BookedJobs(m, tuple(jobs))
+    booked.gate()
+    return booked
+
+
+@dataclass
+class JobScan:
+    path: str  # <repo>/<run_id>/jobs.json
+    status: str  # booked, already, rejected
+    jobs: BookedJobs | None = None
+    reason: str = ""
+
+
+def _scan_jobs(root: str, manifests: list, jobs_files: dict[tuple[str, str], str], booked_jobs: set[str],
+               found: Scanned) -> None:
+    """One JobScan per jobs.json, in the order of the runs' `started`. A run whose evidence is in jobs.csv is not read."""
+    files_read = bytes_read = 0
+    seen = set()
+    for _, repo, run_id, manifest_path, _artifacts, m, _why in manifests:
+        path = jobs_files.get((repo, run_id))
+        if path is None:
+            continue
+        seen.add((repo, run_id))
+        if m is None:
+            found.jobs.append(JobScan(path, "rejected", reason="its manifest.json is rejected, so its jobs are not read"
+                                      if manifest_path else f"no {MANIFEST} in its run folder"))
+        elif m.evidence(m.run_attempt) in booked_jobs:
+            found.jobs.append(JobScan(path, "already", reason="already booked"))
+        else:
+            try:
+                size = os.lstat(os.path.join(root, path)).st_size
+            except OSError:
+                size = 0
+            if files_read >= MAX_FILES or bytes_read + size > MAX_INGEST_BYTES:
+                found.unread.append((f"{repo}/{run_id}", f"{MAX_FILES}-file or {_size(MAX_INGEST_BYTES)} cap on jobs"))
+                continue
+            files_read += 1
+            bytes_read += size
+            try:
+                found.jobs.append(JobScan(path, "booked", read_jobs_file(os.path.join(root, path), m)))
+            except Rejected as e:
+                found.jobs.append(JobScan(path, "rejected", reason=str(e)))
+    found.jobs.extend(JobScan(path, "rejected", reason=f"no {MANIFEST} in its run folder")
+                      for key, path in jobs_files.items() if key not in seen)
+    found.jobs.sort(key=lambda s: s.path)
+
+
+def plan_jobs(books: Books, scans: list[JobScan]) -> dict[str, bytes | None]:
+    """jobs.csv and steps.csv after booking the new runs' jobs: rows only at the end, jobs by (started, evidence,
+    job_id) and steps by (their job's started, evidence, job_id, number). Empty when there is nothing to book."""
+    entries = sorted(((cells["started"], cells["evidence"], int(cells["job_id"]), cells, steps)
+                      for s in scans if s.status == "booked" for cells, steps in s.jobs.entries()), key=lambda e: e[:3])
+    if not entries:
+        return {}
+    jobs_text = "".join(_csv_line(cells[k] for k in JOBS_SCHEMA) for *_, cells, _ in entries)
+    steps_text = "".join(_csv_line(c[k] for k in STEPS_SCHEMA) for *_, steps in entries for c in steps)
+    return {JOBS: _appended(books.tables[JOBS].data, jobs_text), STEPS: _appended(books.tables[STEPS].data, steps_text)}
+
+
+def jobs_booked_evidence(books: Books) -> set[str] | None:
+    """The evidence links in jobs.csv, or None when the job books are not adopted."""
+    return {r.cells["evidence"] for r in books.tables[JOBS].rows} if adopted(books) else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2629,6 +2948,8 @@ def main(argv: list[str] | None = None) -> int:
     ingest.add_argument("fetch_dir", metavar="FETCH_DIR")
     ingest.add_argument("--dry-run", action="store_true", help="say what would be booked; write nothing")
     ingest.add_argument("--json", action="store_true")
+    ingest.add_argument("--only", choices=["jobs"], help="book only jobs.json files into books/jobs.csv and books/steps.csv: "
+                        "no artifact is read and the three test books are left alone")
     ingest.set_defaults(func=cmd_ingest)
     summary = sub.add_parser("summary", help="the numbers for one week, from books that pass check")
     summary.add_argument("books_dir", metavar="BOOKS_DIR")

@@ -1495,5 +1495,236 @@ class AppendOnlyTest(CheckCase):
         self.assertEqual(self.check("--base", "HEAD")[0], 0)
 
 
+# ---------------------------------------------------------------------------
+# the job books: optional until adopted, then held to every rule
+# ---------------------------------------------------------------------------
+
+JOB_LINK = "https://github.com/example/agentfiles/actions/runs/103/attempts/1"
+JOBS_ROW = dict(zip(quality.JOBS_SCHEMA, (
+    "2026-11-16T09:30:01Z", "agentfiles", "fedcba9876543210fedcba9876543210fedcba98", "push", "ci", "validate", "7001",
+    "failure", "3000", "66000", "Run tests", JOB_LINK)))
+STEPS_ROW = dict(zip(quality.STEPS_SCHEMA, (
+    "2026-11-16T09:30:05Z", "agentfiles", "7001", "2", "Run tests", "failure", "21000", JOB_LINK)))
+JOB_ROWS = {quality.JOBS: JOBS_ROW, quality.STEPS: STEPS_ROW}
+
+
+class JobBooksCase(CheckCase):
+    def adopt(self, jobs: int = 1, steps: int = 1) -> None:
+        for rel, count in ((quality.JOBS, jobs), (quality.STEPS, steps)):
+            (self.dir / rel).write_text(",".join(quality.TABLE_SCHEMAS[rel]) + "\n")
+            for n in range(count):
+                self.add(rel, **({"job_id": str(7001 + n)} if rel == quality.JOBS else {"number": str(2 + n)}))
+
+    def add(self, rel: str, **cells) -> int:
+        row = {**JOB_ROWS[rel], **cells}
+        path = self.dir / rel
+        with open(path, "a", newline="") as f:
+            f.write(quality._csv_line(row[k] for k in quality.TABLE_SCHEMAS[rel]))
+        return len(path.read_text().splitlines())
+
+    def assertCheckClean(self, rows: int, *extra) -> None:
+        self.assertEqual(self.check(*extra), (0, [f"ok, {rows} rows, 0 problems"]))
+
+
+class JobBooksAdoptionTest(JobBooksCase):
+    def test_books_without_either_file_are_as_before(self):
+        self.assertCheckClean(7)
+
+    def test_adopted_books_are_clean_and_their_rows_are_counted(self):
+        self.adopt(jobs=2, steps=3)
+        self.assertCheckClean(7 + 2 + 3)
+
+    def test_a_header_only_pair_is_adopted_and_clean(self):
+        self.adopt(jobs=0, steps=0)
+        self.assertCheckClean(7)
+
+    def test_jobs_csv_without_steps_csv_names_the_missing_file(self):
+        self.adopt()
+        (self.dir / quality.STEPS).unlink()
+        self.assertEqual(self.check(), (1, ["books/steps.csv:1: missing file; books/jobs.csv exists, and the job books are adopted as a pair",
+                                            "1 problems"]))
+
+    def test_steps_csv_without_jobs_csv_names_the_missing_file(self):
+        self.adopt()
+        (self.dir / quality.JOBS).unlink()
+        self.assertEqual(self.check(), (1, ["books/jobs.csv:1: missing file; books/steps.csv exists, and the job books are adopted as a pair",
+                                            "1 problems"]))
+
+    def test_the_commands_that_refuse_failing_books_refuse_a_half_adopted_pair(self):
+        self.adopt()
+        (self.dir / quality.STEPS).unlink()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            codes = (quality.main(["summary", str(self.dir)]), quality.main(["ingest", str(self.dir), str(self.dir.parent)]))
+        self.assertEqual(codes, (1, 1))
+        self.assertEqual(out.getvalue().count("books/steps.csv:1: missing file"), 2)
+
+    def test_a_wrong_header_in_either_file(self):
+        for rel in quality.JOB_BOOKS:
+            with self.subTest(rel):
+                self.adopt()
+                path = self.dir / rel
+                path.write_text(path.read_text().replace(quality.TABLE_SCHEMAS[rel][0], "renamed", 1))
+                self.assertFlags(rel, 1, "header does not match the schema")
+
+    def test_crlf_and_bom_in_either_file_are_named_once(self):
+        for rel in quality.JOB_BOOKS:
+            with self.subTest(rel):
+                self.adopt()
+                path = self.dir / rel
+                good = path.read_bytes()
+                path.write_bytes(good.replace(b"\n", b"\r\n"))
+                self.assertEqual(self.check(), (1, [f"{rel}:1: CRLF line endings; the books use LF", "1 problems"]))
+                path.write_bytes(b"\xef\xbb\xbf" + good)
+                code, lines = self.check()
+                self.assertEqual((code, len(lines)), (1, 2), lines)
+                self.assertRegex(lines[0], rf"^{re.escape(rel)}:1: starts with a UTF-8 BOM")
+
+    def test_a_row_with_the_wrong_number_of_columns(self):
+        self.adopt()
+        with open(self.dir / quality.STEPS, "a") as f:
+            f.write("2026-11-16T09:30:05Z,agentfiles,7001\n")
+        self.assertFlags(quality.STEPS, 3, "3 columns, expected 8")
+
+
+class JobRowRulesTest(JobBooksCase):
+    BAD = {
+        quality.JOBS: {
+            "started": ["", "2026-11-16 09:30:00", "2019-11-16T09:30:00Z"],
+            "repo": ["", "Agent Files"],
+            "sha": ["abc", "F" * 40],
+            "event": [""],
+            "workflow": [""],
+            "job": ["", "=cmd()", "a\x1bb", "x" * 1001],
+            "job_id": ["", "0", "01", "-5", "abc", "1.5"],
+            "conclusion": ["Failure", "a b", "x" * 31, "1"],
+            "queue_ms": ["-1", "01", "1.5", "soon"],
+            "total_ms": ["-1", "01", "x"],
+            "failed_step": ["=cmd()", "a\x1bb"],
+            "evidence": ["", "http://example.com/x"],
+        },
+        quality.STEPS: {
+            "started": ["2026-11-16 09:30:00", "2019-11-16T09:30:00Z"],
+            "repo": [""],
+            "job_id": ["", "0", "01"],
+            "number": ["", "0", "01", "-1", "x"],
+            "step": ["", "=cmd()", "a\x1bb", "x" * 1001],
+            "conclusion": ["Failure", "a b"],
+            "ms": ["-1", "01", "x"],
+            "evidence": ["", "http://example.com/x"],
+        },
+    }
+
+    def test_each_bad_value_is_flagged_on_its_line_naming_the_column(self):
+        for rel, columns in self.BAD.items():
+            for column, values in columns.items():
+                for value in values:
+                    with self.subTest(rel=rel, column=column, value=ascii(value)[:20]):
+                        self.adopt(jobs=0, steps=0)
+                        line = self.add(rel, **{column: value})
+                        code, lines = self.check()
+                        self.assertEqual(code, 1, lines)
+                        self.assertTrue(any(l.startswith(f"{rel}:{line}: {column} ") for l in lines), lines)
+
+    def test_values_that_look_odd_but_are_allowed(self):
+        self.adopt(jobs=0, steps=0)
+        self.add(quality.JOBS, conclusion="", queue_ms="", total_ms="", failed_step="", job="(unprintable name)")
+        self.add(quality.JOBS, job_id="7002", conclusion="timed_out", queue_ms="0", total_ms="0")
+        self.add(quality.STEPS, started="", conclusion="", ms="")
+        self.add(quality.STEPS, number="3", ms="0")
+        self.assertCheckClean(11)
+
+    def test_the_same_job_twice_is_a_duplicate_of_the_first_line(self):
+        self.adopt(jobs=1, steps=0)
+        line = self.add(quality.JOBS, job="renamed")
+        self.assertEqual(self.check(), (1, [f"books/jobs.csv:{line}: duplicate of line 2 (same evidence and job_id)", "1 problems"]))
+
+    def test_the_same_job_id_in_another_run_is_not_a_duplicate(self):
+        self.adopt(jobs=1, steps=0)
+        self.add(quality.JOBS, evidence=JOB_LINK.replace("/103/", "/104/"))
+        self.assertCheckClean(9)
+
+    def test_the_same_step_number_twice_in_a_job_is_a_duplicate(self):
+        self.adopt(jobs=1, steps=1)
+        line = self.add(quality.STEPS, step="again")
+        self.assertEqual(self.check(), (1, [f"books/steps.csv:{line}: duplicate of line 2 (same evidence, job_id and number)", "1 problems"]))
+
+    def test_a_step_with_no_job_is_an_orphan_on_its_line(self):
+        self.adopt(jobs=1, steps=0)
+        line = self.add(quality.STEPS, job_id="9999")
+        code, lines = self.check()
+        self.assertEqual(code, 1)
+        self.assertTrue(lines[0].startswith(f"books/steps.csv:{line}: no job in books/jobs.csv with evidence "), lines)
+        self.assertTrue(lines[0].endswith("and job_id '9999'"), lines)
+
+    def test_a_step_of_another_run_with_the_same_job_id_is_an_orphan(self):
+        self.adopt(jobs=1, steps=0)
+        line = self.add(quality.STEPS, evidence=JOB_LINK.replace("/103/", "/104/"))
+        self.assertTrue(self.check()[1][0].startswith(f"books/steps.csv:{line}: no job in books/jobs.csv"))
+
+    def test_a_step_whose_repo_differs_from_its_jobs_repo_is_flagged(self):
+        self.adopt(jobs=1, steps=0)
+        line = self.add(quality.STEPS, repo="other")
+        self.assertEqual(self.check()[1][0], f"books/steps.csv:{line}: repo 'other' differs from books/jobs.csv line 2 ('agentfiles')")
+
+    def test_a_job_without_steps_is_fine(self):
+        self.adopt(jobs=2, steps=0)
+        self.assertCheckClean(9)
+
+
+class JobBooksAppendOnlyTest(JobBooksCase):
+    def git(self, *args):
+        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", str(self.dir), *args],
+                              check=True, capture_output=True, text=True).stdout
+
+    def commit(self) -> None:
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "books")
+
+    def setUp(self):
+        super().setUp()
+        self.git("init", "-q")
+        self.adopt(jobs=2, steps=2)
+        self.commit()
+
+    def test_appended_rows_pass(self):
+        self.add(quality.JOBS, job_id="8000")
+        self.add(quality.STEPS, number="9")
+        self.assertCheckClean(7 + 3 + 3, "--base", "HEAD")
+
+    def test_an_edited_earlier_row_fails_on_its_line_in_each_file(self):
+        for rel, column in ((quality.JOBS, "failure"), (quality.STEPS, "failure")):
+            with self.subTest(rel):
+                path = self.dir / rel
+                good = path.read_text()
+                path.write_text(good.replace(f",{column},", ",success,", 1))
+                code, lines = self.check("--base", "HEAD")
+                self.assertEqual(code, 1, lines)
+                self.assertIn(f"{rel}:2: changed since HEAD", lines)
+                path.write_text(good)
+
+    def test_a_removed_row_fails_in_each_file(self):
+        for rel in quality.JOB_BOOKS:
+            with self.subTest(rel):
+                path = self.dir / rel
+                good = path.read_text()
+                path.write_text("".join(good.splitlines(keepends=True)[:2]))
+                self.assertIn(f"{rel}:3: removed since HEAD", self.check("--base", "HEAD")[1])
+                path.write_text(good)
+
+    def test_files_that_are_new_since_the_base_may_have_any_rows(self):
+        self.git("rm", "-q", "--cached", quality.JOBS, quality.STEPS)
+        self.git("commit", "-q", "-m", "drop the job books")
+        self.add(quality.JOBS, job_id="1")
+        self.assertCheckClean(7 + 3 + 2, "--base", "HEAD")
+
+    def test_books_without_the_job_files_pass_against_a_base_that_has_them_not(self):
+        self.git("rm", "-q", "--cached", quality.JOBS, quality.STEPS)
+        self.git("commit", "-q", "-m", "drop the job books")
+        for rel in quality.JOB_BOOKS:
+            (self.dir / rel).unlink()
+        self.assertCheckClean(7, "--base", "HEAD")
+
+
 if __name__ == "__main__":
     unittest.main()
