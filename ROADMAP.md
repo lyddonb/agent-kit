@@ -40,9 +40,10 @@ produces tests of the wrong things. They also cost API tokens in CI (needs a sec
 **Prioritize when:** a skill misfires (does not trigger, or triggers wrongly) twice. Review
 evals get their cases from R34's escapes book. The wait for real prompts ends with R38, which
 shows which sessions invoked a skill. The first evals are the tool-call checks in agent-ledger's
-M3 unit 1, with criteria in this repo and no `evals/` tree here. Its trigger replaces this
-one for those checks: R38 has four weeks of rows, or beau-mode's non-negotiables are about to
-change. Triggering cases follow from the same sessions.
+M3 unit 1. Their criteria live in this repo and they need no `evals/` tree. Its trigger
+replaces this one for those checks: R38 has four weeks of rows, or beau-mode's non-negotiables
+are about to change. The triggering evals above are still planned and draw on the same
+sessions.
 
 ### R4. `skills-ref validate` in CI
 **What:** Run the reference validator from the Agent Skills project alongside
