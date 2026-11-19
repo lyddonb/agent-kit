@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "id": "bstack@0.15.0",
+      "date": "2026-11-18",
+      "plugin": "bstack",
+      "version": "0.15.0",
+      "changes": [
+        "Every commit an agent writes now says how it was checked, in a `Verified:` git trailer: `receipt <run-id>`, `verify-work`, `tests` or `none <reason>`. The Opening a PR playbook defines the values, and beau-agent and verify-work carry the rule.",
+        "`git log --format='%h %(trailers:key=Verified,valueonly)'` lists the stamp beside each commit, so unverified commits can be counted."
+      ],
+      "try": "Show me how each commit on this branch was verified."
+    },
+    {
       "id": "bstack@0.14.0",
       "date": "2026-11-18",
       "plugin": "bstack",
