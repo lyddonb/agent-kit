@@ -1795,6 +1795,46 @@ class FailedOnMainTest(SummaryCase):
         self.assertEqual([(g["python"], g["outcome"]) for g in got], [("3.12", "fail")])
 
 
+class CaughtOnPrTest(SummaryCase):
+    def caught(self, runs, failures) -> dict:
+        return self.repo(runs, failures)["caught_on_pr"]
+
+    def test_only_failures_in_pull_request_runs_this_week(self):
+        push, pr = run_row(1, event="push"), run_row(2, event="pull_request", sha=SHA_B)
+        sched = run_row(4, event="schedule")
+        old = run_row(3, event="pull_request", started="2026-11-05T10:00:00Z")
+        failures = [failure_row(push, "t.main"), failure_row(pr, "t.b", "error"), failure_row(pr, "t.a"),
+                    failure_row(old, "t.old"), failure_row(sched, "t.sched")]
+        got = self.caught([push, pr, old, sched], failures)
+        self.assertEqual(got, {"count": 2, "failures": [
+            {"evidence": ev(2), "outcome": "fail", "python": "3.12", "sha": SHA_B, "test_id": "t.a"},
+            {"evidence": ev(2), "outcome": "error", "python": "3.12", "sha": SHA_B, "test_id": "t.b"}]})
+
+    def test_a_test_failing_on_main_and_on_a_pull_request_is_in_both_lists(self):
+        push, pr = run_row(1, event="push"), run_row(2, event="pull_request", sha=SHA_B)
+        s = self.repo([push, pr], [failure_row(push, "t.both"), failure_row(pr, "t.both")])
+        self.assertEqual([(f["test_id"], f["evidence"]) for f in s["failed_on_main"]], [("t.both", ev(1))])
+        self.assertEqual([(f["test_id"], f["evidence"]) for f in s["caught_on_pr"]["failures"]], [("t.both", ev(2))])
+
+    def test_the_count_is_distinct_tests_not_failure_rows(self):
+        runs = [run_row(1, event="pull_request", python="3.10"), run_row(1, event="pull_request", python="3.12"),
+                run_row(2, event="pull_request", sha=SHA_B)]
+        failures = [failure_row(r, "t.a") for r in runs] + [failure_row(runs[0], "t.b")]
+        got = self.caught(runs, failures)
+        self.assertEqual((got["count"], len(got["failures"])), (2, 4))
+
+    def test_another_repos_pull_request_failures_are_not_counted(self):
+        mine, theirs = run_row(1, event="pull_request"), run_row(2, repo="other", event="pull_request")
+        s = self.summary([mine, theirs], [failure_row(theirs, "t.x")])["repos"]
+        self.assertEqual(s["demo"]["caught_on_pr"], {"count": 0, "failures": []})
+        self.assertEqual(s["other"]["caught_on_pr"]["count"], 1)
+
+    def test_the_run_is_found_by_evidence_and_python(self):
+        a, b = run_row(1, event="pull_request", python="3.12"), run_row(1, event="push", python="3.13")
+        got = self.caught([a, b], [failure_row(a), failure_row(b)])["failures"]
+        self.assertEqual([(g["python"], g["outcome"]) for g in got], [("3.12", "fail")])
+
+
 class FlakyTest(SummaryCase):
     def flaky(self, runs, failures) -> list[dict]:
         return self.repo(runs, failures)["flaky"]
@@ -1886,7 +1926,8 @@ class RefusalAndShapeTest(SummaryCase):
         self.assertEqual(first[1], json.dumps(data, sort_keys=True, indent=2) + "\n")
         keys = set(data["repos"]["demo"])
         self.assertEqual(keys, {"runs", "red_runs", "tests", "suite_ms", "suite_ms_prior4", "suite_ms_change", "ci_wall_ms",
-                                "slowest_tests", "failed_on_main", "flaky", "tests_added", "tests_removed", "over_threshold"})
+                                "slowest_tests", "failed_on_main", "caught_on_pr", "flaky", "tests_added", "tests_removed",
+                                "over_threshold"})
         self.assertEqual(set(data), {"week", "generated_from", "repos", "slowest_tests", "thresholds"})
 
     def test_the_human_version_shows_the_same_numbers(self):
@@ -2034,6 +2075,11 @@ def oracle(artifacts, week=None) -> dict:
             "failed_on_main": sorted(({"test_id": f["test_id"], "sha": f["sha"], "python": f["python"], "outcome": f["outcome"],
                                        "evidence": f["evidence"]} for f in this_failures if f["event"] == "push"),
                                      key=lambda d: (d["test_id"], d["evidence"], d["python"])),
+            "caught_on_pr": {
+                "count": len({f["test_id"] for f in this_failures if f["event"] == "pull_request"}),
+                "failures": sorted(({"test_id": f["test_id"], "sha": f["sha"], "python": f["python"], "outcome": f["outcome"],
+                                     "evidence": f["evidence"]} for f in this_failures if f["event"] == "pull_request"),
+                                   key=lambda d: (d["test_id"], d["evidence"], d["python"]))},
             "flaky": sorted(({"test_id": k[0], "sha": k[1], "python": k[2], "event": k[3], "failed_evidence": sorted(v["failed"]),
                               "passed_evidence": sorted(v["passed"])} for k, v in flaky.items() if v["passed"]),
                             key=lambda d: (d["test_id"], d["sha"], d["python"], d["event"])),
