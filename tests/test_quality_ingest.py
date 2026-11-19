@@ -2447,7 +2447,7 @@ class JobsIngestTest(TempCase):
         self.assertEqual(code, 0, out)
         link, who = ev(1), ["demo", SHA_A, "push", "ci"]
         self.assertEqual(rows_of(self.books, quality.JOBS), [
-            [sec(1), *who, "test", "20", "failure", "3000", "36000", "unit", link],
+            [sec(1), *who, "test", "20", "failure", "3000", "36000", "2", link],
             [sec(1), *who, "slow", "40", "cancelled", "4000", "", "", link],
             [sec(2), *who, "lint", "10", "success", "1000", "10000", "", link],
             [sec(3), *who, "deploy", "30", "skipped", "", "", "", link],
@@ -2522,8 +2522,8 @@ class JobsIngestTest(TempCase):
         for i, name in enumerate(names):
             with self.subTest(name=ascii(name)[:30]):
                 row = by_id[str(100 + i)]
-                self.assertEqual((row[5], row[10], row[8], row[9]), ("(unprintable name)", "(unprintable name)", "3000", "6000"))
-        self.assertEqual((by_id["200"][5], by_id["200"][10]), ("fine name", "also fine"))
+                self.assertEqual((row[5], row[10], row[8], row[9]), ("(unprintable name)", "1", "3000", "6000"))
+        self.assertEqual((by_id["200"][5], by_id["200"][10]), ("fine name", "1"))
         steps = {r[2]: r[4] for r in rows_of(self.books, quality.STEPS)}
         self.assertEqual([steps[str(100 + i)] for i in range(len(names))], ["(unprintable name)"] * len(names))
         self.assertEqual(steps["200"], "also fine")
@@ -2603,13 +2603,43 @@ class JobsIngestTest(TempCase):
         self.assertEqual(code, 1, out)
         self.assertIn("rejected: demo/1/jobs.json: file is larger than 4 MB\n", out)
 
-    def test_negative_durations_are_booked_as_zero(self):
+    def test_negative_durations_are_booked_as_not_measured_and_a_real_zero_as_zero(self):
         self.good_run(1, jjob(10, created=sec(20), started=sec(10), completed=sec(5),
                               steps=(jstep(1, started=sec(30), completed=sec(2)),)))
         self.assertEqual(self.ingest()[0], 0)
         job, step = rows_of(self.books, quality.JOBS)[0], rows_of(self.books, quality.STEPS)[0]
-        self.assertEqual((job[8], job[9], step[6]), ("0", "0", "0"))
+        self.assertEqual((job[8], job[9], step[6]), ("", "", ""))
         self.assertCheckOk()
+
+    def test_a_span_of_zero_seconds_is_a_real_zero(self):
+        self.good_run(1, jjob(10, created=sec(4), started=sec(4), completed=sec(4), steps=(jstep(1, started=sec(4), completed=sec(4)),)))
+        self.assertEqual(self.ingest()[0], 0)
+        job, step = rows_of(self.books, quality.JOBS)[0], rows_of(self.books, quality.STEPS)[0]
+        self.assertEqual((job[8], job[9], step[6]), ("0", "0", "0"))
+
+    def test_the_failed_step_is_booked_by_number_so_two_steps_of_one_name_stay_apart(self):
+        self.good_run(1, jjob(10, "test", "failure", steps=(jstep(1, "Run make"), jstep(2, "Run make", "failure"), jstep(3, "Run make", "failure")),),
+                      jjob(11, "lint", "success", steps=(jstep(1, "Run make"),)))
+        self.assertEqual(self.ingest()[0], 0)
+        self.assertEqual({r[6]: r[10] for r in rows_of(self.books, quality.JOBS)}, {"10": "2", "11": ""})
+        self.assertCheckOk()
+
+    def test_a_run_with_no_jobs_is_reported_as_such_every_time_and_books_nothing(self):
+        put_run(self.art, manifest(1))
+        put_jobs(self.art, manifest(1))
+        before = all_bytes(self.books)
+        for _ in range(2):
+            code, out = self.ingest("--json")
+            self.assertEqual(code, 0, out)
+            data = json.loads(out)
+            self.assertEqual({k: data["totals"][k] for k in ("jobs_booked", "jobs_empty", "jobs_already_booked", "jobs_rejected", "job_rows")},
+                             {"jobs_booked": 0, "jobs_empty": 1, "jobs_already_booked": 0, "jobs_rejected": 0, "job_rows": 0})
+            self.assertEqual(data["jobs"], [{"path": "demo/1/jobs.json", "reason": "no jobs", "status": "empty"}])
+            self.assertEqual(all_bytes(self.books), before)
+        text = self.ingest()[1]
+        self.assertIn("skipped jobs demo/1: no jobs\n", text)
+        self.assertNotIn("booked jobs demo", text)
+        self.assertNotIn("no artifacts", text)
 
     def test_dry_run_says_what_it_would_book_and_writes_nothing(self):
         self.good_run(1)
@@ -2639,7 +2669,7 @@ class JobsIngestTest(TempCase):
     def test_the_totals_line_gains_the_jobs_counts_when_adopted(self):
         self.good_run(1)
         out = self.ingest()[1]
-        self.assertTrue(out.endswith("; booked jobs of 1 runs (1 job rows, 1 step rows), skipped 0 already booked, rejected 0\n"), out)
+        self.assertTrue(out.endswith("; booked jobs of 1 runs (1 job rows, 1 step rows), skipped 0 already booked and 0 with no jobs, rejected 0\n"), out)
 
     # --only jobs
 

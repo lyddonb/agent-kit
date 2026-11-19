@@ -7,6 +7,7 @@ and judged by what it prints and returns.
 """
 import ast
 import contextlib
+import csv
 import importlib.util
 import io
 import json
@@ -1502,7 +1503,7 @@ class AppendOnlyTest(CheckCase):
 JOB_LINK = "https://github.com/example/agentfiles/actions/runs/103/attempts/1"
 JOBS_ROW = dict(zip(quality.JOBS_SCHEMA, (
     "2026-11-16T09:30:01Z", "agentfiles", "fedcba9876543210fedcba9876543210fedcba98", "push", "ci", "validate", "7001",
-    "failure", "3000", "66000", "Run tests", JOB_LINK)))
+    "failure", "3000", "66000", "2", JOB_LINK)))
 STEPS_ROW = dict(zip(quality.STEPS_SCHEMA, (
     "2026-11-16T09:30:05Z", "agentfiles", "7001", "2", "Run tests", "failure", "21000", JOB_LINK)))
 JOB_ROWS = {quality.JOBS: JOBS_ROW, quality.STEPS: STEPS_ROW}
@@ -1514,9 +1515,18 @@ class JobBooksCase(CheckCase):
             (self.dir / rel).write_text(",".join(quality.TABLE_SCHEMAS[rel]) + "\n")
             for n in range(count):
                 self.add(rel, **({"job_id": str(7001 + n)} if rel == quality.JOBS else {"number": str(2 + n)}))
+        if steps:  # the first job failed at step 2, the first step added
+            self.rewrite_job(1, failed_step_number="2")
+
+    def rewrite_job(self, line: int, **cells) -> None:
+        path = self.dir / quality.JOBS
+        lines = path.read_text().splitlines(keepends=True)
+        old = dict(zip(quality.JOBS_SCHEMA, next(csv.reader([lines[line]]))))
+        lines[line] = quality._csv_line({**old, **cells}[k] for k in quality.JOBS_SCHEMA)
+        path.write_text("".join(lines))
 
     def add(self, rel: str, **cells) -> int:
-        row = {**JOB_ROWS[rel], **cells}
+        row = {**JOB_ROWS[rel], **({"failed_step_number": ""} if rel == quality.JOBS else {}), **cells}
         path = self.dir / rel
         with open(path, "a", newline="") as f:
             f.write(quality._csv_line(row[k] for k in quality.TABLE_SCHEMAS[rel]))
@@ -1590,7 +1600,7 @@ class JobBooksAdoptionTest(JobBooksCase):
 class JobRowRulesTest(JobBooksCase):
     BAD = {
         quality.JOBS: {
-            "started": ["", "2026-11-16 09:30:00", "2019-11-16T09:30:00Z"],
+            "created": ["", "2026-11-16 09:30:00", "2019-11-16T09:30:00Z"],
             "repo": ["", "Agent Files"],
             "sha": ["abc", "F" * 40],
             "event": [""],
@@ -1600,7 +1610,7 @@ class JobRowRulesTest(JobBooksCase):
             "conclusion": ["Failure", "a b", "x" * 31, "1"],
             "queue_ms": ["-1", "01", "1.5", "soon"],
             "total_ms": ["-1", "01", "x"],
-            "failed_step": ["=cmd()", "a\x1bb"],
+            "failed_step_number": ["0", "01", "-1", "x", "1.5"],
             "evidence": ["", "http://example.com/x"],
         },
         quality.STEPS: {
@@ -1628,7 +1638,7 @@ class JobRowRulesTest(JobBooksCase):
 
     def test_values_that_look_odd_but_are_allowed(self):
         self.adopt(jobs=0, steps=0)
-        self.add(quality.JOBS, conclusion="", queue_ms="", total_ms="", failed_step="", job="(unprintable name)")
+        self.add(quality.JOBS, conclusion="", queue_ms="", total_ms="", failed_step_number="", job="(unprintable name)")
         self.add(quality.JOBS, job_id="7002", conclusion="timed_out", queue_ms="0", total_ms="0")
         self.add(quality.STEPS, started="", conclusion="", ms="")
         self.add(quality.STEPS, number="3", ms="0")
@@ -1666,6 +1676,26 @@ class JobRowRulesTest(JobBooksCase):
         self.adopt(jobs=1, steps=0)
         line = self.add(quality.STEPS, repo="other")
         self.assertEqual(self.check()[1][0], f"books/steps.csv:{line}: repo 'other' differs from books/jobs.csv line 2 ('agentfiles')")
+
+    def test_a_failed_step_number_must_name_a_step_of_that_job_that_failed(self):
+        self.adopt(jobs=1, steps=2)  # job 7001 failed at step 2; step 3 is also a row, with conclusion failure
+        self.add(quality.STEPS, number="4", conclusion="success")
+        self.rewrite_job(1, failed_step_number="9")
+        self.assertEqual(self.check(), (1, ["books/jobs.csv:2: failed_step_number '9' has no step in books/steps.csv with that number",
+                                            "1 problems"]))
+        self.rewrite_job(1, failed_step_number="4")
+        code, lines = self.check()
+        self.assertEqual(code, 1)
+        self.assertEqual(lines[0], "books/jobs.csv:2: failed_step_number '4' is books/steps.csv line 4, whose conclusion is 'success', not failure")
+        self.rewrite_job(1, failed_step_number="3")
+        self.assertCheckClean(7 + 1 + 3)
+
+    def test_a_failed_step_number_of_another_job_or_run_does_not_count(self):
+        self.adopt(jobs=1, steps=1)
+        self.add(quality.JOBS, job_id="7002", failed_step_number="2")
+        self.add(quality.JOBS, job_id="7001", evidence=JOB_LINK.replace("/103/", "/104/"), failed_step_number="2")
+        code, lines = self.check()
+        self.assertEqual((code, [l.split(":", 2)[1] for l in lines[:-1]]), (1, ["3", "4"]))
 
     def test_a_job_without_steps_is_fine(self):
         self.adopt(jobs=2, steps=0)

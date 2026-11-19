@@ -102,17 +102,20 @@ rules (RUN_RULES, FAILURE_RULES, WEEKLY_RULES, WATCHED_RULES, KINDS_RULES): stam
 starts with = + - @ tab or CR (a spreadsheet would run it) or holds a control character other than
 newline and tab (a terminal would obey it).
 
-The job books. books/jobs.csv (`started,repo,sha,event,workflow,job,job_id,conclusion,queue_ms,total_ms,
-failed_step,evidence`) has one row per job, books/steps.csv (`started,repo,job_id,number,step,conclusion,ms,
-evidence`) one row per step. They are optional until adopted, because books written before they existed have
+The job books. books/jobs.csv (`created,repo,sha,event,workflow,job,job_id,conclusion,queue_ms,total_ms,
+failed_step_number,evidence`) has one row per job, books/steps.csv (`started,repo,job_id,number,step,conclusion,ms,
+evidence`) one row per step; `created` is when the job was queued and a step's `started` is when it ran. A step
+reaches its job's sha, event, workflow and name through the join on (`evidence`, `job_id`). Create both files with
+their full headers: a file with any other header fails `check`. They are optional until adopted, because books written before they existed have
 neither: with neither file, `check`, `ingest`, `fetch` and `summary` print, return and write exactly what they did
 before. Exactly one of the two is a `check` problem on the missing file (so every command that refuses books that
 fail check refuses it). With both, they are held to `JOB_RULES` and `STEP_RULES` (one set of functions used by
 `check` and by `ingest`, like `RUN_RULES`): the header, stamps in 2020 to 2099, `job_id` and `number` as positive
 integers without leading zeros, `conclusion` matching [a-z_]{0,30}, `queue_ms`, `total_ms` and `ms` empty or a
-non-negative integer, the text hygiene and the 1000 characters of every other file, uniqueness on `(evidence,
+non-negative integer, `failed_step_number` empty or a positive integer, the text hygiene and the 1000 characters of every other file, uniqueness on `(evidence,
 job_id)` and `(evidence, job_id, number)`, and that every step has a job with the same `(evidence, job_id)` and
-`repo`. `ok, N rows` counts their rows, and with --base both are append only (a file missing at REF is new and
+`repo`, and that a job's `failed_step_number`, when set, is the `number` of a step of that job whose conclusion
+is `failure`. `ok, N rows` counts their rows, and with --base both are append only (a file missing at REF is new and
 may have any rows; one that exists at REF and is gone now is `removed since REF`).
 
 `ingest` reads the layout `fetch` writes. For each <repo>/<run_id>/manifest.json: it must agree with
@@ -136,18 +139,23 @@ Jobs in ingest, only once the job books are adopted (otherwise jobs.json files a
 folder's `jobs.json` is booked when its evidence is not yet in jobs.csv; its identity needs a valid manifest, and
 repo, sha, event, workflow and evidence come from the manifest, never from the file. The file is read strictly (4 MB,
 64 jobs, 100 steps, no unknown or missing key), and its `run_id` and `run_attempt` must be the manifest's. Every
-job the API reported is booked, `skipped` and `cancelled` ones and ones with no steps included. `started` is the
+job the API reported is booked, `skipped` and `cancelled` ones and ones with no steps included. `created` is the
 job's `created` stamp and is required. `queue_ms` is the job's started minus created and `total_ms` completed minus
-started, `ms` of a step likewise; each is empty when a stamp it needs is missing and 0 when the difference is
-negative. `failed_step` names the lowest-numbered step whose conclusion is `failure`. A job or step name is text a
+started, `ms` of a step likewise; each is empty when a stamp it needs is missing or the difference is negative
+(empty always means not measured; GitHub reports a skipped job as completing a second before it starts), and 0 is a
+real zero at one second resolution. `failed_step_number` is the `number` of the lowest-numbered step whose
+conclusion is `failure`, or empty; a name would be ambiguous and does not join. A job or step name is text a
 pull request controls: one that is empty, fails text hygiene or is over 1000 characters is booked as
 `(unprintable name)` and never blocks the run's timings. A stamp that is not empty and not a valid stamp, or a
 conclusion outside its rule, rejects that jobs.json by name and blocks nothing else, not the run's test record
 and not other runs. A folder with a manifest, a jobs.json and no artifacts books its jobs and prints no `no
 artifacts` line. Per jobs file it prints `booked jobs REPO/RUN: N jobs, M steps`, `skipped jobs REPO/RUN: already
-booked` or `rejected: REPO/RUN/jobs.json: why`, and a rejection makes ingest exit 1. The totals line and the
---json totals gain `jobs_booked`, `jobs_already_booked`, `jobs_rejected`, `job_rows` and `step_rows`. New job rows
-are ordered by (started, evidence, job_id) and step rows by (their job's started, evidence, job_id, number).
+booked`, `skipped jobs REPO/RUN: no jobs` or `rejected: REPO/RUN/jobs.json: why`, and a rejection makes ingest
+exit 1. A run with no jobs (a `startup_failure`) can never appear in jobs.csv, so it is reported as `no jobs` on
+every ingest and counted in `jobs_empty`, never in `jobs_booked`; fetch still asks the jobs API about it while it is
+inside the `--since` window. The totals line and the --json totals gain `jobs_booked`, `jobs_already_booked`,
+`jobs_empty`, `jobs_rejected`, `job_rows` and `step_rows`. New job rows are ordered by (created, evidence, job_id)
+and step rows by (their job's created, evidence, job_id, number).
 `--only jobs` books only jobs and steps: it reads no artifact and leaves runs.csv, failures.csv and
 tests-weekly.csv alone; without adopted books it exits 2.
 
@@ -213,8 +221,8 @@ FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "ev
 WEEKLY_SCHEMA = ("week", "repo", "test_id", "runs", "failed", "total_ms", "max_ms")
 WATCHED_SCHEMA = ("repo", "github", "workflow")
 KINDS_SCHEMA = ("repo", "prefix", "kind")
-JOBS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "job", "job_id", "conclusion",
-               "queue_ms", "total_ms", "failed_step", "evidence")
+JOBS_SCHEMA = ("created", "repo", "sha", "event", "workflow", "job", "job_id", "conclusion",
+               "queue_ms", "total_ms", "failed_step_number", "evidence")
 STEPS_SCHEMA = ("started", "repo", "job_id", "number", "step", "conclusion", "ms", "evidence")
 SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}  # the files every book has
 # The files a book may leave out. ingest never writes kinds.csv. The job books come as a pair: neither file means
@@ -1004,6 +1012,19 @@ _CONCLUSION = re.compile(r"[a-z_]{0,30}")
 _OPTIONAL_COUNT = re.compile(r"(0|[1-9][0-9]*)?")
 
 
+def _created_rule(cells: dict) -> Iterator[str]:
+    if not _is_stamp(cells["created"]):
+        yield (f"created must look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
+               f"got {_show(cells['created'])}")
+
+
+def _optional_positive_rule(name: str) -> Rule:
+    def rule(cells: dict) -> Iterator[str]:
+        if cells[name] and not _POSITIVE.fullmatch(cells[name]):
+            yield f"{name} must be empty or a positive integer without leading zeros, got {_show(cells[name])}"
+    return rule
+
+
 def _optional_stamp_rule(cells: dict) -> Iterator[str]:
     if cells["started"] and not _is_stamp(cells["started"]):
         yield (f"started must be empty or look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
@@ -1039,10 +1060,10 @@ def _optional_count_rule(*names: str) -> Rule:
 
 
 JOB_RULES: dict[str, Rule] = {
-    "started": _stamp_rule, "repo": _repo_rule, "sha": _sha_rule, "event": _event_rule, "workflow": _workflow_rule,
+    "created": _created_rule, "repo": _repo_rule, "sha": _sha_rule, "event": _event_rule, "workflow": _workflow_rule,
     "job": _nonempty_rule("job"), "job_id": _positive_rule("job_id"), "conclusion": _conclusion_rule,
-    "durations": _optional_count_rule("queue_ms", "total_ms"), "evidence": _evidence_rule,
-    "text": _text_rule("event", "workflow", "job", "failed_step", "evidence"),
+    "durations": _optional_count_rule("queue_ms", "total_ms"), "failed_step": _optional_positive_rule("failed_step_number"),
+    "evidence": _evidence_rule, "text": _text_rule("event", "workflow", "job", "evidence"),
 }
 STEP_RULES: dict[str, Rule] = {
     "started": _optional_stamp_rule, "repo": _repo_rule, "job_id": _positive_rule("job_id"),
@@ -1203,10 +1224,21 @@ def check_steps(books: Books) -> Iterator[Problem]:
 
 
 def check_steps_match_jobs(books: Books) -> Iterator[Problem]:
-    """Every step belongs to a job of the same run (same evidence and job_id) in the same repo."""
+    """Every step belongs to a job of the same run (same evidence and job_id) in the same repo, and a job's
+    failed_step_number, when set, names a step of it that failed."""
     if not adopted(books) or any(p.path in (JOBS, STEPS) for p in books.load_problems):
         return
     jobs = {(r.cells["evidence"], r.cells["job_id"]): r for r in books.tables[JOBS].rows}
+    steps = {(r.cells["evidence"], r.cells["job_id"], r.cells["number"]): r for r in books.tables[STEPS].rows}
+    for row in books.tables[JOBS].rows:
+        c, number = row.cells, row.cells["failed_step_number"]
+        if number:
+            step = steps.get((c["evidence"], c["job_id"], number))
+            if step is None:
+                yield Problem(JOBS, row.line, f"failed_step_number {_show(number)} has no step in {STEPS} with that number")
+            elif step.cells["conclusion"] != "failure":
+                yield Problem(JOBS, row.line, f"failed_step_number {_show(number)} is {STEPS} line {step.line}, whose conclusion is "
+                                              f"{_show(step.cells['conclusion'])}, not failure")
     for row in books.tables[STEPS].rows:
         c = row.cells
         job = jobs.get((c["evidence"], c["job_id"]))
@@ -2057,6 +2089,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         jobs_rejected = sum(s.status == "rejected" for s in found.jobs)
         booked_jobs = [s for s in found.jobs if s.status == "booked"]
         totals.update(jobs_booked=len(booked_jobs), jobs_already_booked=sum(s.status == "already" for s in found.jobs),
+                      jobs_empty=sum(s.status == "empty" for s in found.jobs),
                       jobs_rejected=jobs_rejected, job_rows=sum(len(s.jobs.jobs) for s in booked_jobs),
                       step_rows=sum(s.jobs.step_count for s in booked_jobs))
     if args.json:
@@ -2111,6 +2144,8 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
             print(f"{'would book' if dry_run else 'booked'} jobs {folder}: {len(s.jobs.jobs)} jobs, {s.jobs.step_count} steps")
         elif s.status == "already":
             print(f"skipped jobs {folder}: already booked")
+        elif s.status == "empty":
+            print(f"skipped jobs {folder}: no jobs")
         else:
             print(f"rejected: {name}: {s.reason}")
     for folder, cap in found.unread:
@@ -2122,7 +2157,8 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
     jobs_part = ""
     if "jobs_booked" in totals:
         jobs_part = (f"; {verb} jobs of {totals['jobs_booked']} runs ({totals['job_rows']} job rows, {totals['step_rows']} step rows), "
-                     f"skipped {totals['jobs_already_booked']} already booked, rejected {totals['jobs_rejected']}")
+                     f"skipped {totals['jobs_already_booked']} already booked and {totals['jobs_empty']} with no jobs, "
+                     f"rejected {totals['jobs_rejected']}")
     if only_jobs:
         print(jobs_part[2:])
     else:
@@ -2803,11 +2839,13 @@ def _name(text: str) -> str:
 
 
 def _span_ms(start: str, end: str) -> str:
-    """Milliseconds from one stamp to another, "" when either is missing, 0 when the end is before the start."""
+    """Milliseconds from one stamp to another. "" means not measured: a missing stamp, or an end before the start
+    (GitHub reports a skipped job as completing a second before it starts). 0 is a real zero at one second resolution."""
     if not start or not end:
         return ""
     stamp = lambda s: datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
-    return str(max(0, round((stamp(end) - stamp(start)).total_seconds() * 1000)))
+    ms = round((stamp(end) - stamp(start)).total_seconds() * 1000)
+    return str(ms) if ms >= 0 else ""
 
 
 def _stamp_field(value: str, what: str, required: bool = False) -> None:
@@ -2838,10 +2876,10 @@ class BookedJobs:
         for job in sorted(self.jobs, key=lambda j: j.id):
             steps = sorted(job.steps, key=lambda s: s.number)
             failed = next((s for s in steps if s.conclusion == "failure"), None)
-            cells = _cells(JOBS_SCHEMA, started=job.created, repo=m.repo, sha=m.head_sha, event=m.event, workflow=m.workflow,
+            cells = _cells(JOBS_SCHEMA, created=job.created, repo=m.repo, sha=m.head_sha, event=m.event, workflow=m.workflow,
                            job=_name(job.name), job_id=job.id, conclusion=job.conclusion,
                            queue_ms=_span_ms(job.created, job.started), total_ms=_span_ms(job.started, job.completed),
-                           failed_step=_name(failed.name) if failed else "", evidence=self.evidence)
+                           failed_step_number=failed.number if failed else "", evidence=self.evidence)
             out.append((cells, [_cells(STEPS_SCHEMA, started=s.started, repo=m.repo, job_id=job.id, number=s.number,
                                        step=_name(s.name), conclusion=s.conclusion, ms=_span_ms(s.started, s.completed),
                                        evidence=self.evidence) for s in steps]))
@@ -2900,7 +2938,7 @@ def read_jobs_file(path: str, m: Manifest) -> BookedJobs:
 @dataclass
 class JobScan:
     path: str  # <repo>/<run_id>/jobs.json
-    status: str  # booked, already, rejected
+    status: str  # booked, already, empty (the run has no jobs), rejected
     jobs: BookedJobs | None = None
     reason: str = ""
 
@@ -2931,7 +2969,8 @@ def _scan_jobs(root: str, manifests: list, jobs_files: dict[tuple[str, str], str
             files_read += 1
             bytes_read += size
             try:
-                found.jobs.append(JobScan(path, "booked", read_jobs_file(os.path.join(root, path), m)))
+                booked = read_jobs_file(os.path.join(root, path), m)
+                found.jobs.append(JobScan(path, "booked", booked) if booked.jobs else JobScan(path, "empty", reason="no jobs"))
             except Rejected as e:
                 found.jobs.append(JobScan(path, "rejected", reason=str(e)))
     found.jobs.extend(JobScan(path, "rejected", reason=f"no {MANIFEST} in its run folder")
@@ -2940,9 +2979,9 @@ def _scan_jobs(root: str, manifests: list, jobs_files: dict[tuple[str, str], str
 
 
 def plan_jobs(books: Books, scans: list[JobScan]) -> dict[str, bytes | None]:
-    """jobs.csv and steps.csv after booking the new runs' jobs: rows only at the end, jobs by (started, evidence,
-    job_id) and steps by (their job's started, evidence, job_id, number). Empty when there is nothing to book."""
-    entries = sorted(((cells["started"], cells["evidence"], int(cells["job_id"]), cells, steps)
+    """jobs.csv and steps.csv after booking the new runs' jobs: rows only at the end, jobs by (created, evidence,
+    job_id) and steps by (their job's created, evidence, job_id, number). Empty when there is nothing to book."""
+    entries = sorted(((cells["created"], cells["evidence"], int(cells["job_id"]), cells, steps)
                       for s in scans if s.status == "booked" for cells, steps in s.jobs.entries()), key=lambda e: e[:3])
     if not entries:
         return {}
