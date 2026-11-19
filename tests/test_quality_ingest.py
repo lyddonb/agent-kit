@@ -1605,6 +1605,149 @@ class SummaryCase(TempCase):
         return self.summary(*args, **kw)["repos"]["demo"]
 
 
+ZERO_KIND = {"caught_on_pr": 0, "failed_on_main": 0, "tests": 0, "total_ms": 0}
+
+
+class KindsSummaryTest(SummaryCase):
+    """by_kind: this week's tests, their cost and their catches, per kind from books/kinds.csv."""
+
+    @staticmethod
+    def wr(test_id="t.A.test_a", total_ms=10, **kw) -> dict:
+        return weekly_row(test_id=test_id, total_ms=total_ms, max_ms=total_ms, **kw)
+
+    def by_kind(self, kinds=(), weekly=(), runs=None, failures=(), *, books_kinds=None, repo="demo") -> dict:
+        runs = [run_row(1)] if runs is None else runs
+        write_books(self.books, runs, failures, weekly)
+        (self.books / quality.WATCHED).write_text(HEADERS[WATCHED] + watch_rows(("demo", "other")))
+        if kinds is not None:
+            (self.books / quality.KINDS).write_text("repo,prefix,kind\n" + "".join(f"{r},{p},{k}\n" for r, p, k in sorted(kinds)))
+        code, out = cli("summary", self.books, "--json", "--week", "2026-W46")
+        self.assertEqual(code, 0, out)
+        return json.loads(out)["repos"][repo]["by_kind"]
+
+    def counts(self, kinds, ids, repo="demo") -> dict:
+        """kind -> test count, for tests with these ids."""
+        got = self.by_kind(kinds, [self.wr(i, repo=repo) for i in ids], [run_row(1, repo=repo)], repo=repo)
+        return {k: v["tests"] for k, v in got.items() if v["tests"]}
+
+    def test_without_the_file_every_test_is_unit_and_all_four_kinds_are_present(self):
+        got = self.by_kind(None, [self.wr(test_id="t.a", total_ms=7), self.wr(test_id="t.b", total_ms=5)])
+        self.assertFalse((self.books / quality.KINDS).exists())
+        self.assertEqual(got, {"unit": {**ZERO_KIND, "tests": 2, "total_ms": 12}, "e2e": ZERO_KIND, "property": ZERO_KIND,
+                               "differential": ZERO_KIND})
+
+    def test_a_header_only_file_is_the_same_as_no_file(self):
+        weekly = [self.wr(test_id="t.a", total_ms=7)]
+        self.assertEqual(self.by_kind((), weekly), self.by_kind(None, weekly))
+
+    def test_a_week_with_no_tests_still_has_all_four_kinds(self):
+        got = self.by_kind([("demo", "t", "e2e")], [])
+        self.assertEqual(got, {k: ZERO_KIND for k in ("unit", "e2e", "property", "differential")})
+
+    def test_a_prefix_matches_whole_dotted_segments_only(self):
+        ids = ["t.A.test_a", "t.AB.test_a", "t.A_b.test_a", "t.Ax", "tt.A.test_a", "t.A"]
+        self.assertEqual(self.counts([("demo", "t.A", "property")], ids), {"property": 2, "unit": 4})
+
+    def test_a_module_prefix_covers_its_classes_and_tests(self):
+        ids = ["mod_a.C.test_x", "mod_a.D.test_y", "mod_ab.C.test_x", "mod.C.test_x"]
+        self.assertEqual(self.counts([("demo", "mod_a", "e2e")], ids), {"e2e": 2, "unit": 2})
+
+    def test_a_full_test_id_prefix_matches_that_test_only(self):
+        ids = ["t.A.test_a", "t.A.test_ab", "t.A.test_a.sub"]
+        self.assertEqual(self.counts([("demo", "t.A.test_a", "differential")], ids), {"differential": 2, "unit": 1})
+
+    def test_the_longest_matching_prefix_wins_(self):
+        rows = [("demo", "t", "e2e"), ("demo", "t.A", "property"), ("demo", "t.A.test_one", "differential")]
+        ids = ["t.A.test_one", "t.A.test_two", "t.B.test_three", "u.C.test_four"]
+        got = self.by_kind(rows, [self.wr(test_id=i, total_ms=n) for n, i in enumerate(ids, 1)])
+        self.assertEqual({k: (v["tests"], v["total_ms"]) for k, v in got.items()},
+                         {"differential": (1, 1), "property": (1, 2), "e2e": (1, 3), "unit": (1, 4)})
+
+    def test_unit_can_be_set_back_inside_a_property_module(self):
+        rows = [("demo", "t_props", "property"), ("demo", "t_props.PlainTest", "unit")]
+        self.assertEqual(self.counts(rows, ["t_props.FramingTest.test_a", "t_props.PlainTest.test_b"]), {"property": 1, "unit": 1})
+
+    def test_another_repos_rows_are_ignored(self):
+        rows = [("other", "t", "e2e"), ("demo", "t.A", "property")]
+        self.assertEqual(self.counts(rows, ["t.A.test_a", "t.B.test_b"]), {"property": 1, "unit": 1})
+
+    def test_each_repo_uses_its_own_rows(self):
+        runs = [run_row(1), run_row(2, repo="other")]
+        write_books(self.books, runs, (), [self.wr(test_id="t.a"), self.wr(test_id="t.a", repo="other")])
+        (self.books / quality.KINDS).write_text("repo,prefix,kind\ndemo,t,e2e\nother,t,property\n")
+        (self.books / quality.WATCHED).write_text("repo,github,workflow\ndemo,example/demo,ci\nother,example/other,ci\n")
+        code, out = cli("summary", self.books, "--json", "--week", "2026-W46")
+        self.assertEqual(code, 0, out)
+        s = json.loads(out)["repos"]
+        self.assertEqual({r: {k: v["tests"] for k, v in s[r]["by_kind"].items()} for r in s},
+                         {"demo": {"unit": 0, "e2e": 1, "property": 0, "differential": 0},
+                          "other": {"unit": 0, "e2e": 0, "property": 1, "differential": 0}})
+
+    def test_cost_counts_this_weeks_total_ms_only(self):
+        weekly = [self.wr(test_id="t.A.x", total_ms=30, runs=3), self.wr(test_id="t.A.x", week="2026-W45", total_ms=900),
+                  self.wr(test_id="t.B.y", total_ms=4)]
+        got = self.by_kind([("demo", "t.A", "property")], weekly)
+        self.assertEqual((got["property"]["total_ms"], got["unit"]["total_ms"]), (30, 4))
+
+    def test_the_kinds_add_up_to_the_slowest_tests_source(self):
+        weekly = [self.wr(test_id=f"t.{c}.x", total_ms=n) for n, c in enumerate("ABCD", 1)]
+        got = self.by_kind([("demo", "t.B", "e2e"), ("demo", "t.C", "differential")], weekly)
+        self.assertEqual((sum(v["total_ms"] for v in got.values()), sum(v["tests"] for v in got.values())), (10, 4))
+
+    def test_catches_are_distinct_tests_per_kind(self):
+        push, pr, pr2 = run_row(1), run_row(2, event="pull_request", sha=SHA_B), run_row(3, event="pull_request", sha=SHA_C)
+        failures = [failure_row(pr, "t.P.a"), failure_row(pr2, "t.P.a"), failure_row(pr, "t.P.b"), failure_row(pr, "t.U.c"),
+                    failure_row(push, "t.P.a"), failure_row(push, "t.E.d")]
+        got = self.by_kind([("demo", "t.P", "property"), ("demo", "t.E", "e2e")], [], [push, pr, pr2], failures)
+        self.assertEqual({k: (v["caught_on_pr"], v["failed_on_main"]) for k, v in got.items()},
+                         {"unit": (1, 0), "e2e": (0, 1), "property": (2, 1), "differential": (0, 0)})
+
+    def test_catches_of_an_earlier_week_are_not_counted(self):
+        old = run_row(2, event="pull_request", started="2026-11-05T10:00:00Z")
+        got = self.by_kind([], [], [run_row(1), old], [failure_row(old, "t.a")])
+        self.assertEqual(got["unit"]["caught_on_pr"], 0)
+
+    def test_the_existing_keys_do_not_move_when_kinds_are_added(self):
+        weekly = [self.wr(test_id="t.A.x", total_ms=30), self.wr(test_id="t.B.y", total_ms=4)]
+        pr = run_row(2, event="pull_request", sha=SHA_B)
+        runs, failures = [run_row(1), pr], [failure_row(pr, "t.A.x")]
+        write_books(self.books, runs, failures, weekly)
+        before = json.loads(cli("summary", self.books, "--json", "--week", "2026-W46")[1])
+        (self.books / quality.KINDS).write_text("repo,prefix,kind\ndemo,t.A,property\n")
+        after = json.loads(cli("summary", self.books, "--json", "--week", "2026-W46")[1])
+        for s in (before, after):
+            del s["repos"]["demo"]["by_kind"]
+        self.assertEqual(after, before)
+
+    def test_books_with_a_bad_kinds_file_give_no_summary(self):
+        write_books(self.books, [run_row(1)], (), [self.wr()])
+        (self.books / quality.KINDS).write_text("repo,prefix,kind\ndemo,t,slow\n")
+        code, out = cli("summary", self.books, "--json", "--week", "2026-W46")
+        self.assertEqual(code, 1)
+        self.assertIn("no summary from unchecked books", out)
+
+    def test_the_human_summary_has_one_by_kind_line(self):
+        write_books(self.books, [run_row(1)], (), [self.wr(test_id="t.A.x", total_ms=30)])
+        (self.books / quality.KINDS).write_text("repo,prefix,kind\ndemo,t.A,property\n")
+        code, out = cli("summary", self.books, "--week", "2026-W46")
+        self.assertEqual(code, 0)
+        self.assertEqual([l for l in out.splitlines() if "by kind" in l],
+                         ["  by kind: unit 0 tests 0 ms, caught 0 on a pull request; e2e 0 tests 0 ms, caught 0 on a pull request; "
+                          "property 1 tests 30 ms, caught 0 on a pull request; differential 0 tests 0 ms, caught 0 on a pull request"])
+
+
+class KindsIngestTest(TempCase):
+    def test_ingest_leaves_kinds_csv_alone_and_does_not_create_it(self):
+        self.assertEqual(self.ingest()[0], 0)
+        self.assertFalse((self.books / quality.KINDS).exists())
+
+    def test_ingest_into_books_with_a_bad_kinds_file_is_refused(self):
+        (self.books / quality.KINDS).write_text("repo,prefix,kind\ndemo,t,slow\n")
+        code, out = self.ingest()
+        self.assertEqual(code, 1)
+        self.assertIn("refusing to ingest into books that fail check", out)
+
+
 class MedianTest(SummaryCase):
     def test_the_median_of_an_odd_count_is_the_middle_value(self):
         runs = [run_row(i, wall_ms=w) for i, w in enumerate([50, 10, 30], start=1)]
@@ -1932,7 +2075,7 @@ class RefusalAndShapeTest(SummaryCase):
         keys = set(data["repos"]["demo"])
         self.assertEqual(keys, {"runs", "red_runs", "tests", "suite_ms", "suite_ms_prior4", "suite_ms_change", "ci_wall_ms",
                                 "slowest_tests", "failed_on_main", "caught_on_pr", "flaky", "tests_added", "tests_removed",
-                                "over_threshold"})
+                                "over_threshold", "by_kind"})
         self.assertEqual(set(data), {"week", "generated_from", "repos", "slowest_tests", "thresholds"})
 
     def test_the_human_version_shows_the_same_numbers(self):
@@ -1991,6 +2134,30 @@ def generate(seed: int) -> list[tuple[dict, dict, list[dict]]]:
     return out
 
 
+def generate_kinds(seed: int) -> list[tuple[str, str, str]]:
+    """Random books/kinds.csv rows for the ids `generate` makes: modules, classes, whole tests, nested prefixes, near
+    misses that share characters but not a dotted segment, and prefixes borrowed from another repo."""
+    rnd = random.Random(seed + 7000)
+    rows: dict[tuple[str, str], str] = {}
+    for _ in range(rnd.randrange(3, 14)):
+        repo, other = rnd.choice(REPOS), rnd.choice(REPOS)
+        n = rnd.randrange(3)
+        prefix = rnd.choice((other, f"{other}.T{n}", f"{other}.T{n}.test_{rnd.randrange(12)}", f"{other}.T", f"{other}.T{n}.test_",
+                             f"{other}.T{n}.test_1", f"{other[:-1]}"))
+        rows[(repo, prefix)] = rnd.choice(("unit", "e2e", "property", "differential"))
+    for _ in range(rnd.randrange(1, 4)):  # a chain: module, class and test of one repo, each its own kind
+        repo, n, i = rnd.choice(REPOS), rnd.randrange(3), rnd.randrange(12)
+        for prefix in (repo, f"{repo}.T{n}", f"{repo}.T{n}.test_{i}"):
+            if rnd.random() < 0.7:
+                rows[(repo, prefix)] = rnd.choice(("unit", "e2e", "property", "differential"))
+    return [(repo, prefix, kind) for (repo, prefix), kind in sorted(rows.items())]
+
+
+def write_kinds(books: Path, kinds) -> None:
+    if kinds:
+        (books / quality.KINDS).write_text("repo,prefix,kind\n" + "".join(f"{r},{p},{k}\n" for r, p, k in kinds))
+
+
 def effective(m: dict, header: dict) -> dict:
     """The header the books must act on: identity from the manifest, the rest from the file."""
     return dict(header, repo=m["repo"], sha=m["head_sha"], event=m["event"], workflow=m["workflow"], started=m["started"])
@@ -2002,7 +2169,19 @@ def write_artifacts(folder: Path, items, rnd: random.Random) -> None:
         put(folder, f"{m['repo']}/{m['run_id']}/artifacts/f{i}-{rnd.randrange(10 ** 6)}/test-results.jsonl", artifact_text(header, rows))
 
 
-def oracle(artifacts, week=None) -> dict:
+def oracle_kind(kinds, repo: str, test_id: str) -> str:
+    """A test's kind by its own reading of the rule: the row of this repo whose prefix is the id or its leading
+    dotted segments, with the most segments. No row: unit."""
+    ids = test_id.split(".")
+    best, kind = 0, "unit"
+    for r, prefix, k in kinds:
+        segs = prefix.split(".")
+        if r == repo and ids[:len(segs)] == segs and len(segs) > best:
+            best, kind = len(segs), k
+    return kind
+
+
+def oracle(artifacts, week=None, kinds=()) -> dict:
     """The summary, worked out straight from the raw artifacts with plain loops."""
     runs = []
     for header, rows in artifacts:
@@ -2067,7 +2246,16 @@ def oracle(artifacts, week=None) -> dict:
                     sides["passed"].add(r["evidence"])
         median = statistics.median_low(walls)
         latest = this[-1]
+        by_kind = {k: {"tests": 0, "total_ms": 0, "caught_on_pr": 0, "failed_on_main": 0} for k in ("unit", "e2e", "property", "differential")}
+        for e in mine_weekly:
+            if e["week"] == week:
+                by_kind[oracle_kind(kinds, repo, e["test_id"])]["tests"] += 1
+                by_kind[oracle_kind(kinds, repo, e["test_id"])]["total_ms"] += e["total"]
+        for key, event in (("caught_on_pr", "pull_request"), ("failed_on_main", "push")):
+            for test_id in {f["test_id"] for f in this_failures if f["event"] == event}:
+                by_kind[oracle_kind(kinds, repo, test_id)][key] += 1
         repos[repo] = {
+            "by_kind": by_kind,
             "runs": len(this), "red_runs": sum(r["verdict"] != 0 for r in this), "tests": latest["tests"],
             "suite_ms": {"median": median, "max": max(walls), "by_python": {
                 py: {"runs": len([r for r in this if r["python"] == py]),
@@ -2103,6 +2291,7 @@ class PropertyTest(TempCase):
     SEEDS = range(40 if os.environ.get("QUALITY_FULL_SEEDS") == "1" else 5)
 
     def test_summary_json_equals_a_recomputation_from_the_raw_artifacts(self):
+        seen_kinds: set[str] = set()
         for seed in self.SEEDS:
             with self.subTest(seed=seed):
                 items = generate(seed)
@@ -2111,13 +2300,18 @@ class PropertyTest(TempCase):
                 write_artifacts(art, items, random.Random(seed))
                 code, out = cli("ingest", books, art)
                 self.assertEqual(code, 0, out)
+                kinds = generate_kinds(seed)
+                write_kinds(books, kinds)
                 self.assertEqual(cli("check", books)[0], 0)
                 for week in sorted(weeks_with_runs(artifacts)):
                     code, out = cli("summary", books, "--json", "--week", week)
                     self.assertEqual(code, 0, out)
-                    self.assertEqual(json.loads(out), json.loads(json.dumps(oracle(artifacts, week))), week)
+                    want = json.loads(json.dumps(oracle(artifacts, week, kinds)))
+                    self.assertEqual(json.loads(out), want, week)
+                    seen_kinds.update(k for r in want["repos"].values() for k, v in r["by_kind"].items() if v["tests"])
                 code, out = cli("summary", books, "--json")
-                self.assertEqual(json.loads(out), json.loads(json.dumps(oracle(artifacts))), "the default week")
+                self.assertEqual(json.loads(out), json.loads(json.dumps(oracle(artifacts, None, kinds))), "the default week")
+        self.assertEqual(seen_kinds, {"unit", "e2e", "property", "differential"}, "the generator never reached a kind")
 
     def test_any_order_and_any_batches_give_the_same_books(self):
         for seed in self.SEEDS:

@@ -47,7 +47,12 @@ The books are four CSV files under BOOKS_DIR: books/runs.csv (one row per record
 only), books/failures.csv (one row per failing test in a run, append only), books/tests-weekly.csv
 (per ISO week, repo and test: runs, failed, total and max milliseconds; rows are updated in place and
 kept sorted) and books/watched.csv (the repos to book: `repo,github,workflow`, for example
-`agentfiles,lyddonb/agentfiles,ci`; edited by hand).
+`agentfiles,lyddonb/agentfiles,ci`; edited by hand). A fifth file is optional: books/kinds.csv
+(`repo,prefix,kind`, edited by hand, sorted by repo then prefix) names the tests that are not unit
+tests. `prefix` is a module, `module.Class` or a whole test id; a test takes the `kind` (`unit`, `e2e`,
+`property` or `differential`) of the row with the longest prefix that matches it on whole dotted segments,
+and `unit` when no row matches. Books without the file are valid. Only `check` reads its form;
+`ingest` never writes it.
 
 Trust: CI runs pull-request code, so anyone who can get a workflow to run can write any recorder
 file, and runs.csv and failures.csv cannot be edited afterwards. Who a run is therefore comes from
@@ -91,7 +96,7 @@ relative to BOOKS_DIR), then `ok, N rows, 0 problems` or `N problems`. Exit 0 wh
 there are problems, 2 on bad usage. With --base REF, runs.csv and failures.csv must be
 append-only against REF. It also checks across the files: every failures row belongs to a run,
 and a run has exactly as many failures rows as its `failed` says. Every row is held to the row
-rules (RUN_RULES, FAILURE_RULES, WEEKLY_RULES, WATCHED_RULES): stamps and weeks in 2020 to 2099,
+rules (RUN_RULES, FAILURE_RULES, WEEKLY_RULES, WATCHED_RULES, KINDS_RULES): stamps and weeks in 2020 to 2099,
 `python` as 3.0 to 3.99 without leading zeros, cells of at most 1000 characters, and no cell that
 starts with = + - @ tab or CR (a spreadsheet would run it) or holds a control character other than
 newline and tab (a terminal would obey it).
@@ -115,7 +120,8 @@ printed has its non-printable characters escaped.
 
 `summary` prints the numbers of one ISO week from books that pass `check`: the one place a
 report takes its numbers from. With --json it is one object with sorted keys and integer
-numbers only. A median of an even count is the lower of the two middle values.
+numbers only. Per repo, `by_kind` holds all four kinds, each with `tests`, `total_ms`, `caught_on_pr`
+and `failed_on_main` (the last two count distinct tests). A median of an even count is the lower of the two middle values.
 
 Standard library only; needs Python 3.10 or later (run it through uv).
 
@@ -166,12 +172,18 @@ FAILURES = "books/failures.csv"
 WEEKLY = "books/tests-weekly.csv"
 WATCHED = "books/watched.csv"
 JOBS = "books/jobs.csv"  # not in SCHEMAS yet: while it exists, `fetch` stores jobs, and it reads only `evidence`
+KINDS = "books/kinds.csv"  # optional: a book without it is valid and every test is a unit test
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
 FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "evidence")
 WEEKLY_SCHEMA = ("week", "repo", "test_id", "runs", "failed", "total_ms", "max_ms")
 WATCHED_SCHEMA = ("repo", "github", "workflow")
-SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}
+KINDS_SCHEMA = ("repo", "prefix", "kind")
+SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}  # the files every book has
+OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA}  # the files a book may leave out; ingest never writes them
+TABLE_SCHEMAS = {**SCHEMAS, **OPTIONAL_SCHEMAS}
+KIND_NAMES = ("unit", "e2e", "property", "differential")
+DEFAULT_KIND = "unit"
 YEAR_MIN, YEAR_MAX = 2020, 2099  # the years a stamp or a week in the books may have
 MAX_CELL = 1000  # characters in one cell, a test id included; the csv module's own field limit (131072) is never reached
 FAILING = ("fail", "error")  # the outcomes failures.csv holds
@@ -662,8 +674,10 @@ def _git(books_dir: str, *args: str):
 
 def _parse_table(rel: str, data: bytes | OSError | None, problems: list[Problem]) -> Table:
     table = Table(rel)
-    schema = SCHEMAS[rel]
+    schema = TABLE_SCHEMAS[rel]
     if data is None:
+        if rel in OPTIONAL_SCHEMAS:
+            return table  # no header, no rows, no problem
         problems.append(Problem(rel, 1, "missing file"))
         return table
     if isinstance(data, OSError):
@@ -708,9 +722,10 @@ def _parse_table(rel: str, data: bytes | OSError | None, problems: list[Problem]
 
 
 def books_from_bytes(books_dir: str, files: dict[str, bytes | OSError | None], base: str | None = None) -> Books:
-    """Books from file contents (None: no such file; an OSError: it could not be read), off the disk."""
+    """Books from file contents (None: no such file; an OSError: it could not be read), off the disk.
+    An optional file may be left out of `files`."""
     problems: list[Problem] = []
-    return Books(books_dir, base, {rel: _parse_table(rel, files[rel], problems) for rel in SCHEMAS}, problems)
+    return Books(books_dir, base, {rel: _parse_table(rel, files.get(rel) if rel in OPTIONAL_SCHEMAS else files[rel], problems) for rel in TABLE_SCHEMAS}, problems)
 
 
 def _read(path: str) -> bytes | OSError | None:
@@ -724,7 +739,7 @@ def _read(path: str) -> bytes | OSError | None:
 
 
 def load(books_dir: str, base: str | None = None) -> Books:
-    return books_from_bytes(books_dir, {rel: _read(os.path.join(books_dir, rel)) for rel in SCHEMAS}, base)
+    return books_from_bytes(books_dir, {rel: _read(os.path.join(books_dir, rel)) for rel in TABLE_SCHEMAS}, base)
 
 
 Check = Callable[[Books], Iterable[Problem]]
@@ -897,6 +912,19 @@ def _github_rule(cells: dict) -> Iterator[str]:
         yield f"github must look like OWNER/NAME, got {_show(cells['github'])}"
 
 
+_PREFIX = re.compile(r"[^.\s]+(\.[^.\s]+)*")
+
+
+def _prefix_rule(cells: dict) -> Iterator[str]:
+    if not _PREFIX.fullmatch(cells["prefix"]):
+        yield f"prefix must be a dotted prefix of a test id (a module, module.Class or module.Class.test), got {_show(cells['prefix'])}"
+
+
+def _kind_rule(cells: dict) -> Iterator[str]:
+    if cells["kind"] not in KIND_NAMES:
+        yield f"kind must be one of {', '.join(KIND_NAMES)}, got {_show(cells['kind'])}"
+
+
 def _workflow_rule(cells: dict) -> Iterator[str]:
     if not cells["workflow"]:
         yield "workflow is empty"
@@ -919,6 +947,9 @@ WEEKLY_RULES: dict[str, Rule] = {
 WATCHED_RULES: dict[str, Rule] = {
     "repo": _repo_rule, "github": _github_rule, "workflow": _workflow_rule, "text": _text_rule("workflow"),
 }
+KINDS_RULES: dict[str, Rule] = {
+    "repo": _repo_rule, "prefix": _prefix_rule, "kind": _kind_rule, "text": _text_rule("prefix"),
+}
 
 
 def rule_messages(rules: dict[str, Rule], cells: dict) -> Iterator[str]:
@@ -931,7 +962,7 @@ def check_load(books: Books) -> Iterator[Problem]:
 
 
 def check_header(books: Books) -> Iterator[Problem]:
-    for rel, schema in SCHEMAS.items():
+    for rel, schema in TABLE_SCHEMAS.items():
         header = books.tables[rel].header
         if header is not None and tuple(header) != schema:
             yield Problem(rel, 1, "header does not match the schema: expected " + ",".join(schema))
@@ -1023,6 +1054,28 @@ def check_watched(books: Books) -> Iterator[Problem]:
             pairs[pair] = n
 
 
+def check_kinds(books: Books) -> Iterator[Problem]:
+    """The form of books/kinds.csv, nothing about which tests exist: a prefix that matches no booked test is fine
+    (a test may be renamed or not yet run)."""
+    yield from _check_rows(books, KINDS, KINDS_RULES)
+    watched = {r.cells["repo"] for r in books.tables[WATCHED].rows}
+    judge_repo = not any(p.path == WATCHED for p in books.load_problems)  # an unreadable watch list would flag every row
+    seen: dict[tuple[str, str], int] = {}
+    previous: tuple[str, str] | None = None
+    for row in books.tables[KINDS].rows:
+        c, n = row.cells, row.line
+        if judge_repo and c["repo"] not in watched:
+            yield Problem(KINDS, n, f"repo {_show(c['repo'])} is not in {WATCHED}")
+        key = (c["repo"], c["prefix"])
+        if key in seen:
+            yield Problem(KINDS, n, f"duplicate of line {seen[key]} (same repo and prefix)")
+        else:
+            seen[key] = n
+        if previous is not None and key < previous:
+            yield Problem(KINDS, n, "not sorted by repo, prefix")
+        previous = key
+
+
 def _base_problem(books: Books) -> Problem | None:
     ref = books.base
     try:
@@ -1094,6 +1147,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("failures-match-runs", check_failures_match_runs),
     ("weekly", check_weekly),
     ("watched", check_watched),
+    ("kinds", check_kinds),
     ("append-only", check_append_only),
 )
 
@@ -1147,6 +1201,12 @@ class FailureRow(NamedTuple):
     test_id: str
     outcome: str
     evidence: str
+
+
+class KindRow(NamedTuple):
+    repo: str
+    prefix: str
+    kind: str
 
 
 class WeeklyRow(NamedTuple):
@@ -1802,8 +1862,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     new = choose_new_runs(scans, booked)
     plan = plan_ingest(books, new)
     if new:
-        after = run_checks(books_from_bytes(args.books_dir, {rel: data if data is not None else books.tables[rel].data
-                                                             for rel, data in plan.files.items()}))
+        unchanged = {KINDS: books.tables[KINDS].data or None}
+        after = run_checks(books_from_bytes(args.books_dir, {**unchanged, **{rel: data if data is not None else books.tables[rel].data
+                                                                              for rel, data in plan.files.items()}}))
         if after:
             _print_problems(after)
             print(f"{len(after)} problems; nothing written")
@@ -1915,7 +1976,32 @@ def _flaky(repo_runs: list[RunRow], repo_failures: list[FailureRow], week: str) 
     return out
 
 
-def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow]) -> dict:
+def kind_of(rules: dict[str, str], test_id: str) -> str:
+    """The kind of a test: the row with the longest prefix that is the id or ends where a dotted segment of it ends.
+    `rules` maps a prefix to a kind (one repo's rows); a test with no such row is a unit test."""
+    parts = test_id.split(".")
+    for n in range(len(parts), 0, -1):
+        kind = rules.get(".".join(parts[:n]))
+        if kind is not None:
+            return kind
+    return DEFAULT_KIND
+
+
+def _by_kind(rules: dict[str, str], here: list[WeeklyRow], on_pr: Iterable[FailureRow], on_main: Iterable[FailureRow]) -> dict:
+    """Per kind, this week: tests, their total_ms, and the distinct tests that failed in a pull request run and on a push."""
+    out = {kind: {"caught_on_pr": set(), "failed_on_main": set(), "tests": set(), "total_ms": 0} for kind in KIND_NAMES}
+    for w in here:
+        entry = out[kind_of(rules, w.test_id)]
+        entry["tests"].add(w.test_id)
+        entry["total_ms"] += w.total_ms
+    for key, failed in (("caught_on_pr", on_pr), ("failed_on_main", on_main)):
+        for f in failed:
+            out[kind_of(rules, f.test_id)][key].add(f.test_id)
+    return {kind: {k: len(v) if isinstance(v, set) else v for k, v in entry.items()} for kind, entry in out.items()}
+
+
+def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow],
+                  kind_rules: dict[str, str]) -> dict:
     mine = [r for r in runs if r.repo == repo]
     this = [r for r in mine if week_of(r.started) == week]
     walls = [r.wall_ms for r in this]
@@ -1934,15 +2020,16 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
     ids = {w.test_id for w in here}
     on_pr = [f for f in sorted(fails, key=lambda f: (f.test_id, f.evidence, f.python))
              if event_of.get((f.evidence, f.python)) == "pull_request"]
+    on_main = [f for f in sorted(fails, key=lambda f: (f.test_id, f.evidence, f.python))
+               if event_of.get((f.evidence, f.python)) == "push"]
     return {
+        "by_kind": _by_kind(kind_rules, here, on_pr, on_main),
         "caught_on_pr": {"count": len({f.test_id for f in on_pr}),
                          "failures": [{"evidence": f.evidence, "outcome": f.outcome, "python": f.python, "sha": f.sha,
                                        "test_id": f.test_id} for f in on_pr]},
         "ci_wall_ms": sum(walls),
         "failed_on_main": [{"evidence": f.evidence, "outcome": f.outcome, "python": f.python, "sha": f.sha,
-                            "test_id": f.test_id}
-                           for f in sorted(fails, key=lambda f: (f.test_id, f.evidence, f.python))
-                           if event_of.get((f.evidence, f.python)) == "push"],
+                            "test_id": f.test_id} for f in on_main],
         "flaky": _flaky(mine, repo_failures, week),
         "over_threshold": this_median > SUITE_MEDIAN_THRESHOLD_MS,
         "red_runs": sum(r.exit_code != 0 for r in this),
@@ -1958,12 +2045,15 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
     }
 
 
-def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow], week: str) -> dict:
+def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow], week: str,
+              kinds: Iterable[KindRow] = ()) -> dict:
     """The week's numbers as plain data: integers, strings, lists and dicts, nothing else."""
     repos = sorted({r.repo for r in runs if week_of(r.started) == week})
+    kinds = list(kinds)
+    rules = {repo: {k.prefix: k.kind for k in kinds if k.repo == repo} for repo in repos}
     return {
         "generated_from": {"failures": len(failures), "runs": len(runs), "weekly_rows": len(weekly)},
-        "repos": {repo: _repo_summary(repo, week, runs, failures, weekly) for repo in repos},
+        "repos": {repo: _repo_summary(repo, week, runs, failures, weekly, rules[repo]) for repo in repos},
         "slowest_tests": _slowest([w for w in weekly if w.week == week and w.repo in repos]),
         "thresholds": {"suite_median_ms": SUITE_MEDIAN_THRESHOLD_MS},
         "week": week,
@@ -1982,6 +2072,8 @@ def render_summary(s: dict) -> str:
         lines.append(f"  failed on a push: {len(r['failed_on_main'])}; caught on a pull request: "
                      f"{r['caught_on_pr']['count']} tests; flaky: {len(r['flaky'])}; "
                      f"tests added {len(r['tests_added'])}, removed {len(r['tests_removed'])}; CI time {r['ci_wall_ms']} ms")
+        lines.append("  by kind: " + "; ".join(f"{kind} {k['tests']} tests {k['total_ms']} ms, caught {k['caught_on_pr']} on a pull request"
+                                                for kind, k in r["by_kind"].items()))
         for t in r["slowest_tests"][:3]:
             lines.append(f"  slow: {printable(t['test_id'])} mean {t['mean_ms']} ms over {t['runs']} runs")
     lines.append(f"threshold: suite median above {s['thresholds']['suite_median_ms']} ms")
@@ -2006,7 +2098,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
     if week is None:
         print("no runs in the books; pass --week to summarize an empty week", file=sys.stderr)
         return 1
-    result = summarize(runs, _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), week)
+    result = summarize(runs, _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), week,
+                       _typed_rows(books, KINDS, KindRow))
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_summary(result))
     return 0
 
