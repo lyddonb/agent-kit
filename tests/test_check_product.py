@@ -51,6 +51,12 @@ class CheckProductTest(unittest.TestCase):
         self.edit("docs/VISION.md", "## The problem\n\nfilled", "## The problem\n\n{{who has it}}")
         self.assertFlags("docs/VISION.md:5: unfilled template placeholder")
 
+    def test_review_guide_placeholder_is_flagged_and_the_file_is_optional(self):
+        self.edit("REVIEW.md", "- filled", "- {{where a bug costs the most}}")
+        self.assertFlags("REVIEW.md:7: unfilled template placeholder")
+        (self.repo / "REVIEW.md").unlink()
+        self.assertEqual(self.problems(), [])
+
     def test_missing_file_is_flagged(self):
         (self.repo / "IDEAS.md").unlink()
         self.assertFlags("IDEAS.md: missing")

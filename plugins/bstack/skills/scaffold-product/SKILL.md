@@ -29,6 +29,7 @@ The code and its history are the evidence. Draft from them; the human confirms i
 5. **Decisions.** If the repo has decision records in another format (for example `docs/decisions/NNN-*.md`), keep the files and give each one an entry in `docs/DECISIONS.md`: heading, status line, the decision in one sentence, and a link. Don't pad the other fields. Then back-fill decisions the code embodies but nobody recorded (language, storage, framework) as `Accepted` with the date of the commit that made them, citing it. Run the **why** skill if the reason isn't obvious.
 6. **Instruction files.** Fold the rules from the old AGENTS.md or CLAUDE.md into the new AGENTS.md. Move reference material (API tables, test patterns) to a doc in `docs/` and link it. `CLAUDE.md` becomes exactly `@AGENTS.md`.
 7. **README.** Keep it. Add a status line that matches `ROADMAP.md`, and replace any roadmap table it carries with a link. Fix stale facts you can confirm from the code, and list the rest in the PR body.
+8. **REVIEW.md.** Draft it from what reviews of this repo have caught: review comments on merged PRs, fix commits that follow a review, and reverts in `git log`. Mark each line `(draft, from <source>)`. Leave out what CI already enforces.
 
 ## Upgrade a repo on the older spec format
 

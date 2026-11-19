@@ -3,6 +3,13 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.18.0 (2026-11-19)
+
+- `interrogate` gives every adversary the repo's `REVIEW.md`, read from the default branch, so a change can't rewrite the guide it is reviewed by. Claude Code Review reads the same file.
+- A second `interrogate` round on the same scope starts from the first round's verified and dropped findings. Each finding now has a severity: Important, Nit or Pre-existing (it fails on the merge base too, and its fix gets its own PR).
+- `scaffold-product` adds a starter `REVIEW.md`, and adopt mode drafts one from past review fixes.
+- Try: `Interrogate this branch, then interrogate it again after I fix what you find.`
+
 ## bstack 0.17.0 (2026-11-19)
 
 - `quality.py summary --json` now groups each repo's tests, their cost and their catches by test kind (`unit`, `e2e`, `property`, `differential`) under `by_kind`. Kinds come from an optional hand-edited `books/kinds.csv` (`repo,prefix,kind`, longest dotted prefix wins); books without it are valid and every test is `unit`. `check` validates the file's form only.
