@@ -9,7 +9,7 @@ metadata:
 
 # Quality Director
 
-The Quality Director measures test economics across Beau's repos: how long each test takes, how often it fails, and what the suite costs per run. It writes numbers into the quality books (a private git repo with `books/runs.csv`, `books/failures.csv`, `books/tests-weekly.csv` the watch list `books/watched.csv` and the optional `books/kinds.csv`) and proposes changes. Phase 1 is measurement only.
+The Quality Director measures test economics across Beau's repos: how long each test takes, how often it fails, and what the suite costs per run. It writes numbers into the quality books (a private git repo with `books/runs.csv`, `books/failures.csv`, `books/tests-weekly.csv` the watch list `books/watched.csv`, and the optional `books/kinds.csv`) and proposes changes. Phase 1 is measurement only.
 
 ## The hard rule
 
@@ -50,11 +50,11 @@ A recorder started with SIGHUP or SIGINT ignored (under `nohup`, or `cmd &` in a
 
 ## The books
 
-Four CSV files in the books repo, all UTF-8 with LF line endings:
+Four CSV files in the books repo (and an optional fifth, `kinds.csv`), all UTF-8 with LF line endings:
 
 | File | One row per | Rule |
 |---|---|---|
-| `books/kinds.csv` | which tests are not unit tests | optional, edited by hand, sorted by `(repo, prefix)`. Columns `repo,prefix,kind`: `repo` is a watched repo, `prefix` is a dotted prefix of a test id (a module, `module.Class` or a whole `module.Class.test`), `kind` is `unit`, `e2e`, `property` or `differential`. A test takes the kind of the row with the longest prefix that matches it on whole dotted segments (`t.A` matches `t.A.test_x`, not `t.AB.test_x`); a test with no row is `unit`, so `unit` is only needed to set a class back inside a prefixed module. A book without the file is valid and every test is `unit`. `(repo, prefix)` is unique. A prefix that matches no booked test is not an error. Example: `agent-ledger,test_verify_properties,property` |
+| `books/kinds.csv` | which tests are not unit tests | optional, edited by hand, sorted by `(repo, prefix)`. Columns `repo,prefix,kind`: `repo` is a watched repo, `prefix` is a dotted prefix of a test id (a module, `module.Class` or a whole `module.Class.test`), `kind` is `unit`, `e2e`, `property` or `differential`. A test takes the kind of the row with the longest prefix that matches it on whole dotted segments (a `setUpClass (mod.Class)` or `setUpModule (mod)` error and an import failure `unittest.loader._FailedTest.mod` are matched as the class or module they name, so a broken e2e module counts as e2e) (`t.A` matches `t.A.test_x`, not `t.AB.test_x`); a test with no row is `unit`, so `unit` is only needed to set a class back inside a prefixed module. A book without the file is valid and every test is `unit`. `(repo, prefix)` is unique. A prefix that matches no booked test is not an error. Example: `agent-ledger,test_verify_properties,property` |
 | `books/watched.csv` | repo to book | edited by hand. Columns `repo,github,workflow`: `repo` is the short slug used in the books, `github` is `OWNER/NAME`, `workflow` is the workflow file's `name:`. `repo` is unique, and so is `(github, workflow)`. Example: `agentfiles,lyddonb/agentfiles,ci` |
 | `books/runs.csv` | recorded CI run | append-only. Columns `started,repo,sha,event,workflow,python,tests,failed,skipped,wall_ms,exit_code,evidence`. `exit_code` is the recorder's verdict for the run (a run cut short at child exit 0 is booked as 1); `failed` is the number of distinct failing tests |
 | `books/failures.csv` | failing test in a run | append-only. Columns `started,repo,sha,python,test_id,outcome,evidence`; `outcome` is `fail` or `error`; unique on `(evidence, python, test_id)` |
