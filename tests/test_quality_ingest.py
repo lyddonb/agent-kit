@@ -1823,6 +1823,11 @@ class CaughtOnPrTest(SummaryCase):
         got = self.caught(runs, failures)
         self.assertEqual((got["count"], len(got["failures"])), (2, 4))
 
+    def test_rows_of_one_test_in_one_run_are_ordered_by_python(self):
+        a, b = run_row(1, event="pull_request", python="3.12"), run_row(1, event="pull_request", python="3.10")
+        got = self.caught([a, b], [failure_row(a), failure_row(b)])["failures"]
+        self.assertEqual([g["python"] for g in got], ["3.10", "3.12"])
+
     def test_another_repos_pull_request_failures_are_not_counted(self):
         mine, theirs = run_row(1, event="pull_request"), run_row(2, repo="other", event="pull_request")
         s = self.summary([mine, theirs], [failure_row(theirs, "t.x")])["repos"]
