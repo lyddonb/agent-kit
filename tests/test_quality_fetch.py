@@ -669,8 +669,12 @@ def job_obj(job_id: int, name: str = "validate", **over) -> dict:
 class JobsTest(FetchCase):
     JOBS_ENDPOINT = "repos/lyddonb/agentfiles/actions/runs/{run}/attempts/1/jobs?per_page=100"
 
-    def adopt(self, header: str = "started,repo,evidence\n", rows: str = "") -> None:
-        (self.books / "books/jobs.csv").write_text(header + rows)
+    def adopt(self, booked_evidence: tuple[str, ...] = ()) -> None:
+        """The job books exist (both files, as `check` wants them), with one booked job for each link given."""
+        rows = "".join(f"2026-11-14T10:00:01Z,agentfiles,{'f' * 40},push,ci,validate,{n},success,3000,66000,,{link}\n"
+                       for n, link in enumerate(booked_evidence, start=1))
+        (self.books / quality.JOBS).write_text(",".join(quality.JOBS_SCHEMA) + "\n" + rows)
+        (self.books / quality.STEPS).write_text(",".join(quality.STEPS_SCHEMA) + "\n")
 
     def serve_jobs(self, run_id: int, *jobs: dict, pages: int = 1) -> None:
         per = max(1, -(-len(jobs) // pages))
@@ -698,12 +702,12 @@ class JobsTest(FetchCase):
                               "fetched 1 runs (1 artifacts); listed 2; skipped 0 forks, 0 pushes to a non-default branch, "
                               "0 already booked, 1 without test-results artifacts; 0 failed\n")
 
-    def test_a_jobs_csv_without_an_evidence_column_is_a_usage_error_and_nothing_is_called(self):
-        self.adopt(header="started,repo\n")
+    def test_a_jobs_csv_that_fails_check_refuses_the_fetch_and_nothing_is_called(self):
+        (self.books / quality.JOBS).write_text("started,repo\n")
         self.runs([self.run_with_artifact(601)])
         code, out = self.fetch()
-        self.assertEqual(code, 2, out)
-        self.assertIn("evidence", out)
+        self.assertEqual(code, 1, out)
+        self.assertIn("books/jobs.csv:1: header does not match the schema", out)
         self.assertEqual(self.calls(), [])
 
     def test_a_run_with_an_artifact_gets_the_artifact_the_manifest_and_jobs_json(self):
@@ -750,7 +754,7 @@ class JobsTest(FetchCase):
 
     def test_a_run_whose_evidence_is_in_jobs_csv_is_not_asked_about_its_jobs(self):
         link = "https://github.com/lyddonb/agentfiles/actions/runs/601/attempts/1"
-        self.adopt(header="evidence,started\n", rows=f"{link},2026-11-14T10:00:00Z\nshort\n")
+        self.adopt((link,))
         self.serve_jobs(601, job_obj(6011))
         self.serve_jobs(602, job_obj(6021))
         self.runs([self.run_with_artifact(601), self.run_with_artifact(602)])

@@ -2379,5 +2379,381 @@ def weeks_with_runs(artifacts) -> set[str]:
     return weeks
 
 
+# ---------------------------------------------------------------------------
+# jobs: jobs.json into books/jobs.csv and books/steps.csv (optional until adopted)
+# ---------------------------------------------------------------------------
+
+JOB_BOOKS = (quality.JOBS, quality.STEPS)
+
+
+def sec(n: int) -> str:
+    """A stamp n seconds into the minute the demo runs start in."""
+    return f"2026-11-12T10:00:{n:02d}Z"
+
+
+def adopt(books: Path) -> None:
+    for rel, schema in ((quality.JOBS, quality.JOBS_SCHEMA), (quality.STEPS, quality.STEPS_SCHEMA)):
+        (books / rel).write_text(",".join(schema) + "\n")
+
+
+def jstep(number: int, name: str = "step", conclusion: str = "success", started: str = sec(10), completed: str = sec(15)) -> dict:
+    return {"number": number, "name": name, "conclusion": conclusion, "started": started, "completed": completed}
+
+
+def jjob(job_id: int, name: str = "validate", conclusion: str = "success", created: str = sec(1), started: str = sec(4),
+         completed: str = sec(10), steps: tuple = ()) -> dict:
+    return {"id": job_id, "name": name, "conclusion": conclusion, "created": created, "started": started,
+            "completed": completed, "steps": list(steps)}
+
+
+def jobs_body(m: dict, *jobs: dict, **over) -> dict:
+    return {"v": 1, "run_id": m["run_id"], "run_attempt": m["run_attempt"], "jobs": list(jobs), **over}
+
+
+def put_jobs(folder: Path, m: dict, *jobs: dict, **over) -> None:
+    put(folder, f"{m['repo']}/{m['run_id']}/jobs.json", json.dumps(jobs_body(m, *jobs, **over)))
+
+
+def rows_of(books: Path, rel: str) -> list[list[str]]:
+    return csv_rows(books / rel)[1:]
+
+
+def all_bytes(books: Path) -> dict[str, bytes]:
+    return {rel: (books / rel).read_bytes() for rel in BOOK_FILES + JOB_BOOKS if (books / rel).exists()}
+
+
+class JobsIngestTest(TempCase):
+    def setUp(self):
+        super().setUp()
+        adopt(self.books)
+
+    def good_run(self, n: int = 1, *jobs: dict) -> dict:
+        m = manifest(n)
+        put_good_run(self.art, n)
+        put_jobs(self.art, m, *(jobs or (jjob(n * 10, steps=(jstep(1),)),)))
+        return m
+
+    def test_every_job_and_step_is_booked_in_order_with_the_numbers_worked_out(self):
+        self.good_run(1,
+                      jjob(20, "test", "failure", sec(1), sec(4), sec(40),
+                           steps=(jstep(3, "later", "failure", sec(30), sec(35)), jstep(1, "setup", "success", sec(4), sec(9)),
+                                  jstep(2, "unit", "failure", sec(9), sec(30)))),
+                      jjob(10, "lint", "success", sec(2), sec(3), sec(13), steps=(jstep(1, "ruff", "success", sec(3), sec(13)),)),
+                      jjob(30, "deploy", "skipped", sec(3), "", "", steps=()),
+                      jjob(40, "slow", "cancelled", sec(1), sec(5), "",
+                           steps=(jstep(1, "wait", "success", sec(5), sec(8)), jstep(2, "hang", "cancelled", sec(8), ""),
+                                  jstep(3, "never", "", "", ""))))
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        link, who = ev(1), ["demo", SHA_A, "push", "ci"]
+        self.assertEqual(rows_of(self.books, quality.JOBS), [
+            [sec(1), *who, "test", "20", "failure", "3000", "36000", "2", link],
+            [sec(1), *who, "slow", "40", "cancelled", "4000", "", "", link],
+            [sec(2), *who, "lint", "10", "success", "1000", "10000", "", link],
+            [sec(3), *who, "deploy", "30", "skipped", "", "", "", link],
+        ])
+        self.assertEqual(rows_of(self.books, quality.STEPS), [
+            [sec(4), "demo", "20", "1", "setup", "success", "5000", link],
+            [sec(9), "demo", "20", "2", "unit", "failure", "21000", link],
+            [sec(30), "demo", "20", "3", "later", "failure", "5000", link],
+            [sec(5), "demo", "40", "1", "wait", "success", "3000", link],
+            [sec(8), "demo", "40", "2", "hang", "cancelled", "", link],
+            ["", "demo", "40", "3", "never", "", "", link],
+            [sec(3), "demo", "10", "1", "ruff", "success", "10000", link],
+        ])
+        self.assertIn("booked jobs demo/1: 4 jobs, 7 steps\n", out)
+        self.assertCheckOk()
+
+    def test_jobs_of_several_runs_are_ordered_across_runs(self):
+        self.good_run(2, jjob(21, created=sec(5), steps=(jstep(1),)))
+        self.good_run(1, jjob(11, created=sec(30), steps=(jstep(1),)), jjob(12, created=sec(5), steps=(jstep(1),)))
+        self.assertEqual(self.ingest()[0], 0)
+        self.assertEqual([(r[0], r[6]) for r in rows_of(self.books, quality.JOBS)], [(sec(5), "12"), (sec(5), "21"), (sec(30), "11")])
+        self.assertEqual([(r[2], r[7].split("/")[-3]) for r in rows_of(self.books, quality.STEPS)],
+                         [("12", "1"), ("21", "2"), ("11", "1")])
+
+    def test_a_folder_with_jobs_and_no_artifacts_is_booked_and_prints_no_no_artifacts_line(self):
+        put_run(self.art, manifest(1))
+        put_jobs(self.art, manifest(1), jjob(10, steps=(jstep(1),)))
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("no artifacts", out)
+        self.assertIn("booked jobs demo/1: 1 jobs, 1 steps\n", out)
+        self.assertEqual(len(rows_of(self.books, quality.JOBS)), 1)
+        self.assertEqual(rows_of(self.books, quality.RUNS), [])
+
+    def test_a_folder_with_a_manifest_and_neither_jobs_nor_artifacts_still_says_so(self):
+        put_run(self.art, manifest(1))
+        self.assertIn("no artifacts: demo/1/manifest.json\n", self.ingest()[1])
+
+    def test_a_run_already_in_runs_csv_gets_its_jobs_and_its_test_record_is_skipped(self):
+        put_good_run(self.art, 1)
+        for rel in JOB_BOOKS:  # the run's test record is booked before the job books exist
+            (self.books / rel).unlink()
+        self.assertEqual(self.ingest()[0], 0)
+        runs = (self.books / quality.RUNS).read_bytes()
+        adopt(self.books)
+        put_jobs(self.art, manifest(1), jjob(10, steps=(jstep(1),)))
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertIn("skipped, already booked: demo/1/artifacts/test-results-py3.12/test-results.jsonl\n", out)
+        self.assertIn("booked jobs demo/1: 1 jobs, 1 steps\n", out)
+        self.assertEqual((self.books / quality.RUNS).read_bytes(), runs)
+        self.assertEqual(len(rows_of(self.books, quality.JOBS)), 1)
+
+    def test_ingesting_the_same_folder_twice_changes_nothing(self):
+        self.good_run(1, jjob(10, steps=(jstep(1),)))
+        self.ingest()
+        before = all_bytes(self.books)
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(all_bytes(self.books), before)
+        self.assertIn("skipped jobs demo/1: already booked\n", out)
+        self.assertNotIn("booked jobs demo", out)
+
+    def test_names_a_pull_request_chose_are_booked_as_unprintable_and_never_block_the_run(self):
+        names = ["=cmd()", "a\x1b[31mb", "", "x" * 1001, "nul\x00byte", "lone\ud800surrogate"]
+        jobs = [jjob(100 + i, name, "failure", steps=(jstep(1, name, "failure"),)) for i, name in enumerate(names)]
+        jobs.append(jjob(200, "fine name", "failure", steps=(jstep(1, "also fine", "failure"),)))
+        self.good_run(1, *jobs)
+        code, out = self.ingest()
+        self.assertEqual(code, 0, out)
+        by_id = {r[6]: r for r in rows_of(self.books, quality.JOBS)}
+        for i, name in enumerate(names):
+            with self.subTest(name=ascii(name)[:30]):
+                row = by_id[str(100 + i)]
+                self.assertEqual((row[5], row[10], row[8], row[9]), ("(unprintable name)", "1", "3000", "6000"))
+        self.assertEqual((by_id["200"][5], by_id["200"][10]), ("fine name", "1"))
+        steps = {r[2]: r[4] for r in rows_of(self.books, quality.STEPS)}
+        self.assertEqual([steps[str(100 + i)] for i in range(len(names))], ["(unprintable name)"] * len(names))
+        self.assertEqual(steps["200"], "also fine")
+        self.assertEqual(len(rows_of(self.books, quality.RUNS)), 1)
+        self.assertCheckOk()
+
+    def test_a_malformed_stamp_rejects_that_jobs_file_by_name_and_not_the_runs_test_record(self):
+        self.good_run(1, jjob(10, created="2026-13-45T00:00:00Z", steps=(jstep(1),)))
+        self.good_run(2)
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"rejected: demo/1/jobs\.json: job 10 created must look like 2026-11-15T09:30:00Z .*2026-13-45")
+        self.assertIn("booked jobs demo/2: 1 jobs, 1 steps\n", out)
+        self.assertEqual(len(rows_of(self.books, quality.RUNS)), 2)
+        self.assertEqual({r[6] for r in rows_of(self.books, quality.JOBS)}, {"20"})
+        self.assertCheckOk()
+
+    def test_what_a_jobs_file_may_not_hold(self):
+        m = manifest(1)
+        steps = tuple(jstep(n) for n in range(1, 4))
+        bad = {
+            "a job with no created stamp": (jobs_body(m, jjob(1, created="")), "job 1 created"),
+            "a job started stamp that is not a stamp": (jobs_body(m, jjob(1, started="yesterday")), "job 1 started"),
+            "a completed stamp before 2020": (jobs_body(m, jjob(1, completed="2019-01-01T00:00:00Z")), "job 1 completed"),
+            "a step stamp that is not a stamp": (jobs_body(m, jjob(1, steps=(jstep(7, started="soon"),))), "job 1 step 7 started"),
+            "a conclusion that breaks its rule": (jobs_body(m, jjob(1, conclusion="Failure!")), "conclusion must match"),
+            "a step conclusion that breaks its rule": (jobs_body(m, jjob(1, steps=(jstep(1, conclusion="a b"),))), "conclusion must match"),
+            "a job id of 0": (jobs_body(m, jjob(0)), "job 1 id must be at least 1"),
+            "a job id twice": (jobs_body(m, jjob(5), jjob(5)), "a job id appears twice"),
+            "a step number twice": (jobs_body(m, jjob(5, steps=(jstep(1), jstep(1)))), "job 5 has a step number twice"),
+            "a step number of 0": (jobs_body(m, jjob(5, steps=(jstep(0),))), "number must be a positive integer"),
+            "65 jobs": (jobs_body(m, *(jjob(n) for n in range(1, 66))), "more than 64 jobs"),
+            "101 steps": (jobs_body(m, jjob(5, steps=tuple(jstep(n) for n in range(1, 102)))), "more than 100 steps"),
+            "another run's id": (jobs_body(m, jjob(5), run_id=2), "run_id 2 and run_attempt 1 are not the manifest's 1 and 1"),
+            "another attempt": (jobs_body(m, jjob(5), run_attempt=2), "are not the manifest's 1 and 1"),
+            "v 2": (jobs_body(m, jjob(5), v=2), "jobs.json v must be 1"),
+            "an unknown key": (jobs_body(m, jjob(5), extra=1), "jobs.json has an unknown key 'extra'"),
+            "a missing key": ({k: v for k, v in jobs_body(m, jjob(5)).items() if k != "jobs"}, "jobs.json is missing jobs"),
+            "a job with an unknown key": (jobs_body(m, dict(jjob(5), extra=1)), "job 1 has an unknown key"),
+            "a name that is not text": (jobs_body(m, dict(jjob(5), name=7)), "job 1 name must be str"),
+            "a step without a number": (jobs_body(m, dict(jjob(5, steps=(jstep(1),)), steps=[{"name": "x"}])), "step 1 is missing"),
+            "a bool where a count goes": (jobs_body(m, dict(jjob(5), id=True)), "job 1 id must be int"),
+        }
+        path = self.art / "jobs.json"
+        for name, (body, why) in bad.items():
+            with self.subTest(name):
+                path.write_text(json.dumps(body))
+                with self.assertRaises(quality.Rejected) as caught:
+                    quality.read_jobs_file(str(path), quality.Manifest(**m))
+                self.assertIn(why, str(caught.exception))
+        path.write_text(json.dumps(jobs_body(m, jjob(5, steps=steps))))
+        self.assertEqual(quality.read_jobs_file(str(path), quality.Manifest(**m)).step_count, 3)
+
+    def test_a_jobs_file_for_another_run_than_its_manifest_is_rejected(self):
+        put_good_run(self.art, 1)
+        put_jobs(self.art, manifest(1), jjob(10), run_id=2)
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertIn("rejected: demo/1/jobs.json: run_id 2 and run_attempt 1 are not the manifest's 1 and 1\n", out)
+        self.assertEqual(len(rows_of(self.books, quality.RUNS)), 1)
+        self.assertEqual(rows_of(self.books, quality.JOBS), [])
+
+    def test_a_jobs_file_needs_a_valid_manifest(self):
+        put(self.art, "demo/1/jobs.json", json.dumps(jobs_body(manifest(1), jjob(10))))
+        put_run(self.art, manifest(2, fork=True))
+        put_jobs(self.art, manifest(2), jjob(20))
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertIn("rejected: demo/1/jobs.json: no manifest.json in its run folder\n", out)
+        self.assertIn("rejected: demo/2/jobs.json: its manifest.json is rejected, so its jobs are not read\n", out)
+        self.assertEqual(rows_of(self.books, quality.JOBS), [])
+
+    def test_a_jobs_file_over_4_mb_is_rejected_unread(self):
+        put_good_run(self.art, 1)
+        put(self.art, "demo/1/jobs.json", b" " * ((4 << 20) + 1))
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertIn("rejected: demo/1/jobs.json: file is larger than 4 MB\n", out)
+
+    def test_negative_durations_are_booked_as_not_measured_and_a_real_zero_as_zero(self):
+        self.good_run(1, jjob(10, created=sec(20), started=sec(10), completed=sec(5),
+                              steps=(jstep(1, started=sec(30), completed=sec(2)),)))
+        self.assertEqual(self.ingest()[0], 0)
+        job, step = rows_of(self.books, quality.JOBS)[0], rows_of(self.books, quality.STEPS)[0]
+        self.assertEqual((job[8], job[9], step[6]), ("", "", ""))
+        self.assertCheckOk()
+
+    def test_a_span_of_zero_seconds_is_a_real_zero(self):
+        self.good_run(1, jjob(10, created=sec(4), started=sec(4), completed=sec(4), steps=(jstep(1, started=sec(4), completed=sec(4)),)))
+        self.assertEqual(self.ingest()[0], 0)
+        job, step = rows_of(self.books, quality.JOBS)[0], rows_of(self.books, quality.STEPS)[0]
+        self.assertEqual((job[8], job[9], step[6]), ("0", "0", "0"))
+
+    def test_the_failed_step_is_booked_by_number_so_two_steps_of_one_name_stay_apart(self):
+        self.good_run(1, jjob(10, "test", "failure", steps=(jstep(1, "Run make"), jstep(2, "Run make", "failure"), jstep(3, "Run make", "failure")),),
+                      jjob(11, "lint", "success", steps=(jstep(1, "Run make"),)))
+        self.assertEqual(self.ingest()[0], 0)
+        self.assertEqual({r[6]: r[10] for r in rows_of(self.books, quality.JOBS)}, {"10": "2", "11": ""})
+        self.assertCheckOk()
+
+    def test_a_run_with_no_jobs_is_reported_as_such_every_time_and_books_nothing(self):
+        put_run(self.art, manifest(1))
+        put_jobs(self.art, manifest(1))
+        before = all_bytes(self.books)
+        for _ in range(2):
+            code, out = self.ingest("--json")
+            self.assertEqual(code, 0, out)
+            data = json.loads(out)
+            self.assertEqual({k: data["totals"][k] for k in ("jobs_booked", "jobs_empty", "jobs_already_booked", "jobs_rejected", "job_rows")},
+                             {"jobs_booked": 0, "jobs_empty": 1, "jobs_already_booked": 0, "jobs_rejected": 0, "job_rows": 0})
+            self.assertEqual(data["jobs"], [{"path": "demo/1/jobs.json", "reason": "no jobs", "status": "empty"}])
+            self.assertEqual(all_bytes(self.books), before)
+        text = self.ingest()[1]
+        self.assertIn("skipped jobs demo/1: no jobs\n", text)
+        self.assertNotIn("booked jobs demo", text)
+        self.assertNotIn("no artifacts", text)
+
+    def test_dry_run_says_what_it_would_book_and_writes_nothing(self):
+        self.good_run(1)
+        before = all_bytes(self.books)
+        code, out = self.ingest("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertIn("would book jobs demo/1: 1 jobs, 1 steps\n", out)
+        self.assertEqual(all_bytes(self.books), before)
+        self.assertEqual(sorted(p.name for p in (self.books / "books").iterdir()),
+                         ["failures.csv", "jobs.csv", "runs.csv", "steps.csv", "tests-weekly.csv", "watched.csv"])
+
+    def test_the_totals_count_runs_and_rows_booked_skipped_and_rejected(self):
+        self.good_run(3, jjob(30, steps=(jstep(1), jstep(2))))
+        self.ingest()
+        self.good_run(1, jjob(10, steps=(jstep(1), jstep(2), jstep(3))), jjob(11))
+        self.good_run(2, jjob(20, created="never"))
+        code, out = self.ingest("--json")
+        data = json.loads(out)
+        self.assertEqual(code, 1)
+        totals = data["totals"]
+        self.assertEqual({k: totals[k] for k in ("jobs_booked", "jobs_already_booked", "jobs_rejected", "job_rows", "step_rows")},
+                         {"jobs_booked": 1, "jobs_already_booked": 1, "jobs_rejected": 1, "job_rows": 2, "step_rows": 3})
+        self.assertEqual({j["path"]: j["status"] for j in data["jobs"]},
+                         {"demo/1/jobs.json": "booked", "demo/2/jobs.json": "rejected", "demo/3/jobs.json": "already"})
+        self.assertEqual(out, json.dumps(data, sort_keys=True, indent=2) + "\n")
+
+    def test_the_totals_line_gains_the_jobs_counts_when_adopted(self):
+        self.good_run(1)
+        out = self.ingest()[1]
+        self.assertTrue(out.endswith("; booked jobs of 1 runs (1 job rows, 1 step rows), skipped 0 already booked and 0 with no jobs, rejected 0\n"), out)
+
+    # --only jobs
+
+    def test_only_jobs_books_jobs_and_leaves_the_three_test_books_byte_identical_and_unread(self):
+        self.good_run(1)
+        put(self.art, "demo/1/artifacts/test-results-py3.12/test-results.jsonl", "not json at all\n")
+        put(self.art, "stray.jsonl", "x\n")
+        before = all_bytes(self.books)
+        code, out = self.ingest("--only", "jobs")
+        self.assertEqual(code, 0, out)
+        after = all_bytes(self.books)
+        for rel in BOOK_FILES:
+            self.assertEqual(after[rel], before[rel], rel)
+        self.assertEqual(len(rows_of(self.books, quality.JOBS)), 1)
+        self.assertNotIn("rejected:", out)
+        self.assertIn("booked jobs demo/1: 1 jobs, 1 steps\n", out)
+        self.assertEqual(sorted(p.name for p in (self.books / "books").iterdir()),
+                         ["failures.csv", "jobs.csv", "runs.csv", "steps.csv", "tests-weekly.csv", "watched.csv"])
+
+    def test_only_jobs_without_adopted_books_is_a_usage_error(self):
+        for rel in JOB_BOOKS:
+            (self.books / rel).unlink()
+        self.good_run(1)
+        before = all_bytes(self.books)
+        code, out = self.ingest("--only", "jobs")
+        self.assertEqual(code, 2, out)
+        self.assertIn("--only jobs needs the job books", out)
+        self.assertEqual(all_bytes(self.books), before)
+
+    def test_only_accepts_only_jobs(self):
+        self.assertEqual(self.ingest("--only", "runs")[0], 2)
+
+    # check refuses what ingest would write
+
+    def test_a_result_that_would_fail_check_is_not_written_for_the_job_books_either(self):
+        self.good_run(1)
+        real = quality.plan_jobs
+
+        def broken(books, scans):
+            made = real(books, scans)
+            made[quality.STEPS] += b"x,x,x,x,x,x,x,x\n"
+            return made
+
+        before = all_bytes(self.books)
+        with unittest.mock.patch.object(quality, "plan_jobs", broken):
+            code, out = self.ingest()
+        self.assertEqual(code, 1)
+        self.assertIn("nothing written", out)
+        self.assertEqual(all_bytes(self.books), before)
+
+
+class JobsNotAdoptedTest(TempCase):
+    """Without books/jobs.csv and books/steps.csv nothing about jobs exists: output, exit codes and files are as before."""
+
+    def test_a_jobs_json_beside_a_run_is_ignored_and_the_output_is_what_it_always_was(self):
+        put_good_run(self.art, 1)
+        put_jobs(self.art, manifest(1), jjob(10, created="garbage"))
+        put_run(self.art, manifest(2))
+        put_jobs(self.art, manifest(2), jjob(20))
+        code, out = self.ingest()
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "booked: demo/1/artifacts/test-results-py3.12/test-results.jsonl: demo 3.12 2 tests, exit_code 0, "
+                              "https://github.com/example/demo/actions/runs/1/attempts/1\n"
+                              "no artifacts: demo/2/manifest.json\n"
+                              "booked 1 runs, 0 failures, 2 weekly rows touched; skipped 0 already booked, 0 duplicates; rejected 0 of 2 files\n")
+        self.assertEqual(sorted(p.name for p in (self.books / "books").iterdir()),
+                         ["failures.csv", "runs.csv", "tests-weekly.csv", "watched.csv"])
+
+    def test_the_json_report_has_none_of_the_job_keys(self):
+        put_good_run(self.art, 1)
+        put_jobs(self.art, manifest(1), jjob(10))
+        data = json.loads(self.ingest("--json")[1])
+        self.assertEqual(sorted(data), ["dry_run", "files", "totals", "wrote"])
+        self.assertEqual(sorted(data["totals"]), ["already_booked", "booked", "duplicates", "failures", "files", "no_artifacts",
+                                                  "rejected", "unread", "weekly_rows"])
+
+    def test_the_same_folder_with_and_without_jobs_files_gives_the_same_report_and_books(self):
+        put_good_run(self.art, 1)
+        other, art = header_only_books(self.tmp / "other-books"), self.tmp / "art-without"
+        put_good_run(art, 1)
+        put_jobs(self.art, manifest(1), jjob(10, created=""))
+        self.assertEqual(self.ingest(), cli("ingest", other, art))
+        self.assertEqual(books_bytes(self.books), books_bytes(other))
+
+
 if __name__ == "__main__":
     unittest.main()
