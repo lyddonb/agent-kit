@@ -2,7 +2,7 @@
 
 **Outcome.** {{What a user will notice when this ships, in one or two sentences.}}
 
-**Serves.** {{G1}}. **Depends on.** {{Nothing, or a phase or human task.}}
+**Serves.** {{G1}}. **Lever.** {{Which of that goal's levers this phase pulls, in the goal's own words.}} **Depends on.** {{Nothing, or a phase or human task.}}
 
 ## Ideal state
 

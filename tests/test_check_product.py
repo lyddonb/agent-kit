@@ -192,6 +192,77 @@ class CheckProductTest(unittest.TestCase):
         self.assertEqual(self.problems(), [])
         self.assertEqual(check_product.drafts(self.repo), 1)
 
+    GOALS_OLD = "| # | Goal | Good looks like |\n|---|---|---|\n| G1 | filled | filled |\n"
+
+    def goals_table(self, table):
+        path = self.repo / "docs/VISION.md"
+        text = path.read_text()
+        start, end = text.index("| # | Goal"), text.index("## Non-goals")
+        path.write_text(text[:start] + table + "\n" + text[end:])
+
+    def test_goal_row_needs_a_measure_a_lever_and_a_first_move(self):
+        for column, row in (("Measure", "| G1 | g | good |  | lever | move |"),
+                            ("Lever", "| G1 | g | good | measure | | move |"),
+                            ("First move", "| G1 | g | good | measure | lever | \t |")):
+            self.goals_table("| # | Goal | Good looks like | Measure | Lever | First move |\n|---|---|---|---|---|---|\n" + row + "\n")
+            found = self.problems()
+            self.assertEqual(len(found), 1, found)
+            self.assertIn(f"docs/VISION.md:11: G1 has no {column}", found[0])
+
+    def test_goal_columns_are_found_by_name_whatever_the_case_or_order(self):
+        self.goals_table("| # | Goal | FIRST MOVE | **lever** | Owner | measure | Good looks like |\n|---|---|---|---|---|---|---|\n"
+                         "| G1 | g | move | lever | me | measure | good |\n| G2 | g | move |  | me | measure | good |\n")
+        found = self.problems()
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("docs/VISION.md:12: G2 has no Lever", found[0])
+
+    def test_goal_row_shorter_than_its_header_is_flagged_not_crashed(self):
+        self.goals_table("| # | Goal | Good looks like | Measure | Lever | First move |\n|---|---|---|---|---|---|\n| G1 | g | good | measure |\n")
+        found = self.problems()
+        self.assertEqual(len(found), 2, found)
+        self.assertIn("G1 has no Lever", found[0])
+        self.assertIn("G1 has no First move", found[1])
+
+    def test_goal_cell_that_is_only_a_dash_or_tbd_is_empty(self):
+        self.goals_table("| # | Goal | Good looks like | Measure | Lever | First move |\n|---|---|---|---|---|---|\n| G1 | g | good | - | TBD | ? |\n")
+        self.assertEqual(len(self.problems()), 3)
+
+    def test_pipes_inside_a_goal_cell_do_not_shift_the_columns(self):
+        self.goals_table("| # | Goal | Good looks like | Measure | Lever | First move |\n|---|---|---|---|---|---|\n"
+                         "| G1 | a \\| b | good | `wc -l log | sort` | lever | move |\n")
+        self.assertEqual(self.problems(), [])
+
+    def test_goals_table_with_only_some_of_the_columns_names_the_missing_ones(self):
+        self.goals_table("| # | Goal | Good looks like | Measure |\n|---|---|---|---|\n| G1 | g | good | measure |\n")
+        found = self.problems()
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("docs/VISION.md:9: goals table has a Measure column but no Lever or First move column", found[0])
+
+    def test_older_goals_table_is_a_note_not_a_problem(self):
+        self.goals_table(self.GOALS_OLD)
+        self.assertEqual(self.problems(), [])
+        notes = check_product.notes(self.repo)
+        self.assertEqual(len(notes), 1, notes)
+        self.assertIn("docs/VISION.md:9: goals table has no Measure, Lever and First move columns", notes[0])
+
+    def test_filled_templates_have_no_notes(self):
+        self.assertEqual(check_product.notes(self.repo), [])
+
+    def test_a_later_table_that_cites_goal_ids_is_not_the_goals_table(self):
+        self.edit("docs/VISION.md", "## Principles", "## Who owns what\n\n| Goal | Owner |\n|---|---|\n| G1 | Sam |\n\n## Principles")
+        self.assertEqual(self.problems(), [])
+        self.assertEqual(check_product.notes(self.repo), [])
+
+    def test_a_note_does_not_change_the_exit_code_and_is_printed_apart(self):
+        import contextlib, io
+        self.goals_table(self.GOALS_OLD)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = check_product.main(["check-product.py", str(self.repo)])
+        self.assertEqual(code, 0)
+        self.assertIn("note: docs/VISION.md:9: goals table has no Measure", err.getvalue())
+        self.assertIn("0 problem(s), 0 draft marker(s) awaiting confirmation, 1 note(s)", out.getvalue())
+
     def test_agents_must_name_an_existing_verify_skill(self):
         shutil.rmtree(self.repo / ".agents")
         self.assertFlags("names verify-demo, but no verify-demo/SKILL.md")

@@ -6,9 +6,9 @@
 
 ## Goals
 
-| # | Goal | Good looks like |
-|---|---|---|
-| G1 | {{Goal}} | {{A measurable result someone could check}} |
+| # | Goal | Good looks like | Measure | Lever | First move |
+|---|---|---|---|---|---|
+| G1 | {{Goal}} | {{A measurable result someone could check}} | {{How you read where it stands today, and the reading}} | {{What you can change that moves the measure}} | {{The first thing to do with that lever}} |
 
 ## Non-goals (for now)
 
