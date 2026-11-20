@@ -1,0 +1,883 @@
+#!/usr/bin/env python3
+"""control-kit: drive the real `claude` CLI against an agent-kit checkout and keep the evidence.
+
+It proves a plugin still installs into Claude Code and that a skill still loads and triggers. Every
+`claude` call runs under a scrubbed environment (`env -i` style) whose HOME, CLAUDE_CONFIG_DIR,
+AGENT_KIT_STATE and TMPDIR sit inside a throwaway workspace, so a drive never touches the real
+~/.claude or ~/.agents, and never makes a model call. Standard library only, Python 3.9 or newer.
+
+Start with `control-kit --help`, then `control-kit <command> --help`.
+"""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import datetime
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+SCRIPT = Path(__file__).resolve()
+SKILL_REPO = SCRIPT.parents[4]  # <repo>/.claude/skills/verify-kit/scripts/control-kit
+MARKER = "control-kit.json"
+TOOL = "control-kit"
+WS_ENV = "VERIFY_KIT_WS"
+SESSION_TIMEOUT_S = 120
+COMMAND_TIMEOUT_S = 120
+SCRUBBED_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
+SLASH_SKILL = "beau-help"  # the login-free trigger: /bstack:beau-help
+FIRST_RUN_DAYS = 14  # whats_new.py shows only the last 14 days of entries on a first run
+
+EXIT_OK, EXIT_FAILED, EXIT_HARNESS = 0, 1, 2
+
+
+class HarnessError(Exception):
+    """The harness itself can't do its job (bad workspace, missing target). Exit 2, not a feature failure."""
+
+
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _write_json(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _inside(path: Path, root: Path) -> bool:
+    return Path(os.path.realpath(path)).is_relative_to(Path(os.path.realpath(root)))
+
+
+def _target_id(target: Path) -> str:
+    """The commit of a git checkout, or a hash of marketplace.json for a plain copy."""
+    proc = subprocess.run(["git", "-C", str(target), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          timeout=30)
+    if proc.returncode == 0 and (target / ".git").exists():
+        return proc.stdout.strip()
+    market = target / ".claude-plugin" / "marketplace.json"
+    return "sha256:" + _sha256(market.read_bytes())[:40] if market.is_file() else "unknown"
+
+
+# --------------------------------------------------------------------------- workspace
+
+@dataclass
+class Workspace:
+    root: Path
+
+    @property
+    def home(self) -> Path:
+        return self.root / "home"
+
+    @property
+    def profile(self) -> Path:
+        return self.root / "profile"
+
+    @property
+    def state(self) -> Path:
+        return self.root / "state"
+
+    @property
+    def cwd(self) -> Path:
+        return self.root / "cwd"
+
+    @property
+    def tmp(self) -> Path:
+        return self.root / "tmp"
+
+    @property
+    def marker_path(self) -> Path:
+        return self.root / MARKER
+
+    def marker(self) -> Dict[str, Any]:
+        try:
+            data = json.loads(self.marker_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise HarnessError(f"{self.root} has no {MARKER}, so control-kit didn't create it; "
+                               f"run `control-kit launch` and use the workspace it prints") from None
+        if data.get("tool") != TOOL:
+            raise HarnessError(f"{self.marker_path} wasn't written by control-kit")
+        return data
+
+    @property
+    def evidence(self) -> Path:
+        return Path(self.marker()["evidence"])
+
+    @property
+    def target(self) -> Path:
+        return Path(self.marker()["target"])
+
+    def state_file(self, name: str) -> Path:
+        return self.state / f"{name}.json"
+
+    def env(self, state_name: str) -> Dict[str, str]:
+        """The whole environment a `claude` call gets. Nothing is inherited, so none of the launching
+        shell's CLAUDE_CODE_* variables (or its email) reach the profile."""
+        return {"PATH": SCRUBBED_PATH, "HOME": str(self.home), "TMPDIR": str(self.tmp),
+                "CLAUDE_CONFIG_DIR": str(self.profile), "AGENT_KIT_STATE": str(self.state_file(state_name))}
+
+
+def _workspace(ns: argparse.Namespace) -> Workspace:
+    raw = ns.ws or os.environ.get(WS_ENV)
+    if not raw:
+        raise HarnessError(f"no workspace: pass --ws DIR or set {WS_ENV} to the path `control-kit launch` printed")
+    ws = Workspace(Path(raw).resolve())
+    ws.marker()
+    return ws
+
+
+def _launch(ns: argparse.Namespace) -> int:
+    target = Path(ns.target).resolve() if ns.target else SKILL_REPO
+    if not (target / ".claude-plugin" / "marketplace.json").is_file():
+        raise HarnessError(f"{target} isn't an agent-kit checkout (no .claude-plugin/marketplace.json); "
+                           f"pass --target <agent-kit checkout>")
+    claude = shutil.which("claude")
+    if not claude:
+        raise HarnessError("no `claude` on PATH; install Claude Code first (the drive runs the real CLI)")
+    parent = Path(os.path.realpath(ns.parent or tempfile.gettempdir()))
+    root = Path(tempfile.mkdtemp(prefix="verify-kit-", dir=parent))
+    ws = Workspace(root)
+    evidence_root = Path(ns.evidence_root).resolve() if ns.evidence_root else SKILL_REPO / ".verify" / "kit"
+    evidence = evidence_root / root.name
+    for d in (ws.home, ws.profile, ws.state, ws.cwd, ws.tmp, evidence):
+        d.mkdir(parents=True, exist_ok=True)
+    marker = {"tool": TOOL, "created": _now(), "workspace": str(root), "target": str(target),
+              "target_commit": _target_id(target), "claude": os.path.realpath(claude),
+              "python": sys.executable, "python_version": platform.python_version(),
+              "evidence": str(evidence), "pid": os.getpid()}
+    _write_json(ws.marker_path, marker)
+    _write_json(evidence / "launch.json", marker)
+    if ns.json:
+        print(json.dumps(marker, indent=2, sort_keys=True))
+    else:
+        print(f"workspace {root}")
+        print(f"evidence  {evidence}")
+        print(f"target    {target} @ {marker['target_commit'][:12]}")
+        print(f"ready: export {WS_ENV}={root}")
+    return EXIT_OK
+
+
+# --------------------------------------------------------------------------- running claude
+
+@dataclass
+class Ran:
+    argv: List[str]
+    exit: int
+    stdout: str
+    stderr: str
+    seconds: float
+    artifact: Optional[str] = None
+
+
+@dataclass
+class Session:
+    """One `claude -p` session, read from its stream-json output."""
+    ran: Ran
+    events: List[Dict[str, Any]]
+    init: Dict[str, Any]
+    result: Dict[str, Any]
+    refused: bool  # init said apiKeySource wasn't "none", so the session was killed before any model call
+
+    @property
+    def session_id(self) -> str:
+        return self.init.get("session_id", "")
+
+    @property
+    def api_key_source(self) -> Optional[str]:
+        return self.init.get("apiKeySource")
+
+    def hook_responses(self, event: str) -> List[Dict[str, Any]]:
+        return [e for e in self.events if e.get("subtype") == "hook_response" and e.get("hook_event") == event]
+
+
+def _claude(ws: Workspace, args: List[str], state: str) -> Ran:
+    argv = [ws.marker()["claude"], *args]
+    start = time.monotonic()
+    try:
+        proc = subprocess.run(argv, cwd=ws.cwd, env=ws.env(state), stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=COMMAND_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise HarnessError(f"claude {' '.join(args[:3])} ran past {COMMAND_TIMEOUT_S} s") from None
+    return Ran(["claude", *args], proc.returncode, proc.stdout, proc.stderr, round(time.monotonic() - start, 3))
+
+
+def _session(ws: Workspace, prompt: str, state: str) -> Session:
+    """Run `claude -p <prompt>` and parse its stream. If the init event shows a credential, kill the
+    process at once: a logged-in profile would make a paid model call for this prompt."""
+    argv = [ws.marker()["claude"], "-p", prompt, "--output-format", "stream-json", "--verbose", "--max-turns", "1"]
+    err_path = ws.tmp / f"stderr-{time.monotonic_ns()}.txt"
+    start = time.monotonic()
+    events: List[Dict[str, Any]] = []
+    raw: List[str] = []
+    init: Dict[str, Any] = {}
+    refused = False
+    with err_path.open("w", encoding="utf-8") as err:
+        proc = subprocess.Popen(argv, cwd=ws.cwd, env=ws.env(state), stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=err, text=True, encoding="utf-8", errors="replace")
+        timer = threading.Timer(SESSION_TIMEOUT_S, proc.kill)
+        timer.start()
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                raw.append(line)
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                events.append(event)
+                if event.get("subtype") == "init":
+                    init = event
+                    if event.get("apiKeySource") != "none":
+                        refused = True
+                        proc.kill()
+                        break
+            code = proc.wait()
+        finally:
+            timer.cancel()
+            if proc.poll() is None:
+                proc.kill()
+    if time.monotonic() - start >= SESSION_TIMEOUT_S:
+        raise HarnessError(f"claude -p {prompt!r} ran past {SESSION_TIMEOUT_S} s")
+    result = next((e for e in events if e.get("type") == "result"), {})
+    ran = Ran(["claude", "-p", prompt, "--output-format", "stream-json", "--verbose", "--max-turns", "1"],
+              code, "".join(raw), err_path.read_text(encoding="utf-8", errors="replace"),
+              round(time.monotonic() - start, 3))
+    return Session(ran, events, init, result, refused)
+
+
+def _cli(ns: argparse.Namespace) -> int:
+    ws = _workspace(ns)
+    _require_doctor(ws)
+    args = list(ns.args)
+    if args and args[0] == "--":
+        args = args[1:]
+    if not args:
+        raise HarnessError("nothing to run: `control-kit cli -- <claude args>`, such as `cli -- plugin list --json`")
+    ran = _claude(ws, args, "cli")
+    folder = ws.evidence / "cli"
+    folder.mkdir(parents=True, exist_ok=True)
+    n = len(list(folder.glob("*.json"))) + 1
+    record = {"argv": ran.argv, "exit": ran.exit, "stdout": ran.stdout, "stderr": ran.stderr,
+              "seconds": ran.seconds, "ts": _now()}
+    _write_json(folder / f"{n:03d}.json", record)
+    if ns.json:
+        print(json.dumps(record, indent=2))
+    else:
+        sys.stdout.write(ran.stdout)
+        sys.stderr.write(ran.stderr)
+    return ran.exit
+
+
+# --------------------------------------------------------------------------- doctor
+
+def _doctor_checks(ws: Workspace) -> List[Dict[str, Any]]:
+    m = ws.marker()
+    target = Path(m["target"])
+    checks: List[Dict[str, Any]] = []
+
+    def add(name: str, ok: bool, detail: str) -> None:
+        checks.append({"check": name, "ok": bool(ok), "detail": detail})
+
+    claude = Path(m["claude"])
+    version = _claude(ws, ["--version"], "doctor") if claude.is_file() else None
+    add("claude-cli", version is not None and version.exit == 0,
+        f"{claude}: {(version.stdout or version.stderr).strip()}" if version else f"{claude} is missing")
+    # The probe prompt is not a real command. A logged-out profile answers "Not logged in" before any
+    # model call. A logged-in one is killed at its init event, before one.
+    probe = _session(ws, "/verify-kit-doctor-probe", "doctor")
+    add("no-credentials", probe.api_key_source == "none",
+        f"apiKeySource {probe.api_key_source!r}" + ("" if probe.api_key_source == "none" else
+        "; this profile is logged in, so a drive could make paid model calls"))
+    env = ws.env("doctor")
+    for name, key in (("isolated-profile", "CLAUDE_CONFIG_DIR"), ("isolated-home", "HOME"),
+                      ("isolated-state", "AGENT_KIT_STATE")):
+        add(name, _inside(Path(env[key]), ws.root), f"{key}={env[key]}")
+    marketplace = target / ".claude-plugin" / "marketplace.json"
+    now = _target_id(target)
+    add("target", marketplace.is_file() and now == m["target_commit"],
+        f"{target} @ {now[:12]} (launched at {m['target_commit'][:12]})")
+    add("evidence-dir", ws.evidence.is_dir() and os.access(ws.evidence, os.W_OK), str(ws.evidence))
+    return checks
+
+
+def _doctor(ns: argparse.Namespace) -> int:
+    ws = _workspace(ns)
+    checks = _doctor_checks(ws)
+    ok = all(c["ok"] for c in checks)
+    _write_json(ws.evidence / "doctor.json", {"ok": ok, "checks": checks, "ts": _now()})
+    if ns.json:
+        print(json.dumps({"ok": ok, "checks": checks}, indent=2))
+    else:
+        for c in checks:
+            print(f"{'ok  ' if c['ok'] else 'FAIL'} {c['check']:<17} {c['detail']}")
+        print("doctor: ready to drive" if ok else "doctor: NOT ready; fix the FAIL lines or launch a fresh workspace")
+    return EXIT_OK if ok else EXIT_FAILED
+
+
+def _require_doctor(ws: Workspace) -> None:
+    path = ws.evidence / "doctor.json"
+    try:
+        ok = json.loads(path.read_text(encoding="utf-8")).get("ok") is True
+    except (OSError, ValueError):
+        ok = False
+    if not ok:
+        raise HarnessError(f"doctor hasn't passed for this workspace ({path}); run `control-kit doctor` first. "
+                           f"This command refuses to run `claude` until it does, because a logged-in "
+                           f"profile would make paid model calls")
+
+
+# --------------------------------------------------------------------------- drive
+
+@dataclass
+class Step:
+    name: str
+    ran: Optional[Ran] = None
+    checks: List[Dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return all(c["ok"] for c in self.checks)
+
+    def record(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {"step": self.name, "ok": self.ok, "checks": self.checks}
+        if self.ran is not None:
+            out.update(argv=self.ran.argv, exit=self.ran.exit, stdout=self.ran.stdout[:3000],
+                       stderr=self.ran.stderr[:3000], seconds=self.ran.seconds)
+            if self.ran.artifact:
+                out["artifact"] = self.ran.artifact
+        return out
+
+
+class StepFailed(Exception):
+    pass
+
+
+def _skill_dirs(target: Path) -> List[str]:
+    root = target / "plugins" / "bstack" / "skills"
+    return sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+
+
+def _agent_names(target: Path) -> List[str]:
+    root = target / "plugins" / "bstack" / "agents"
+    return sorted(p.stem for p in root.glob("*.md")) if root.is_dir() else []
+
+
+def _kit_version(target: Path, plugin: str) -> Optional[str]:
+    """The plugin's version in kit.yaml, read as text so no YAML parser is needed."""
+    try:
+        lines = (target / "kit.yaml").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    inside = False
+    for line in lines:
+        m = re.match(r"\s*- name:\s*(\S+)", line)
+        if m:
+            inside = m.group(1) == plugin
+        elif inside and (v := re.match(r"\s+version:\s*(\S+)", line)):
+            return v.group(1)
+    return None
+
+
+def _first_heading(skill_md: Path) -> Optional[str]:
+    in_front = False
+    for i, line in enumerate(skill_md.read_text(encoding="utf-8").splitlines()):
+        if i == 0 and line.strip() == "---":
+            in_front = True
+            continue
+        if in_front:
+            in_front = line.strip() != "---"
+            continue
+        if line.startswith("# "):
+            return line.strip()
+    return None
+
+
+def _newest_entry(target: Path, plugin: str) -> Optional[Dict[str, Any]]:
+    path = target / "plugins" / "bstack" / "skills" / "beau-help" / "references" / "changes.json"
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))["entries"]
+    except (OSError, ValueError, KeyError):
+        return None
+    return next((e for e in entries if e.get("plugin") == plugin), None)  # newest first
+
+
+def _session_file(ws: Workspace, session_id: str) -> Optional[Path]:
+    hits = sorted((ws.profile / "projects").glob(f"*/{session_id}.jsonl")) if session_id else []
+    return hits[0] if hits else None
+
+
+class Journey:
+    """One feature's drive: each step runs a real `claude` command and checks its exit code and what it
+    wrote. The first failed step stops the feature; every step is written to the evidence as it runs."""
+
+    def __init__(self, ws: Workspace, feature: str, installed: bool = False):
+        # installed: `drive all` has just run the install feature and it passed, so the profile holds bstack.
+        self.ws, self.feature, self.known_installed = ws, feature, installed
+        self.folder = ws.evidence / feature
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.log = self.folder / "steps.jsonl"
+        self.log.write_text("", encoding="utf-8")
+        self.steps: List[Step] = []
+        self.sessions = 0
+
+    @staticmethod
+    def check(s: Step, name: str, ok: bool, detail: str = "") -> None:
+        s.checks.append({"check": name, "ok": bool(ok), "detail": detail})
+
+    def _finish(self, s: Step) -> Step:
+        with self.log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(s.record(), sort_keys=True) + "\n")
+        if not s.ok:
+            raise StepFailed(s.name)
+        return s
+
+    def step(self, name: str, args: List[str], *, exit: Optional[int] = None,
+             checks: Optional[Callable[[Step], None]] = None, state: str = "cli") -> Step:
+        s = Step(name)
+        self.steps.append(s)
+        s.ran = _claude(self.ws, args, state)
+        if exit is not None:
+            self.check(s, f"exit {exit}", s.ran.exit == exit, f"got exit {s.ran.exit}: {s.ran.stderr.strip()[:200]}")
+        if checks is not None and s.ok:
+            checks(s)
+        return self._finish(s)
+
+    def local(self, name: str, checks: Callable[[Step], None]) -> Step:
+        """A step that runs no command, only checks files the workspace holds."""
+        s = Step(name)
+        self.steps.append(s)
+        checks(s)
+        return self._finish(s)
+
+    def session(self, name: str, prompt: str, state: str,
+                checks: Optional[Callable[[Step, Session], None]] = None) -> Session:
+        s = Step(name)
+        self.steps.append(s)
+        sess = _session(self.ws, prompt, state)
+        self.sessions += 1
+        artifact = self.folder / f"session-{self.sessions}.jsonl"
+        artifact.write_text(sess.ran.stdout, encoding="utf-8")
+        sess.ran.artifact = str(artifact)
+        s.ran = sess.ran
+        self.check(s, "init event seen", bool(sess.init), "no system/init event in the stream")
+        self.check(s, "apiKeySource is none (no credential, so no model call)", sess.api_key_source == "none",
+                   f"apiKeySource {sess.api_key_source!r}" + ("; killed at init" if sess.refused else ""))
+        if checks is not None and s.ok:
+            checks(s, sess)
+        self._finish(s)
+        return sess
+
+    def listing(self, name: str, checks: Optional[Callable[[Step, List[Dict[str, Any]]], None]] = None) -> List[Dict]:
+        found: Dict[str, List[Dict[str, Any]]] = {}
+
+        def parse(s: Step) -> None:
+            try:
+                data = json.loads(s.ran.stdout)
+                ok = isinstance(data, list)
+            except ValueError:
+                data, ok = [], False
+            self.check(s, "plugin list prints a JSON list", ok, s.ran.stdout[:200])
+            found["plugins"] = data if ok else []
+            if ok and checks is not None:
+                checks(s, data)
+        self.step(name, ["plugin", "list", "--json"], exit=0, checks=parse)
+        (self.folder / "plugin-list.json").write_text(json.dumps(found["plugins"], indent=2) + "\n", encoding="utf-8")
+        return found["plugins"]
+
+    def installed(self, plugins: List[Dict[str, Any]], plugin: str) -> Optional[Dict[str, Any]]:
+        return next((p for p in plugins if p.get("id") == f"{plugin}@agent-kit"), None)
+
+    def precondition_installed(self) -> None:
+        """Features other than `install` need bstack in the profile. `drive all` runs install first, so this
+        only does the work when one feature is driven alone."""
+        if self.known_installed:
+            return
+        plugins = self.listing("precondition: plugin list")
+        if self.installed(plugins, "bstack"):
+            return
+        self.step("precondition: marketplace add", ["plugin", "marketplace", "add", str(self.ws.target)], exit=0)
+        self.step("precondition: install bstack@agent-kit", ["plugin", "install", "bstack@agent-kit", "--json"], exit=0)
+
+
+def feature_install(j: Journey) -> None:
+    target = j.ws.target
+    profile = j.ws.profile
+
+    def added(s: Step) -> None:
+        known = profile / "plugins" / "known_marketplaces.json"
+        text = known.read_text(encoding="utf-8") if known.is_file() else ""
+        j.check(s, "profile/plugins/known_marketplaces.json names agent-kit", "agent-kit" in text, str(known))
+    j.step("marketplace add <target>", ["plugin", "marketplace", "add", str(target)], exit=0, checks=added)
+
+    def installed(s: Step) -> None:
+        try:
+            data = json.loads(s.ran.stdout)
+        except ValueError:
+            data = {}
+        j.check(s, "install --json says ok for bstack@agent-kit",
+                data.get("outcome") == "ok" and data.get("pluginId") == "bstack@agent-kit", s.ran.stdout[:200])
+        rec = profile / "plugins" / "installed_plugins.json"
+        j.check(s, "profile/plugins/installed_plugins.json was written inside the workspace", rec.is_file(), str(rec))
+    j.step("install bstack@agent-kit", ["plugin", "install", "bstack@agent-kit", "--json"], exit=0, checks=installed)
+
+    def listed(s: Step, plugins: List[Dict[str, Any]]) -> None:
+        want = _kit_version(target, "bstack")
+        bstack, principles = j.installed(plugins, "bstack"), j.installed(plugins, "principles")
+        j.check(s, "bstack is listed and enabled", bool(bstack and bstack.get("enabled")), json.dumps(bstack)[:200])
+        j.check(s, f"bstack is at the kit.yaml version ({want})", bool(bstack) and want is not None
+                and bstack.get("version") == want, f"listed {bstack.get('version') if bstack else None}")
+        j.check(s, "principles (bstack's dependency) is listed and enabled",
+                bool(principles and principles.get("enabled")), json.dumps(principles)[:200])
+        src = (bstack or {}).get("readFromFolder", "")
+        j.check(s, "bstack reads from the target checkout", bool(src)
+                and os.path.realpath(src) == os.path.realpath(target / "plugins" / "bstack"), f"readFromFolder {src}")
+    j.listing("plugin list shows bstack and principles", listed)
+
+
+def feature_skills_load(j: Journey) -> None:
+    j.precondition_installed()
+    target = j.ws.target
+
+    def loaded(s: Step, sess: Session) -> None:
+        skills, agents = set(sess.init.get("skills", [])), set(sess.init.get("agents", []))
+        want = [f"bstack:{n}" for n in _skill_dirs(target)]
+        missing = [n for n in want if n not in skills]
+        j.check(s, f"init lists all {len(want)} bstack skill folders as bstack:<name>", bool(want) and not missing,
+                f"missing {missing}" if missing else f"{len(want)} found")
+        want_agents = [f"bstack:{n}" for n in _agent_names(target)]
+        missing_agents = [n for n in want_agents if n not in agents]
+        j.check(s, "init lists the bstack agents", bool(want_agents) and not missing_agents,
+                f"missing {missing_agents}" if missing_agents else ", ".join(want_agents))
+        plugin = next((p for p in sess.init.get("plugins", []) if p.get("name") == "bstack"), None)
+        j.check(s, "init says bstack loaded from the target checkout", bool(plugin)
+                and os.path.realpath(plugin["path"]) == os.path.realpath(target / "plugins" / "bstack"),
+                json.dumps(plugin))
+    j.session("session init lists the skills", f"/bstack:{SLASH_SKILL}", "skills-load", loaded)
+
+
+def feature_slash_trigger(j: Journey) -> None:
+    j.precondition_installed()
+    target = j.ws.target
+    heading = _first_heading(target / "plugins" / "bstack" / "skills" / SLASH_SKILL / "SKILL.md")
+
+    def triggered(s: Step, sess: Session) -> None:
+        j.check(s, "exit 1 with Not logged in, and no cost (the expected pass: no model was called)",
+                s.ran.exit == 1 and "Not logged in" in str(sess.result.get("result", ""))
+                and sess.result.get("total_cost_usd") == 0,
+                f"exit {s.ran.exit}, result {sess.result.get('result')!r}, cost {sess.result.get('total_cost_usd')}")
+        path = _session_file(j.ws, sess.session_id)
+        j.check(s, "a session file was written inside the workspace profile", path is not None
+                and _inside(path, j.ws.root), f"{j.ws.profile}/projects/*/{sess.session_id}.jsonl")
+        if path is None:
+            return
+        shutil.copyfile(path, j.folder / f"profile-session-{sess.session_id}.jsonl")
+        bodies = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            content = (e.get("message") or {}).get("content") if e.get("type") == "user" else None
+            if isinstance(content, list):
+                bodies += [c.get("text", "") for c in content if isinstance(c, dict)]
+        body = next((b for b in bodies if "Base directory for this skill:" in b), "")
+        j.check(s, "a user turn holds 'Base directory for this skill:'", bool(body))
+        base = re.search(r"Base directory for this skill: (.+)", body)
+        want = target / "plugins" / "bstack" / "skills" / SLASH_SKILL
+        j.check(s, "that base directory is the target checkout's skill folder",
+                bool(base) and os.path.realpath(base.group(1).strip()) == os.path.realpath(want),
+                base.group(1).strip() if base else "no base directory line")
+        j.check(s, f"the same turn holds the skill's first heading ({heading})", bool(heading) and heading in body)
+    j.session(f"/bstack:{SLASH_SKILL} expands the skill body", f"/bstack:{SLASH_SKILL}", "slash-trigger", triggered)
+
+
+def feature_whats_new_hook(j: Journey) -> None:
+    j.precondition_installed()
+    target = j.ws.target
+    state = "whats-new-hook"
+    seen = j.ws.state_file(state)
+    newest = _newest_entry(target, "bstack")
+    cutoff = (datetime.date.today() - datetime.timedelta(days=FIRST_RUN_DAYS)).isoformat()
+    # On a first run whats_new.py shows only entries from the last 14 days. With none, a silent hook is correct.
+    expect_notice = bool(newest) and newest["date"] >= cutoff
+    j.local("no seen-state file yet", lambda s: j.check(
+        s, "the feature's own state file doesn't exist", not seen.exists(), str(seen)))
+
+    def first(s: Step, sess: Session) -> None:
+        hooks = sess.hook_responses("SessionStart")
+        j.check(s, "the SessionStart hook ran", len(hooks) == 1, f"{len(hooks)} hook_response events")
+        if len(hooks) != 1:
+            return
+        h = hooks[0]
+        j.check(s, "the hook exited 0", str(h.get("exit_code")) == "0", f"exit_code {h.get('exit_code')}, "
+                f"stderr {str(h.get('stderr'))[:200]}")
+        out = h.get("output") or ""
+        if expect_notice:
+            try:
+                message = json.loads(out)["systemMessage"]
+            except (ValueError, KeyError, TypeError):
+                message = ""
+            want = f"bstack {newest['version']}"
+            j.check(s, f"the first notice names the newest bstack version ({want})", want in message, out[:200])
+        else:
+            j.check(s, f"newest entry ({newest and newest['date']}) is older than {FIRST_RUN_DAYS} days, so a "
+                    f"silent first notice is correct", out == "", out[:200])
+        j.check(s, "the seen-state file appeared inside the workspace", seen.is_file() and _inside(seen, j.ws.root),
+                str(seen))
+        try:
+            ids = set(json.loads(seen.read_text(encoding="utf-8"))["seen"])
+        except (OSError, ValueError, KeyError):
+            ids = set()
+        j.check(s, "it marks the newest bstack entry seen", bool(newest) and newest["id"] in ids,
+                f"{len(ids)} ids")
+    j.session("first session: the hook shows what's new", f"/bstack:{SLASH_SKILL}", state, first)
+
+    def second(s: Step, sess: Session) -> None:
+        hooks = sess.hook_responses("SessionStart")
+        j.check(s, "the SessionStart hook ran again", len(hooks) == 1, f"{len(hooks)} hook_response events")
+        if len(hooks) == 1:
+            j.check(s, "the hook exited 0 and printed nothing", str(hooks[0].get("exit_code")) == "0"
+                    and (hooks[0].get("output") or "") == "", (hooks[0].get("output") or "")[:200])
+    j.session("second session: the hook is silent", f"/bstack:{SLASH_SKILL}", state, second)
+
+
+FEATURES: Dict[str, Any] = {
+    "install": (feature_install, "marketplace add, install bstack@agent-kit, and plugin list shows it and principles"),
+    "skills-load": (feature_skills_load, "a session's init event lists every bstack skill folder and agent"),
+    "slash-trigger": (feature_slash_trigger, "/bstack:beau-help expands the skill body with no login and no model"),
+    "whats-new-hook": (feature_whats_new_hook, "the SessionStart hook shows the newest version once, then is silent"),
+}
+
+
+def _drive_one(ws: Workspace, name: str, installed: bool = False) -> Dict[str, Any]:
+    fn, _ = FEATURES[name]
+    j = Journey(ws, name, installed)
+    start = time.monotonic()
+    error = None
+    try:
+        fn(j)
+    except StepFailed:
+        pass
+    except HarnessError as e:
+        error = str(e)
+    failed = next((s for s in j.steps if not s.ok), None)
+    result = {"feature": name, "ok": failed is None and error is None, "steps": len(j.steps),
+              "failed_step": failed.name if failed else None,
+              "failed_checks": [c for c in failed.checks if not c["ok"]] if failed else [],
+              "harness_error": error, "blocked_by": None, "seconds": round(time.monotonic() - start, 3),
+              "evidence": str(j.log)}
+    _write_json(j.folder / "result.json", result)
+    return result
+
+
+def _blocked(ws: Workspace, name: str, by: str) -> Dict[str, Any]:
+    result = {"feature": name, "ok": False, "steps": 0, "failed_step": None, "failed_checks": [],
+              "harness_error": None, "blocked_by": by, "seconds": 0.0, "evidence": ""}
+    _write_json(ws.evidence / name / "result.json", result)
+    return result
+
+
+COPIED = ("settings.json", "plugins/installed_plugins.json", "plugins/known_marketplaces.json")
+
+
+def _snapshot_to(ws: Workspace, dest: Path) -> int:
+    """Copy the files the drive wrote (profile settings and plugin records, the seen-state files, the session
+    files) into the evidence with a sha256 each, because the workspace is deleted by cleanup."""
+    if dest.exists():
+        shutil.rmtree(dest)
+    files: List[Path] = [ws.profile / rel for rel in COPIED if (ws.profile / rel).is_file()]
+    files += sorted(ws.state.glob("*.json"))
+    files += sorted((ws.profile / "projects").glob("*/*.jsonl"))
+    manifest = []
+    for p in files:
+        rel = p.relative_to(ws.root)
+        out = dest / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(p, out)
+        manifest.append(f"{_sha256(p.read_bytes())}  {rel.as_posix()}")
+    (dest / "MANIFEST.sha256").write_text("\n".join(manifest) + ("\n" if manifest else ""), encoding="utf-8")
+    return len(manifest)
+
+
+def _drive(ns: argparse.Namespace) -> int:
+    ws = _workspace(ns)
+    _require_doctor(ws)
+    names = list(FEATURES) if ns.feature == "all" else [ns.feature]
+    for n in names:
+        if (ws.evidence / n / "result.json").exists():
+            raise HarnessError(f"{n} already ran in this workspace ({ws.evidence / n / 'result.json'} exists); "
+                               f"run cleanup, then launch a fresh one")
+    if ns.feature == "all" and (ws.profile / "plugins" / "installed_plugins.json").exists():
+        raise HarnessError(f"{ws.profile} already has plugins installed; `drive all` starts from an empty profile. "
+                           f"Run cleanup, then launch a fresh workspace")
+    results: List[Dict[str, Any]] = []
+    if "install" in names:
+        results.append(_drive_one(ws, "install"))
+    rest = [n for n in names if n != "install"]
+    if "install" in names and not results[0]["ok"]:
+        results += [_blocked(ws, n, "install") for n in rest]
+    else:
+        # After install the features only read the profile and each use their own state file, so they run
+        # side by side, as three Claude Code sessions on one profile would.
+        installed = "install" in names
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(rest))) as pool:
+            results += list(pool.map(lambda n: _drive_one(ws, n, installed), rest))
+    for r in results:
+        n = r["feature"]
+        if not ns.json:
+            mark = "PASS" if r["ok"] else "FAIL"
+            if r["blocked_by"]:
+                print(f"{mark} {n:<15} blocked: {r['blocked_by']} failed, so this feature has no plugin to check")
+                continue
+            print(f"{mark} {n:<15} {r['steps']} steps, {r['seconds']:.2f}s")
+            if not r["ok"]:
+                print(f"     failed step: {r['failed_step']}")
+                for c in r["failed_checks"]:
+                    print(f"     - {c['check']}: {c['detail'][:300]}")
+                if r["harness_error"]:
+                    print(f"     harness error: {r['harness_error']}")
+    files = _snapshot_to(ws, ws.evidence / "profile-snapshot")
+    ok = all(r["ok"] for r in results)
+    harness = any(r["harness_error"] for r in results)
+    m = ws.marker()
+    summary = {"ok": ok, "target": m["target"], "target_commit": m["target_commit"], "features": results,
+               "snapshot_files": files, "ts": _now()}
+    _write_json(ws.evidence / f"drive-{ns.feature}.json", summary)
+    if ns.json:
+        print(json.dumps(summary, indent=2))
+    else:
+        print(f"{'PASSED' if ok else 'FAILED'}: {sum(r['ok'] for r in results)}/{len(results)} features; "
+              f"evidence in {ws.evidence}")
+    return EXIT_OK if ok else (EXIT_HARNESS if harness else EXIT_FAILED)
+
+
+def _snapshot(ns: argparse.Namespace) -> int:
+    ws = _workspace(ns)
+    dest = ws.evidence / (ns.name or "profile-snapshot")
+    n = _snapshot_to(ws, dest)
+    print(f"copied {n} files from {ws.root} to {dest}; hashes in {dest}/MANIFEST.sha256")
+    return EXIT_OK
+
+
+def _cleanup(ns: argparse.Namespace) -> int:
+    ws = _workspace(ns)
+    m = ws.marker()
+    evidence = Path(m["evidence"])
+    if _inside(evidence, ws.root):
+        raise HarnessError(f"evidence {evidence} is inside the workspace; refusing to delete it")
+    if ns.dry_run:
+        print(f"would remove {ws.root} (workspace created by control-kit at {m['created']}); would keep {evidence}")
+        return EXIT_OK
+    shutil.rmtree(ws.root)
+    _write_json(evidence / "cleanup.json", {"removed": str(ws.root), "ts": _now()})
+    print(f"removed {ws.root}; evidence kept in {evidence}")
+    return EXIT_OK
+
+
+# --------------------------------------------------------------------------- parser
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="control-kit",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Drive the real `claude` CLI against an agent-kit checkout in a throwaway workspace and keep "
+                    "the evidence. Every claude call runs under a scrubbed environment inside the workspace.",
+        epilog="Typical run:\n"
+               "  control-kit launch                 # prints the workspace; export VERIFY_KIT_WS=<it>\n"
+               "  control-kit doctor                 # every line ok\n"
+               "  control-kit drive all              # or one feature: install, skills-load, slash-trigger, whats-new-hook\n"
+               "  control-kit cleanup                # removes the workspace, keeps the evidence\n"
+               "Exit codes: 0 pass, 1 a check failed, 2 the harness couldn't run (bad workspace, doctor not passed).")
+    sub = p.add_subparsers(dest="command", metavar="COMMAND", required=True)
+
+    def ws_args(s: argparse.ArgumentParser) -> None:
+        s.add_argument("--ws", metavar="DIR", default=None, help=f"the workspace `launch` printed (default: ${WS_ENV})")
+        s.add_argument("--json", action="store_true", help="print JSON instead of text")
+
+    s = sub.add_parser("launch", formatter_class=argparse.RawDescriptionHelpFormatter,
+                       help="create a fresh workspace: its own HOME, Claude profile and state, and cwd",
+                       description="Create a throwaway workspace under the temp dir with home/, profile/ (the "
+                                   "CLAUDE_CONFIG_DIR), state/ (AGENT_KIT_STATE files), tmp/ and cwd/. Evidence goes "
+                                   "to <evidence-root>/<workspace name>/ and survives cleanup.",
+                       epilog="Example:\n  control-kit launch\n"
+                              "  control-kit launch --target /tmp/agent-kit-copy --evidence-root /tmp/ev")
+    s.add_argument("--target", metavar="CHECKOUT", default=None,
+                   help=f"the agent-kit checkout to drive (default: the one holding this script, {SKILL_REPO})")
+    s.add_argument("--evidence-root", metavar="DIR", default=None,
+                   help=f"where evidence folders go (default: {SKILL_REPO / '.verify' / 'kit'}, git-ignored)")
+    s.add_argument("--parent", metavar="DIR", default=None, help="where to create the workspace (default: the temp dir)")
+    s.add_argument("--json", action="store_true", help="print the workspace record as JSON")
+    s.set_defaults(func=_launch)
+
+    s = sub.add_parser("doctor", help="is this workspace worth driving? it writes only inside the workspace",
+                       description="Check that claude runs, that a session reports apiKeySource none (a logged-in "
+                                   "profile would make paid model calls), that profile, HOME and state are inside "
+                                   "the workspace, that the target hasn't moved, and the evidence folder. Exit 0 when "
+                                   "every line is ok. drive and cli refuse to run until it has passed.",
+                       epilog="Example: control-kit doctor --json")
+    ws_args(s)
+    s.set_defaults(func=_doctor)
+
+    s = sub.add_parser("drive", formatter_class=argparse.RawDescriptionHelpFormatter,
+                       help="run a mapped feature's journey (or all of them) and record every step",
+                       description="Run the journey for a feature from features/<name>.md. Each step runs the real "
+                                   "claude command, checks the exit code and what it wrote, and is appended to "
+                                   "<evidence>/<feature>/steps.jsonl. `all` needs an empty profile.",
+                       epilog="Features:\n" + "\n".join(f"  {k:<15} {v[1]}" for k, v in FEATURES.items())
+                              + "\nExample: control-kit drive slash-trigger")
+    s.add_argument("feature", choices=["all", *FEATURES], help="a feature name, or all")
+    ws_args(s)
+    s.set_defaults(func=_drive)
+
+    s = sub.add_parser("cli", help="run one claude command in the workspace and record it",
+                       description="Run `claude <args>` under the scrubbed environment with cwd in the workspace. "
+                                   "Prints its output, exits with its code, and records argv, stdout, stderr and exit "
+                                   "in <evidence>/cli/NNN.json.",
+                       epilog="Example: control-kit cli -- plugin list --json")
+    ws_args(s)
+    s.add_argument("args", nargs=argparse.REMAINDER, help="-- then the claude arguments")
+    s.set_defaults(func=_cli)
+
+    s = sub.add_parser("snapshot", help="copy the files the drive wrote into the evidence with a sha256 manifest",
+                       description="Copy the profile's settings and plugin records, the state files and the session "
+                                   "files to <evidence>/<name>/ and write MANIFEST.sha256.",
+                       epilog="Example: control-kit snapshot --name after-install")
+    ws_args(s)
+    s.add_argument("--name", default=None, help="the snapshot folder name (default: profile-snapshot)")
+    s.set_defaults(func=_snapshot)
+
+    s = sub.add_parser("cleanup", help="remove the workspace this tool created; keep the evidence",
+                       description="Remove the workspace folder (only one with control-kit.json in it). The "
+                                   "evidence folder is never touched.",
+                       epilog="Example: control-kit cleanup --dry-run")
+    ws_args(s)
+    s.add_argument("--dry-run", action="store_true", help="say what would be removed and remove nothing")
+    s.set_defaults(func=_cleanup)
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    ns = build_parser().parse_args(argv)
+    try:
+        return ns.func(ns)
+    except HarnessError as e:
+        print(f"control-kit {ns.command}: {e}", file=sys.stderr)
+        return EXIT_HARNESS
+
+
+if __name__ == "__main__":
+    sys.exit(main())
