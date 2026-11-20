@@ -565,7 +565,8 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 - `quality.py` stays standard library only, and `summary --json` stays byte-stable.
 - No health score and no dashboard. Skills get one section in the weekly brief.
 
-Order: R38's prototype now. agentfiles R17 can start, since the lint it runs has shipped.
+Order: R38's prototype is done and its build waits on H15 and the books repo's H6. agentfiles
+R17 can start, since the lint it runs has shipped.
 agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
@@ -575,33 +576,55 @@ rows.
 ### R38. Book skill use from transcripts
 **What:** A second pass inside cfo's `weekly-claude-code.sh`, which already reads this Mac's
 agent logs every week (one launchd job, one read), appends one row per skill invocation to
-`books/skill-uses.csv` in the quality books: week, skill, its source and version, tool, how it
-was invoked (explicit or auto), signals, verdict. The unit is every installed skill, keyed on
-`agentfiles.lock`, not only the kit's own. For governed
-runs the pass reads the redacted archives `ledger session add` keeps under
-`.audit/runs/<run>/sessions/`. Signals are deterministic: tool searches and tool errors in the
-window after the skill loads, and whether a correction followed. A correction comes from a
-ledger `rejection` entry (R23) where one exists, and only otherwise from the next user turn.
-Verdicts use the post's five names (unused bundle, ineffective, harmful, partially effective,
-effective). Only the ones a rule can decide are filled, and the rest stay `unjudged`.
-`quality.py summary --json` gains uses per skill and a list of skills with repeat
-non-effective verdicts. No transcript text is booked.
-**Units:** (1) Prototype: on four weeks of real transcripts, can an invocation and its signals
-be read reliably in Claude Code, Codex and Cursor? Stop with the numbers. (2) The pass and the
-`quality.py` changes. (3) In the books repo: the new book, the pin move and the brief section
-(quality phase 1c).
+`books/skill-uses.csv` in the quality books: week, skill, its source, its version, tool, how
+it was invoked, and three counts for the window after the skill loads (tool calls, tool
+searches, tool errors). The verdict column exists and every row is `unjudged` for now. The
+unit is every installed skill, keyed on `agentfiles.lock`, not only the kit's own.
+`quality.py summary --json` gains uses per skill. No transcript text is booked.
+
+What the prototype settled (unit 1, run on four weeks of real transcripts, 2026-11-20):
+
+- **Claude Code is the first tool.** A use is a `Skill` tool call, a typed slash command, or a
+  `Read` of an installed `SKILL.md`. A `Read` of a `SKILL.md` in a checkout is someone editing
+  the skill and is not a use. All three are read from `user` and `assistant` records only:
+  other record types repeat the same content.
+- **Drop duplicates by tool-call id.** About one invocation in seven also sits in another file
+  (resumed and forked sessions). No copy differed from the one kept.
+- **How invoked has four values:** `typed` (a slash command), `named` (the turn before names
+  the skill), `auto`, and `subagent`. A typed turn is a user record whose `origin.kind` is
+  `human`. Records from older sessions may lack `origin`: count those rows and report them.
+- **The window is bounded.** From a skill load to the next typed turn the median is 29 tool
+  calls and one window in ten passes 111, and in one window in six another skill loads first.
+  "More than 3 errors" fired for 23% of windows of 20 or more calls and for none of the
+  shorter ones, so over the whole window it measures the length of the task. Book the counts
+  over the first 20 tool results, with the call count beside them. Pick a threshold from a few
+  weeks of rows before any rule fills a verdict.
+- **The version comes from `agentfiles.lock` on the day.** The transcript shows where a skill
+  was loaded from (installed plugin, marketplace copy, worktree) and almost never its version.
+- **Cursor gives a use count and nothing else.** Its only trace is a `Read` of a `SKILL.md`.
+  It records no tool results and no time per record, so a row is dated by its file and its
+  counts are empty.
+- **Codex is left out** until it has sessions: none in the four weeks.
+- **No correction signal in the first version** (Beau, 2026-11-20). A rule on the next typed
+  turn matched 2 of 1,158 turns, so it can't be told apart from noise without reading the
+  text. A correction can come back later from a ledger `rejection` entry (R23), and never
+  from a guess at the next user turn.
+
+**Units:** (1) Prototype: done, findings above. (2) The pass and the `quality.py` changes.
+(3) In the books repo: the new book, the pin move and the brief section (quality phase 1c).
 **Where:** `plugins/cfo/skills/cfo-books/scripts/weekly-claude-code.sh`,
 `plugins/bstack/skills/qualitydirector/**`, `plugins/bstack/skills/reflect/scripts/find-transcripts.py`,
 tests, `kit.yaml`, `changes.yaml`, generated files.
 **Depends on:** H15 and the books repo's H6 (Beau allows the read and the booking). R19 if the
-transcript reader has to live outside `reflect`. R23 only for corrections from `rejection`
-entries. agentfiles H13 decides whether cfo's own skills are counted.
-**Playbook:** Prototype, then Feature.
+transcript reader has to live outside `reflect`. agentfiles H13 decides whether cfo's own
+skills are counted. For governed runs the pass can read the redacted archives
+`ledger session add` keeps under `.audit/runs/<run>/sessions/`.
+**Playbook:** Feature, from the findings above.
 **Done when:** a run over the last four weeks of real transcripts books rows, `check` passes,
 a second run changes nothing, and ten rows picked at random match the transcripts by hand.
-**Why not done:** `find-transcripts.py` exists for `reflect` and `recall`, but nothing counts
-what a skill did after it loaded.
-**Prioritize when:** now. It feeds agent-ledger's M3 unit 1, R41 and R3.
+**Why not done:** Unit 2 waits on H15 and H6. The prototype was a throwaway script and
+nothing is booked.
+**Prioritize when:** H15 and H6 are answered. It feeds agent-ledger's M3 unit 1, R41 and R3.
 
 ## P1
 
