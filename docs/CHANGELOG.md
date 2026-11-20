@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.23.0 (2026-11-19)
+
+- You can now run `quality.py audit-ci REPO_DIR [--json]` (qualitydirector 0.7.0) to see, per workflow and job, the CI-speed facts a proposal needs: cancel-in-progress concurrency for pull requests, `timeout-minutes`, dependency caching, a matrix that runs in full on pull requests, and path filters. It only reads the workflow files, writes nothing, and its output is input for a proposal, never an action.
+- Try: `Run the Quality Director's audit-ci on this repo and tell me which jobs have no timeout.`
+
 ## bstack 0.22.0 (2026-11-19)
 
 - A product's goals now say what measures them, what moves them and the first move. The `docs/VISION.md` goals table has Measure, Lever and First move columns, scaffold-product asks for them in the interview and drafts them when it adopts a repo, and a new phase spec has a `**Lever.**` sentence naming which lever of its goal it pulls.

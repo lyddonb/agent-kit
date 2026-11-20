@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.23.0",
+      "date": "2026-11-19",
+      "plugin": "bstack",
+      "version": "0.23.0",
+      "changes": [
+        "You can now run `quality.py audit-ci REPO_DIR [--json]` (qualitydirector 0.7.0) to see, per workflow and job, the CI-speed facts a proposal needs: cancel-in-progress concurrency for pull requests, `timeout-minutes`, dependency caching, a matrix that runs in full on pull requests, and path filters. It only reads the workflow files, writes nothing, and its output is input for a proposal, never an action."
+      ],
+      "try": "Run the Quality Director's audit-ci on this repo and tell me which jobs have no timeout."
+    },
+    {
       "id": "bstack@0.22.0",
       "date": "2026-11-19",
       "plugin": "bstack",
