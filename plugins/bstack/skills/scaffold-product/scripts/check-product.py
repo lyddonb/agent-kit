@@ -6,6 +6,8 @@ Usage:
 
 Prints one `file:line: problem` line per problem on stderr and a summary on stdout.
 Exit code 0 when there are no problems, 1 when there are some, 2 on bad usage.
+A `note: file:line: ...` line on stderr is not a problem and never changes the exit code: it names
+a format this checker will hold the repo to once the repo adopts it.
 
 With --receipts RUN_ID, every box this branch newly checked (`- [x]` in a phase spec now, not
 `[x]` in the same file at REF, default origin/main) must be backed by a receipt: the run's last
@@ -18,7 +20,7 @@ Needs `ledger` on PATH; exit 2 when it, the run folder or REF is missing.
 
 The layout (see the skill's references/layout.md):
   AGENTS.md, README.md, ROADMAP.md, HUMAN_TASKS.md, IDEAS.md
-  docs/VISION.md      goals table with G ids, and non-goals
+  docs/VISION.md      goals table with G ids, each with a measure, a lever and a first move; non-goals
   docs/DECISIONS.md   numbered decisions, append-only
   docs/phases/<id>-<slug>.md   one spec per phase: ideal state, criteria and anti-criteria with probes
   docs/plans/         temporary plans; deleted when their phase is done
@@ -48,7 +50,13 @@ NEEDS_CONFIRMATION = ("planned", "building", "in progress", "gated")
 STATUSES = ("not started", "specced", "planned", "building", "in progress", "gated", "done", "parked")
 DECISION = re.compile(r"^### D(\d+)\.\s+\S")
 DECISION_STATUS = re.compile(r"^\*(Accepted|Proposed|Superseded|Rejected)\b")
-GOAL_ROW = re.compile(r"^\|\s*G\d+\s*\|")
+GOAL_ROW = re.compile(r"^\|\s*(G\d+)\s*\|")
+# What each goal row says besides the goal: how you read where it stands, what you can change that
+# moves that reading, and the first thing to do with it.
+GOAL_COLUMNS = {"measure": "say how you read where this goal stands today",
+                "lever": "say what you can change that moves the measure",
+                "first move": "say the first thing to do with that lever"}
+EMPTY_CELL = ("", "-", "--", "—", "–", "?", "tbd", "todo", "n/a")
 BOX = re.compile(r"^\s*- \[[ xX]\] ")
 PHASE_FILE = re.compile(r"^(P\d+[a-z]?)-[a-z0-9-]+\.md$")
 ROADMAP_ROW = re.compile(r"^\|\s*(P\d+[a-z]?)(?![\w.])[^|]*\|([^|]*)\|")
@@ -69,9 +77,10 @@ def check(repo: Path) -> list[str]:
     goals: set[str] = set()
     if vision.is_file():
         text = lines(vision)
-        goals = {m.group(1) for l in text if (m := re.match(r"^\|\s*(G\d+)\s*\|", l))}
-        if not any(GOAL_ROW.match(l) for l in text):
+        goals = {m.group(1) for l in text if (m := GOAL_ROW.match(l))}
+        if not goals:
             out.append("docs/VISION.md:1: no goals table with G1, G2, ... rows; goals need ids that phases can cite")
+        out += goal_columns(text)[0]
         if not any(l.strip().lower().startswith("## non-goals") for l in text):
             out.append("docs/VISION.md:1: no '## Non-goals' section")
 
@@ -153,6 +162,74 @@ def check(repo: Path) -> list[str]:
             if not any((repo / d / name / "SKILL.md").is_file() for d in (".agents/skills", ".claude/skills", "skills")):
                 out.append(f"AGENTS.md:1: names {name}, but no {name}/SKILL.md under .agents/skills, .claude/skills or skills")
     return out
+
+
+def cells(row: str) -> list[str]:
+    """A table row's cells. A `\\|`, or a `|` inside a code span, is text and not a column break."""
+    found, cell, in_code, i = [], "", False, 0
+    while i < len(row):
+        c = row[i]
+        if c == "\\" and row[i + 1:i + 2] == "|":
+            cell, i = cell + "|", i + 2
+            continue
+        if c == "`":
+            in_code = not in_code
+        if c == "|" and not in_code:
+            found.append(cell.strip())
+            cell = ""
+        else:
+            cell += c
+        i += 1
+    found.append(cell.strip())
+    return found[1:-1] if row.strip().endswith("|") else found[1:]
+
+
+def goal_columns(text: list[str]) -> tuple[list[str], list[str]]:
+    """(problems, notes) for the goals table: the first table in VISION.md with G rows.
+
+    A table with all of Measure, Lever and First move fails each goal row that leaves one empty. A
+    table with some of them fails once. A table with none predates the columns: that is a note.
+    """
+    first = next((i for i, l in enumerate(text) if GOAL_ROW.match(l)), None)
+    if first is None:
+        return [], []
+    top = first
+    while top > 0 and text[top - 1].lstrip().startswith("|"):
+        top -= 1
+    if top == first:
+        return [], []
+    end = first
+    while end < len(text) and text[end].lstrip().startswith("|"):
+        end += 1
+    header = [c.strip("*_` ").lower() for c in cells(text[top])]
+    where = f"docs/VISION.md:{top + 1}"
+    have = [c for c in GOAL_COLUMNS if c in header]
+    missing = [c for c in GOAL_COLUMNS if c not in header]
+    names = lambda cs: " or ".join(c.capitalize() for c in cs)
+    if not have:
+        return [], [f"{where}: goals table has no Measure, Lever and First move columns. Nothing fails until it "
+                    f"has them. A person supplies them: see scaffold-product's 'Add measure, lever and first move "
+                    f"to the goals'"]
+    if missing:
+        return [f"{where}: goals table has a {names(have).replace(' or ', ' and ')} column but no {names(missing)} "
+                f"column; a goal needs all of Measure, Lever and First move"], []
+    out = []
+    for i in range(first, end):
+        m = GOAL_ROW.match(text[i])
+        if not m:
+            continue
+        row = cells(text[i])
+        for column, ask in GOAL_COLUMNS.items():
+            at = header.index(column)
+            if at >= len(row) or row[at].strip("*_` ").lower() in EMPTY_CELL:
+                out.append(f"docs/VISION.md:{i + 1}: {m.group(1)} has no {column.capitalize()}; {ask}")
+    return out, []
+
+
+def notes(repo: Path) -> list[str]:
+    """What the checker will hold this repo to once it adopts a newer format. Printed, never failed."""
+    vision = repo / "docs/VISION.md"
+    return goal_columns(lines(vision))[1] if vision.is_file() else []
 
 
 def sections(text: list[str]) -> dict[str, tuple[int, list[str]]]:
@@ -443,7 +520,12 @@ def main(argv: list[str]) -> int:
         receipt_line = f", receipts: {new} newly checked, {backed} backed"
     for p in problems:
         print(p, file=sys.stderr)
-    print(f"check-product: {repo.name}: {len(problems)} problem(s), {drafts(repo)} draft marker(s) awaiting confirmation{receipt_line}")
+    noted = notes(repo)
+    for n in noted:
+        print(f"note: {n}", file=sys.stderr)
+    note_line = f", {len(noted)} note(s)" if noted else ""
+    print(f"check-product: {repo.name}: {len(problems)} problem(s), {drafts(repo)} draft marker(s) awaiting confirmation"
+          f"{note_line}{receipt_line}")
     return 1 if problems else 0
 
 

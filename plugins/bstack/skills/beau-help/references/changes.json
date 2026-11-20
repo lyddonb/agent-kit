@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "id": "bstack@0.22.0",
+      "date": "2026-11-19",
+      "plugin": "bstack",
+      "version": "0.22.0",
+      "changes": [
+        "A product's goals now say what measures them, what moves them and the first move. The `docs/VISION.md` goals table has Measure, Lever and First move columns, scaffold-product asks for them in the interview and drafts them when it adopts a repo, and a new phase spec has a `**Lever.**` sentence naming which lever of its goal it pulls.",
+        "`check-product.py` fails a goal row that leaves Measure, Lever or First move empty, once the goals table has those columns. A table written before them gets a `note:` line and still passes, so no product repo breaks. scaffold-product's \"Add measure, lever and first move to the goals\" drafts the cells from evidence for you to confirm."
+      ],
+      "try": "Add measure, lever and first move to the goals in docs/VISION.md."
+    },
+    {
       "id": "bstack@0.21.0",
       "date": "2026-11-19",
       "plugin": "bstack",

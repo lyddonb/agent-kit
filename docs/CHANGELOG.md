@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.22.0 (2026-11-19)
+
+- A product's goals now say what measures them, what moves them and the first move. The `docs/VISION.md` goals table has Measure, Lever and First move columns, scaffold-product asks for them in the interview and drafts them when it adopts a repo, and a new phase spec has a `**Lever.**` sentence naming which lever of its goal it pulls.
+- `check-product.py` fails a goal row that leaves Measure, Lever or First move empty, once the goals table has those columns. A table written before them gets a `note:` line and still passes, so no product repo breaks. scaffold-product's "Add measure, lever and first move to the goals" drafts the cells from evidence for you to confirm.
+- Try: `Add measure, lever and first move to the goals in docs/VISION.md.`
+
 ## bstack 0.21.0 (2026-11-19)
 
 - beau-mode now caps fix rounds. In the Bug fix, Feature and Autonomous run playbooks, when the same check still fails after three fixes, the agent stops work on that check and tells you which check, what it tried and why it is stuck. It doesn't skip, loosen or rerun the check, and "don't stop" doesn't lift the cap. A fix that uncovers a different failure doesn't count against it, and other work carries on.
