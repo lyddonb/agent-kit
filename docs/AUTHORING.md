@@ -93,6 +93,39 @@ These keep a skill behaving the same in every client:
 | Name a model role (`judgment`, `reviewers`) | Hard-code a model id in a skill | Model ids differ per tool and change often; agentfiles maps roles to models |
 | Write descriptions with trigger phrases ("Use when ...") | Write "Helps with X" | Agents choose skills from the description alone |
 
+## Commands a skill names (enforced by `make validate`)
+
+When a skill tells an agent to run one of the kit's scripts, the script, the subcommand and
+every flag must exist. `tools/validate.py` reads what each script under a skill's `scripts/`
+accepts from its source (it never runs one) and checks every command in the inline code and
+fenced blocks of each `SKILL.md`, playbook, reference and snippet:
+
+```
+error:   plugins/cfo/skills/cfo-brief/SKILL.md:45: passes --weekly to `books.py summary`, which does not accept it (it accepts --as-of, --help, --json, --month)
+```
+
+Fix the doc or the script. Inline code that names a kit script is read as a command, so
+`` `books.py and quality.py` `` fails: give each its own code span.
+
+Three things keep the check able to read a script:
+
+- Build an argparse parser with each parser bound to a variable and every flag a string
+  literal. A helper that adds arguments to a parser passed in, or a loop over flag names,
+  fails the check: it can't tell which flags exist or which subcommand they belong to.
+- A script that reads `sys.argv` itself keeps its flag literals in a function that takes `argv`.
+- Two skills never ship a script with the same file name, since docs name a script by file name.
+
+What the check leaves alone:
+
+- A flag written on its own (`` `--peek` `` in a sentence), a subcommand written without its
+  script (`` `next CASE` ``), and a script named outside code formatting. Write the whole
+  command when it matters.
+- Words after a pipe, a redirect, `&&`, `;`, a bare `--` or a `#` comment. A kit script run after one of
+  those (`cd DIR && python3 scripts/x.py ...`) is still checked.
+- A script that another program reads (`cat scripts/x.sh`, `ruff check scripts/x.py`), a file
+  of the same name in another folder, and `./scripts/...`, which is the project's own.
+- Short flags, and whether a flag's value is valid.
+
 ## MCP servers
 
 Declare them once in `kit.yaml` using the Agent Plugins shape:
