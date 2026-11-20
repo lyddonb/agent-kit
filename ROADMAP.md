@@ -565,8 +565,8 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 - `quality.py` stays standard library only, and `summary --json` stays byte-stable.
 - No health score and no dashboard. Skills get one section in the weekly brief.
 
-Order: R38's prototype is done and its build waits on H15 and the books repo's H6. agentfiles
-R17 can start, since the lint it runs has shipped.
+Order: R38's prototype is done and its build can start (H15 and the books repo's H6 are both
+yes). agentfiles R17 can start, since the lint it runs has shipped.
 agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
@@ -582,7 +582,7 @@ searches, tool errors). The verdict column exists and every row is `unjudged` fo
 unit is every installed skill, keyed on `agentfiles.lock`, not only the kit's own.
 `quality.py summary --json` gains uses per skill. No transcript text is booked.
 
-What the prototype settled (unit 1, run on four weeks of real transcripts, 2026-11-20):
+What the prototype settled (unit 1, run on four weeks of real transcripts, 2026-11-19):
 
 - **Claude Code is the first tool.** A use is a `Skill` tool call, a typed slash command, or a
   `Read` of an installed `SKILL.md`. A `Read` of a `SKILL.md` in a checkout is someone editing
@@ -605,7 +605,7 @@ What the prototype settled (unit 1, run on four weeks of real transcripts, 2026-
   It records no tool results and no time per record, so a row is dated by its file and its
   counts are empty.
 - **Codex is left out** until it has sessions: none in the four weeks.
-- **No correction signal in the first version** (Beau, 2026-11-20). A rule on the next typed
+- **No correction signal in the first version** (Beau, 2026-11-19). A rule on the next typed
   turn matched 2 of 1,158 turns, so it can't be told apart from noise without reading the
   text. A correction can come back later from a ledger `rejection` entry (R23), and never
   from a guess at the next user turn.
@@ -615,16 +615,15 @@ What the prototype settled (unit 1, run on four weeks of real transcripts, 2026-
 **Where:** `plugins/cfo/skills/cfo-books/scripts/weekly-claude-code.sh`,
 `plugins/bstack/skills/qualitydirector/**`, `plugins/bstack/skills/reflect/scripts/find-transcripts.py`,
 tests, `kit.yaml`, `changes.yaml`, generated files.
-**Depends on:** H15 and the books repo's H6 (Beau allows the read and the booking). R19 if the
+**Depends on:** H15 and the books repo's H6, both answered yes on 2026-11-19. R19 if the
 transcript reader has to live outside `reflect`. agentfiles H13 decides whether cfo's own
 skills are counted. For governed runs the pass can read the redacted archives
 `ledger session add` keeps under `.audit/runs/<run>/sessions/`.
 **Playbook:** Feature, from the findings above.
 **Done when:** a run over the last four weeks of real transcripts books rows, `check` passes,
 a second run changes nothing, and ten rows picked at random match the transcripts by hand.
-**Why not done:** Unit 2 waits on H15 and H6. The prototype was a throwaway script and
-nothing is booked.
-**Prioritize when:** H15 and H6 are answered. It feeds agent-ledger's M3 unit 1, R41 and R3.
+**Why not done:** The prototype was a throwaway script and nothing is booked. Unit 2 is next.
+**Prioritize when:** now. It feeds agent-ledger's M3 unit 1, R41 and R3.
 
 ## P1
 
