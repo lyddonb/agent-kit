@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The Quality Director's primitives: record a test run, fetch the runs of watched repos from GitHub,
-book them into the quality books, check the books, and summarize a week.
+book them into the quality books, check the books, and summarize a week. `audit-ci` is separate: it reads a repo's
+workflow files, not the books.
 
 Usage:
     uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
@@ -8,6 +9,7 @@ Usage:
     uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
     uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json]
+    uv run --python 3.12 quality.py audit-ci REPO_DIR [--json]
 
 `record` runs `python -m unittest discover -s TESTS_DIR` and writes what happened to FILE as
 JSON Lines: a run header, then one line per test with its outcome (pass, fail, error, skip) and
@@ -193,6 +195,7 @@ if sys.version_info < (3, 10):
 import argparse
 import contextlib
 import csv
+import errno
 import hashlib
 import io
 import json
@@ -3157,6 +3160,658 @@ def jobs_booked_evidence(books: Books) -> set[str] | None:
     return {r.cells["evidence"] for r in books.tables[JOBS].rows} if adopted(books) else None
 
 
+# ---------------------------------------------------------------------------
+# audit-ci: what a repo's workflow files say about CI speed, read from the files and nothing else
+# ---------------------------------------------------------------------------
+#
+# `audit-ci REPO_DIR` is read-only: it opens `.github/workflows/*.yml|*.yaml` for reading and prints. It never follows a symlink,
+# reads at most MAX_WORKFLOW_BYTES per file and MAX_WORKFLOWS files, and prints text that a pull request controls only after
+# `_audit_text` (no control characters, MAX_CELL characters at most). Python has no YAML reader, so `read_workflow_yaml` reads
+# the block-style subset workflows use and refuses (WorkflowUnreadable) whatever it cannot read exactly: it returns what PyYAML's
+# BaseLoader returns (dict, list and str only) or it raises.
+
+AUDIT_VERSION = 1
+MAX_WORKFLOW_BYTES = 1 << 20
+MAX_WORKFLOWS = 200
+MAX_YAML_DEPTH = 40
+MAX_YAML_KEY = 1000  # PyYAML refuses a simple key longer than 1024
+MAX_MATRIX_COMBINATIONS = 10 ** 9  # a product above this is reported as "unknown"
+SELECTION_PROOF = "not checked"  # no convention exists yet for where a path filter's proof lives
+WORKFLOWS_DIR = ".github/workflows"
+
+
+class WorkflowUnreadable(Exception):
+    """A workflow this command will not read, and why (`line N: why` when the reader refused a line)."""
+
+
+class _Line(NamedTuple):
+    indent: int
+    text: str  # the line after its indentation, comment included
+    no: int
+
+
+# Every character PyYAML accepts, minus the ones this reader refuses: tab, carriage return, NEL, line and paragraph separators, BOM.
+_BAD_YAML_CHAR = re.compile("[^\n\x20-\x7e\xa0-‧‪-퟿-﻾＀-�\U00010000-\U0010ffff]")
+_PLAIN_KEY = re.compile(r"[A-Za-z0-9_$./][A-Za-z0-9_ $./=+()@{}<>~^;-]*")
+_BLOCK_HEADER = re.compile(r"([|>])([+-]?)(?: *| +#.*)")
+_ESCAPES = {"0": "\0", "a": "\a", "b": "\b", "t": "\t", "n": "\n", "v": "\v", "f": "\f", "r": "\r", "e": "\x1b", " ": " ",
+            '"': '"', "/": "/", "\\": "\\"}
+
+
+def _refuse(no: int, why: str) -> WorkflowUnreadable:
+    return WorkflowUnreadable(f"line {no}: {why}")
+
+
+def _is_dash(text: str) -> bool:
+    return text == "-" or text.startswith("- ")
+
+
+def _spaces(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _skip_spaces(text: str, i: int) -> int:
+    while i < len(text) and text[i] == " ":
+        i += 1
+    return i
+
+
+def _block_scalar(raw: list[str], start: int, parent: int, folded: bool, chomp: str, no: int) -> tuple[str, int]:
+    """A `|` or `>` body that starts at raw[start], where `parent` is the indent of the collection it sits in. This is PyYAML's
+    scan_block_scalar line by line: `raw` is the text split on "\\n", so only raw[-1] has no break after it (an empty raw[-1] is
+    the end of the file). Returns the text and the index of the first line that is not part of it."""
+    last = len(raw) - 1
+    min_indent = max(parent + 1, 1)
+    k, widest, breaks = start, 0, []
+    while k <= last and raw[k].strip(" ") == "":
+        widest = max(widest, len(raw[k]))
+        if k < last:
+            breaks.append("\n")
+        k += 1
+    chunks: list[str] = []
+    line_break = ""
+    if k <= last and _spaces(raw[k]) >= min_indent:
+        indent = _spaces(raw[k])
+        if widest > indent:
+            raise _refuse(no, "a blank line before the block scalar's text is indented deeper than the text")
+        while True:
+            chunks.extend(breaks)
+            text = raw[k][indent:]
+            chunks.append(text)
+            line_break = "\n" if k < last else ""
+            k += 1
+            breaks = []
+            while k <= last and raw[k].strip(" ") == "" and len(raw[k]) <= indent:
+                if k < last:
+                    breaks.append("\n")
+                k += 1
+            if k > last or _spaces(raw[k]) < indent:
+                break
+            if folded and line_break == "\n" and text[0] not in " \t" and raw[k][indent] not in " \t":
+                if not breaks:
+                    chunks.append(" ")
+            else:
+                chunks.append(line_break)
+    if chomp != "-":
+        chunks.append(line_break)
+    if chomp == "+":
+        chunks.extend(breaks)
+    return "".join(chunks), k
+
+
+class _YamlReader:
+    """Block-style YAML, one document, read line by line. Anything outside the subset raises WorkflowUnreadable."""
+
+    def __init__(self, text: str) -> None:
+        self.raw = text.split("\n")
+        self.pos = 0
+        self.held: _Line | None = None
+        self.depth = 0
+
+    def _scan(self) -> _Line | None:
+        while self.pos < len(self.raw):
+            line = self.raw[self.pos]
+            self.pos += 1
+            text = line.lstrip(" ")
+            if text == "" or text[0] == "#":
+                continue
+            if line.startswith(("---", "...")):
+                raise _refuse(self.pos, "a document marker (this reader reads one document)")
+            if line.startswith("%"):
+                raise _refuse(self.pos, "a directive")
+            return _Line(len(line) - len(text), text, self.pos)
+        return None
+
+    def peek(self) -> _Line | None:
+        if self.held is None:
+            self.held = self._scan()
+        return self.held
+
+    def take(self) -> _Line | None:
+        line = self.peek()
+        self.held = None
+        return line
+
+    def enter(self, no: int) -> None:
+        self.depth += 1
+        if self.depth > MAX_YAML_DEPTH:
+            raise _refuse(no, f"nesting deeper than {MAX_YAML_DEPTH} levels")
+
+    def node(self) -> dict | list:
+        line = self.peek()
+        assert line is not None
+        return self.seq(line.indent) if _is_dash(line.text) else self.map(line.indent)
+
+    def child(self, parent: int, same_indent_list: bool) -> dict | list | str:
+        line = self.peek()
+        if line is None:
+            return ""
+        if line.indent > parent:
+            return self.node()
+        if same_indent_list and line.indent == parent and _is_dash(line.text):
+            return self.seq(parent)
+        return ""
+
+    def map(self, indent: int) -> dict:
+        out: dict = {}
+        first = self.peek()
+        assert first is not None
+        self.enter(first.no)
+        while (line := self.peek()) is not None and line.indent == indent and not _is_dash(line.text):
+            self.take()
+            split = self.key_of(line.text, line.no)
+            if split is None:
+                raise _refuse(line.no, "not a `key: value` line this reader reads")
+            key, rest = split
+            if key in out:
+                raise _refuse(line.no, f"the key {_show(key)} appears twice")
+            out[key] = self.value(rest, indent, line.no)
+        self.depth -= 1
+        self.no_deeper(indent)
+        return out
+
+    def seq(self, indent: int) -> list:
+        out: list = []
+        first = self.peek()
+        assert first is not None
+        self.enter(first.no)
+        while (line := self.peek()) is not None and line.indent == indent and _is_dash(line.text):
+            self.take()
+            body = line.text[1:]
+            rest = body.lstrip(" ")
+            inner = indent + 1 + len(body) - len(rest)
+            if rest == "" or rest[0] == "#":
+                out.append(self.child(indent, same_indent_list=False))
+            elif _is_dash(rest):
+                raise _refuse(line.no, "a list inside a list on one line")
+            elif self.key_of(rest, line.no) is not None:
+                self.held = _Line(inner, rest, line.no)
+                out.append(self.map(inner))
+            else:
+                out.append(self.value(rest, indent, line.no))
+        self.depth -= 1
+        self.no_deeper(indent)
+        return out
+
+    def no_deeper(self, indent: int) -> None:
+        line = self.peek()
+        if line is not None and line.indent > indent:
+            raise _refuse(line.no, "indentation that continues nothing (a value on more than one line is not read)")
+
+    def key_of(self, text: str, no: int) -> tuple[str, str] | None:
+        """`key: rest` at the start of text as (key, rest), or None when text is not a mapping entry."""
+        if text[0] in "\"'":
+            key, end = self.quoted(text, 0, no)
+            after = text[end:].lstrip(" ")
+            if after[:1] != ":" or after[1:2] not in ("", " "):
+                return None
+            if len(text) - len(after) > MAX_YAML_KEY:  # PyYAML measures from the key's start to its colon, spaces included
+                raise _refuse(no, "a key longer than PyYAML reads")
+            return key, after[1:].lstrip(" ")
+        colon = text.find(":")
+        if colon < 0 or text[colon + 1:colon + 2] not in ("", " "):
+            return None
+        key = text[:colon].rstrip(" ")
+        if _PLAIN_KEY.fullmatch(key) is None:
+            return None
+        if colon > MAX_YAML_KEY:
+            raise _refuse(no, "a key longer than PyYAML reads")
+        return key, text[colon + 1:].lstrip(" ")
+
+    def value(self, rest: str, parent: int, no: int) -> dict | list | str:
+        if rest == "" or rest[0] == "#":
+            return self.child(parent, same_indent_list=True)
+        first = rest[0]
+        if first in "|>":
+            header = _BLOCK_HEADER.fullmatch(rest)
+            if header is None:
+                raise _refuse(no, "a block scalar header with an indentation indicator or other text")
+            scalar, self.pos = _block_scalar(self.raw, self.pos, parent, first == ">", header.group(2), no)
+            return scalar
+        if first in "\"'":
+            scalar, end = self.quoted(rest, 0, no)
+            self.tail(rest[end:], no)
+        elif first == "[":
+            scalar = self.flow_list(rest, no)
+        else:
+            scalar = self.plain(rest, no)
+        self.no_deeper(parent)
+        return scalar
+
+    def tail(self, tail: str, no: int) -> None:
+        after = tail.lstrip(" ")
+        if after != "" and not (after[0] == "#" and tail[0] == " "):
+            raise _refuse(no, "text after a quoted value or a list")
+
+    def plain(self, rest: str, no: int) -> str:
+        cut = rest.find(" #")
+        text = (rest if cut < 0 else rest[:cut]).rstrip(" ")
+        first = text[0]
+        if first in "&*!|>%@`,]}{[#" or (first in "-?:" and (len(text) == 1 or text[1] == " ")):
+            raise _refuse(no, f"{first!r} starts a form this reader does not read (anchor, alias, tag, flow map or reserved)")
+        if ": " in text or text.endswith(":"):
+            raise _refuse(no, "a colon followed by a space inside a plain value (PyYAML refuses it too)")
+        return text
+
+    def quoted(self, text: str, start: int, no: int) -> tuple[str, int]:
+        quote, i, out = text[start], start + 1, []
+        while i < len(text):
+            c = text[i]
+            if c == quote:
+                if quote == "'" and text[i + 1:i + 2] == "'":
+                    out.append("'")
+                    i += 2
+                    continue
+                return "".join(out), i + 1
+            if c == "\\" and quote == '"':
+                escape = _ESCAPES.get(text[i + 1:i + 2])
+                if escape is None:
+                    raise _refuse(no, "an escape this reader does not read")
+                out.append(escape)
+                i += 2
+                continue
+            out.append(c)
+            i += 1
+        raise _refuse(no, "a quoted value that does not end on its line")
+
+    def flow_list(self, text: str, no: int) -> list[str]:
+        items: list[str] = []
+        i = 1
+        while True:
+            i = _skip_spaces(text, i)
+            if i >= len(text):
+                raise _refuse(no, "a list that does not end on its line")
+            if text[i] == "]":
+                break
+            if text[i] in "\"'":
+                item, i = self.quoted(text, i, no)
+            else:
+                end = i
+                while end < len(text) and text[end] not in ",]":
+                    end += 1
+                if end >= len(text):
+                    raise _refuse(no, "a list that does not end on its line")
+                item = text[i:end].rstrip(" ")
+                i = end
+                if item == "" or item[0] in "&*!|>%@`#?:" or (item[0] == "-" and item[1:2] in ("", " ")) \
+                        or any(c in item for c in "[]{}#?") or re.search(r":(\s|$)", item):
+                    raise _refuse(no, "a list item this reader does not read (empty, nested, tagged or with a colon)")
+            items.append(item)
+            i = _skip_spaces(text, i)
+            if i >= len(text):
+                raise _refuse(no, "a list that does not end on its line")
+            if text[i] == ",":
+                i += 1
+            elif text[i] != "]":
+                raise _refuse(no, "text after a list item")
+        self.tail(text[i + 1:], no)
+        return items
+
+
+def read_workflow_yaml(text: str) -> dict | list:
+    """What PyYAML's BaseLoader returns for text (dict, list and str only), or WorkflowUnreadable. Never an approximation."""
+    text = text.replace("\r\n", "\n")
+    bad = _BAD_YAML_CHAR.search(text)
+    if bad is not None:
+        raise _refuse(text.count("\n", 0, bad.start()) + 1, f"{_show(bad.group())} (a tab, control character or unusual line break is not read)")
+    reader = _YamlReader(text)
+    first = reader.peek()
+    if first is None:
+        raise _refuse(1, "the file has no content")
+    if first.indent != 0:
+        raise _refuse(first.no, "the first line is indented")
+    try:
+        doc = reader.node()
+    except RecursionError:
+        raise _refuse(first.no, "nesting too deep") from None
+    left = reader.peek()
+    if left is not None:
+        raise _refuse(left.no, "indentation or a list entry that belongs to nothing")
+    return doc
+
+
+class Concurrency(NamedTuple):
+    set: bool
+    cancel_in_progress: str  # "yes" | "no" | "pull_requests_only" | "unknown"
+    raw: str | None  # the text of the expression when "unknown" or "pull_requests_only"
+
+
+class Matrix(NamedTuple):
+    axes: dict[str, int | str]  # the length of each list axis, "unknown" for an axis that is an expression
+    include: int
+    exclude: int
+    combinations: int | str  # "unknown" unless every axis is a literal list and there is no include or exclude
+    full_on_pull_request: str  # "yes" | "no" | "unknown"
+
+
+class PathFilter(NamedTuple):
+    trigger: str
+    paths: list[str]
+    paths_ignore: list[str]
+    selection_proof: str
+
+
+class JobFacts(NamedTuple):
+    id: str
+    reusable_workflow: bool
+    timeout_minutes: int | str | None  # None when absent, "unknown", "not applicable" for a reusable workflow
+    concurrency: Concurrency
+    matrix: Matrix | None
+    caching: list[str]
+    steps: int
+
+
+class WorkflowFacts(NamedTuple):
+    path: str
+    sha256: str | None
+    unreadable: str | None  # why, or None when the file was read
+    name: str | None
+    triggers: list[str]
+    on_pull_request: bool
+    concurrency: Concurrency
+    path_filters: list[PathFilter]
+    jobs: list[JobFacts]
+
+
+_NO_CONCURRENCY = Concurrency(False, "no", None)
+_MATRIX_UNKNOWN = Matrix({}, 0, 0, "unknown", "unknown")
+_EVENT_IS = r"github\.event_name\s*==\s*'(pull_request|pull_request_target)'"
+_PR_ONLY = re.compile(rf"\s*{_EVENT_IS}\s*(?:\|\|\s*{_EVENT_IS}\s*)?")
+
+
+def _audit_text(value: object) -> str:
+    """Text from a workflow, safe to print: no control characters, at most MAX_CELL characters."""
+    shown = printable(str(value))
+    return shown if len(shown) <= MAX_CELL else shown[:MAX_CELL - 3] + "..."
+
+
+def _is_pr_only(expression: str) -> bool:
+    """True for a test of the event name against pull_request, alone or joined to pull_request_target. Spaces count only around
+    `==` and `||`, and only single-quoted strings, which is all GitHub reads."""
+    inner = re.fullmatch(r"\$\{\{(.*)\}\}", expression.strip(), re.S)
+    match = _PR_ONLY.fullmatch(inner.group(1)) if inner else None
+    return match is not None and "pull_request" in match.groups() and match.group(1) != match.group(2)
+
+
+def _kind(value: object) -> str:
+    return "(map)" if isinstance(value, dict) else "(list)"
+
+
+def _concurrency(node: object) -> Concurrency:
+    if node is None or node == "":
+        return _NO_CONCURRENCY
+    if not isinstance(node, dict):
+        return Concurrency(True, "no", None) if isinstance(node, str) else Concurrency(True, "unknown", _kind(node))
+    if "cancel-in-progress" not in node:
+        return Concurrency(True, "no", None)
+    value = node["cancel-in-progress"]
+    if not isinstance(value, str):
+        return Concurrency(True, "unknown", _kind(value))
+    if value in ("true", "false"):
+        return Concurrency(True, "yes" if value == "true" else "no", None)
+    return Concurrency(True, "pull_requests_only" if _is_pr_only(value) else "unknown", _audit_text(value))
+
+
+def _mentions_event(value: object) -> bool:
+    if isinstance(value, str):
+        return "github.event_name" in value
+    if isinstance(value, list):
+        return any(_mentions_event(v) for v in value)
+    return isinstance(value, dict) and any(_mentions_event(v) for v in value.values())
+
+
+def _matrix(job: dict, on_pull_request: bool, called: bool) -> Matrix | None:
+    strategy = job.get("strategy")
+    if isinstance(strategy, str) and strategy != "":
+        return _MATRIX_UNKNOWN
+    if not isinstance(strategy, dict) or "matrix" not in strategy:
+        return None
+    matrix = strategy["matrix"]
+    if not isinstance(matrix, dict):
+        return _MATRIX_UNKNOWN
+    axes: dict[str, int | str] = {}
+    conditional = job.get("if") not in (None, "")  # any condition may skip the job on a pull request; none is evaluated here
+    mentions = False
+    for key, value in matrix.items():
+        if key in ("include", "exclude"):
+            continue
+        if isinstance(value, list):
+            axes[_audit_text(key)] = len(value)
+        else:
+            axes[_audit_text(key)] = "unknown"
+        mentions = mentions or _mentions_event(value)
+    combinations: int | str = "unknown"
+    if axes and "include" not in matrix and "exclude" not in matrix and all(type(n) is int for n in axes.values()):
+        combinations = 1
+        for n in axes.values():
+            combinations *= n
+            if combinations > MAX_MATRIX_COMBINATIONS:
+                combinations = "unknown"
+                break
+    include, exclude = matrix.get("include"), matrix.get("exclude")
+    # A called workflow runs in its caller's event, so it may run on pull requests.
+    full = "unknown" if combinations == "unknown" or mentions or conditional or (called and not on_pull_request) else ("yes" if on_pull_request else "no")
+    return Matrix(axes, len(include) if isinstance(include, list) else 0, len(exclude) if isinstance(exclude, list) else 0, combinations, full)
+
+
+def _caching(steps: list) -> list[str]:
+    found: set[str] = set()
+    for step in steps:
+        uses = step.get("uses") if isinstance(step, dict) else None
+        if not isinstance(uses, str):
+            continue
+        action = uses.split("@", 1)[0].strip().lower()
+        options = step.get("with")
+        options = options if isinstance(options, dict) else {}
+        cache = options.get("cache")
+        if action in ("actions/cache", "actions/cache/restore"):
+            found.add("actions/cache")
+        elif action.startswith("actions/setup-") and isinstance(cache, str) and cache.strip() not in ("", "false"):
+            found.add(f"{action} cache: {'expression' if '${{' in cache else cache.strip()}")
+        elif action == "astral-sh/setup-uv" and options.get("enable-cache") == "true":
+            found.add("astral-sh/setup-uv cache")
+    return sorted(_audit_text(name) for name in found)
+
+
+def _timeout_minutes(job: dict, reusable: bool) -> int | str | None:
+    value = job.get("timeout-minutes")
+    if reusable:
+        return "not applicable"
+    if value is None:
+        return None
+    return int(value) if isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value) else "unknown"
+
+
+def _job_facts(job_id: str, job: dict, on_pull_request: bool, called: bool) -> JobFacts:
+    reusable = isinstance(job.get("uses"), str)
+    steps = job.get("steps")
+    steps = steps if isinstance(steps, list) else []
+    return JobFacts(_audit_text(job_id), reusable, _timeout_minutes(job, reusable), _concurrency(job.get("concurrency")),
+                    _matrix(job, on_pull_request, called), _caching(steps), len(steps))
+
+
+def _strings(value: object) -> list[str]:
+    values = value if isinstance(value, list) else [value] if isinstance(value, str) else []
+    return [_audit_text(v) for v in values if isinstance(v, str)]
+
+
+def _workflow_facts(path: str, sha256: str, doc: object) -> WorkflowFacts:
+    if not isinstance(doc, dict):
+        raise WorkflowUnreadable("the top level is not a map")
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict) or not jobs:
+        raise WorkflowUnreadable("there is no jobs map")
+    for job_id, job in jobs.items():
+        if not isinstance(job, dict):
+            raise WorkflowUnreadable(f"the job {_show(job_id)} is not a map")
+    on = doc.get("on")
+    if isinstance(on, list) and not all(isinstance(t, str) for t in on):
+        raise WorkflowUnreadable("the on list has an entry that is not an event name")
+    triggers = sorted({_audit_text(t) for t in (on if isinstance(on, (list, dict)) else [on] if isinstance(on, str) and on != "" else [])})
+    on_pull_request = "pull_request" in triggers or "pull_request_target" in triggers
+    filters = [PathFilter(_audit_text(t), _strings(v.get("paths")), _strings(v.get("paths-ignore")), SELECTION_PROOF)
+               for t, v in sorted(on.items()) if isinstance(v, dict) and ("paths" in v or "paths-ignore" in v)] if isinstance(on, dict) else []
+    name = doc.get("name")
+    return WorkflowFacts(path, sha256, None, _audit_text(name) if isinstance(name, str) and name != "" else None, triggers,
+                         on_pull_request, _concurrency(doc.get("concurrency")), filters,
+                         [_job_facts(job_id, job, on_pull_request, "workflow_call" in triggers) for job_id, job in jobs.items()])
+
+
+def _unreadable(path: str, sha256: str | None, why: str) -> WorkflowFacts:
+    return WorkflowFacts(_audit_text(path), sha256, _audit_text(why), None, [], False, _NO_CONCURRENCY, [], [])
+
+
+def _read_regular_file(path: str) -> tuple[bytes | None, str]:
+    """The bytes of a regular file that is not a symlink and at most MAX_WORKFLOW_BYTES (else None and why not)."""
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return None, "is a symbolic link, which this command does not follow" if os.path.islink(path) else "is not a regular file"
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError as e:
+        return None, "is a symbolic link, which this command does not follow" if e.errno == errno.ELOOP else f"could not be read: {e.strerror}"
+    with os.fdopen(fd, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            return None, "is not a regular file"
+        data = handle.read(MAX_WORKFLOW_BYTES + 1) if info.st_size <= MAX_WORKFLOW_BYTES else b""
+    return (data, "") if info.st_size <= MAX_WORKFLOW_BYTES and len(data) <= MAX_WORKFLOW_BYTES else (None, f"is larger than {MAX_WORKFLOW_BYTES} bytes")
+
+
+def _audit_file(path: str, rel: str) -> WorkflowFacts:
+    data, why = _read_regular_file(path)
+    if data is None:
+        return _unreadable(rel, None, why)
+    sha256 = hashlib.sha256(data).hexdigest()
+    try:
+        return _workflow_facts(_audit_text(rel), sha256, read_workflow_yaml(data.decode("utf-8")))
+    except UnicodeDecodeError:
+        return _unreadable(rel, sha256, "is not UTF-8 text")
+    except WorkflowUnreadable as e:
+        return _unreadable(rel, sha256, str(e))
+
+
+class AuditLimit(Exception):
+    """The repo has more workflow files than audit-ci reads."""
+
+
+def audit_workflows(repo_dir: str) -> list[WorkflowFacts]:
+    """The facts of every workflow file under REPO_DIR/.github/workflows, sorted by path. Reads nothing else, writes nothing."""
+    folder = repo_dir
+    for part, rel in ((".github", ".github"), ("workflows", WORKFLOWS_DIR)):
+        folder = os.path.join(folder, part)
+        try:
+            info = os.lstat(folder)
+        except (FileNotFoundError, NotADirectoryError):
+            return []
+        except OSError as e:
+            return [_unreadable(rel, None, f"could not be inspected: {e.strerror}")]
+        if stat.S_ISLNK(info.st_mode):
+            return [_unreadable(rel, None, "is a symbolic link, which this command does not follow")]
+        if not stat.S_ISDIR(info.st_mode):
+            return [] if part == ".github" else [_unreadable(rel, None, "is not a directory")]
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.endswith((".yml", ".yaml")))
+    except OSError as e:
+        return [_unreadable(WORKFLOWS_DIR, None, f"could not be listed: {e.strerror}")]
+    if len(names) > MAX_WORKFLOWS:
+        raise AuditLimit(f"{len(names)} workflow files (audit-ci reads at most {MAX_WORKFLOWS})")
+    return [_audit_file(os.path.join(folder, n), f"{WORKFLOWS_DIR}/{n}") for n in names]
+
+
+def _facts_json(value: object) -> object:
+    if isinstance(value, tuple):
+        return {k: _facts_json(v) for k, v in zip(value._fields, value)}  # type: ignore[attr-defined]
+    if isinstance(value, list):
+        return [_facts_json(v) for v in value]
+    return value
+
+
+def audit_report(workflows: list[WorkflowFacts]) -> dict:
+    readable = [w for w in workflows if w.unreadable is None]
+    jobs = [j for w in readable for j in w.jobs]
+    without_cancel = [w for w in readable if w.on_pull_request and w.concurrency.cancel_in_progress == "no"
+                      and any(j.concurrency.cancel_in_progress == "no" for j in w.jobs)]
+    entries = []
+    for w in workflows:
+        entry = {"path": w.path, "sha256": w.sha256, "readable": w.unreadable is None}
+        if w.unreadable is not None:
+            entry["unreadable"] = w.unreadable
+        else:
+            entry.update({k: v for k, v in _facts_json(w).items() if k not in entry and k != "unreadable"})  # type: ignore[attr-defined]
+        entries.append(entry)
+    return {"v": AUDIT_VERSION, "workflows": entries, "summary": {
+        "workflows": len(workflows), "unreadable": len(workflows) - len(readable), "jobs": len(jobs),
+        "jobs_without_timeout": sum(j.timeout_minutes is None for j in jobs),
+        "pull_request_workflows_without_cancel": len(without_cancel),
+        "jobs_with_matrix": sum(j.matrix is not None for j in jobs), "jobs_with_caching": sum(bool(j.caching) for j in jobs),
+        "path_filters": sum(len(w.path_filters) for w in readable)}}
+
+
+def _concurrency_text(c: Concurrency) -> str:
+    return "none" if not c.set else f"cancel-in-progress {c.cancel_in_progress}" + (f" ({c.raw})" if c.raw is not None else "")
+
+
+def _matrix_text(m: Matrix | None) -> str:
+    if m is None:
+        return "none"
+    axes = " x ".join(f"{k} {n}" for k, n in sorted(m.axes.items())) or "no axes"
+    return f"{axes}, include {m.include}, exclude {m.exclude}, combinations {m.combinations}, full on pull requests {m.full_on_pull_request}"
+
+
+def render_audit(workflows: list[WorkflowFacts], summary: dict) -> str:
+    lines = [f"audit-ci: {summary['workflows']} workflows, {summary['unreadable']} unreadable"]
+    for w in workflows:
+        lines.append(printable(w.path) + (f" ({printable(w.name)})" if w.name else ""))
+        if w.unreadable is not None:
+            lines.append(f"  unreadable: {printable(w.unreadable)}")
+            continue
+        lines.append(f"  triggers: {', '.join(w.triggers) or 'none'}; pull requests: {'yes' if w.on_pull_request else 'no'}")
+        lines.append(f"  concurrency: {_concurrency_text(w.concurrency)}")
+        for f in w.path_filters:
+            lines.append(f"  path filter on {f.trigger}: paths {f.paths}, paths-ignore {f.paths_ignore}, selection proof {f.selection_proof}")
+        for j in w.jobs:
+            timeout = "none" if j.timeout_minutes is None else j.timeout_minutes
+            lines.append(f"  job {j.id}: timeout {timeout}{', reusable workflow' if j.reusable_workflow else ''}; "
+                         f"concurrency {_concurrency_text(j.concurrency)}; matrix {_matrix_text(j.matrix)}; "
+                         f"caching {', '.join(j.caching) or 'none'}; steps {j.steps}")
+    lines.append("summary: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in summary.items()))
+    return "\n".join(lines)
+
+
+def cmd_audit_ci(args: argparse.Namespace) -> int:
+    if not os.path.isdir(args.repo_dir):
+        print(f"quality.py: not a directory: {args.repo_dir}", file=sys.stderr)
+        return 2
+    try:
+        workflows = audit_workflows(args.repo_dir)
+    except AuditLimit as e:
+        print(f"quality.py: {_audit_text(e)}", file=sys.stderr)
+        return 1
+    report = audit_report(workflows)
+    print(json.dumps(report, indent=2, sort_keys=True) if args.json else render_audit(workflows, report["summary"]))
+    return 1 if report["summary"]["unreadable"] else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="quality.py", description="The Quality Director's recorder and books checker.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -3192,6 +3847,10 @@ def main(argv: list[str] | None = None) -> int:
     summary.add_argument("--week", metavar="YYYY-Www", help="an ISO week; the latest week in runs.csv by default")
     summary.add_argument("--json", action="store_true")
     summary.set_defaults(func=cmd_summary)
+    audit = sub.add_parser("audit-ci", help="what a repo's workflow files say about CI speed (read-only, no books)")
+    audit.add_argument("repo_dir", metavar="REPO_DIR")
+    audit.add_argument("--json", action="store_true")
+    audit.set_defaults(func=cmd_audit_ci)
     args = parser.parse_args(argv)
     return args.func(args)
 
