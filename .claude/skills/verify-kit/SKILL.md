@@ -31,11 +31,11 @@ Each line below works as its own shell call, so the sequence survives a tool tha
 
 The evidence is then in the `evidence` folder that `launch` printed, and `drive-all.json` in it says `"ok": true`. In one persistent shell, you can `export VERIFY_KIT_WS=<ws>` once and leave out `--ws`. The examples below write the script as `$C` and leave out `--ws`.
 
-To drive one feature, run `drive <feature> --ws <ws>` with a name from the map below. Each feature runs once per workspace. To drive it again, run `cleanup`, then `launch` a new workspace. To drive another checkout, such as a copy with a change you want to test, pass `launch --target <checkout>`.
+To drive one feature, run `drive <feature> --ws <ws>` with a name from the map below. On a fresh workspace a feature other than `install` first adds the marketplace and installs `bstack` itself, as its own steps, so it needs no earlier `drive install`. It ends with `PASSED: 1/1 features`. Each feature runs once per workspace. To drive it again, run `cleanup`, then `launch` a new workspace. To drive another checkout, such as a copy with a change you want to test, pass `launch --target <checkout>`.
 
 Pass looks like this: `drive` exits 0, every feature line says `PASS`, and `<evidence>/drive-all.json` has `"ok": true`.
 
-**The passing `slash-trigger` step exits 1.** It runs `claude -p "/bstack:beau-help"`, and the profile has no login, so the CLI answers `Not logged in · Please run /login` and exits 1. That is the expected result, and the proof: the skill body is expanded into the session before the login check, and `total_cost_usd` is 0, so no model was called. The feature checks for exactly that exit and message, and for the body in the session file. Don't "fix" it by logging in. A login would make every drive a paid model call, and `doctor` fails on it.
+**Inside a passing `slash-trigger`, the `claude` command exits 1, while `drive` itself exits 0.** The step runs `claude -p "/bstack:beau-help"`, and the profile has no login, so the CLI answers `Not logged in · Please run /login` and exits 1. That is the expected result, and the proof: the skill body is expanded into the session before the login check, and `total_cost_usd` is 0, so no model was called. The feature checks for exactly that exit and message, and for the body in the session file. Don't "fix" it by logging in. A login would make every drive a paid model call, and `doctor` fails on it.
 
 Fail looks like this: `drive` exits 1, and the failing feature prints `FAIL`, the failed step, and each failed check with what it saw. For example:
 
@@ -94,11 +94,11 @@ Options: `--target <checkout>` drives another agent-kit checkout, `--evidence-ro
 
 ## Evidence
 
-The evidence for a workspace is at `<repo>/.verify/kit/<workspace name>/`, which is git-ignored. `launch` prints the path, and `--evidence-root` changes it. It holds:
+The evidence for a workspace is at `<repo>/.verify/kit/<workspace name>/`, which is git-ignored. `launch` prints the path. With `--evidence-root <dir>` it is `<dir>/<workspace name>/`. It holds:
 
 - `launch.json` and `doctor.json`: the workspace record and the doctor result.
 - `<feature>/steps.jsonl`: one line per step, with argv, exit code, stdout, stderr, seconds and each check (`{check, ok, detail}`).
-- `<feature>/session-N.jsonl`: the full stream-json output of each session. `install/plugin-list.json`: the plugin list. `slash-trigger/profile-session-<id>.jsonl`: a copy of the session file the CLI wrote.
+- `<feature>/session-N.jsonl`: the full stream-json output of each session. `<feature>/plugin-list.json`: the plugin list, in `install` and in any feature that ran its own install steps. `slash-trigger/profile-session-<id>.jsonl`: a copy of the session file the CLI wrote.
 - `<feature>/result.json`: pass or fail, and the failed step and checks.
 - `drive-<feature or all>.json`: the summary, with the target commit.
 - `profile-snapshot/` and its `MANIFEST.sha256`: the plugin records, settings, state files and session files the drive wrote, with a sha256 each.
