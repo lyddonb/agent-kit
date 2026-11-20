@@ -108,7 +108,7 @@ Proof standards:
 
 - Drive the real CLI as a user does. Don't read the plugin files and call that a check of what Claude Code loads.
 - Check what the CLI wrote (the plugin record, the seen-state file, the session file), not only stdout. The checks match only stable parts: the init event's `skills`, `agents`, `plugins` and `apiKeySource`, the hook's `exit_code` and `output`, and two strings in the session file.
-- To show the drive can fail, copy the checkout and break one thing by hand: delete one skill's `SKILL.md` (fails `skills-load`), empty `hooks.json`'s `hooks` (fails `whats-new-hook`), or remove `principles` from the copy's `marketplace.json` (fails `install`). Then `launch --target <copy>` and drive it. These are hand-made breaks, not past commits: a sweep of 35 past commits found none that fails these checks.
+- To show the drive can fail, copy the checkout and break one thing by hand: delete one skill's `SKILL.md` (fails `skills-load`), empty `hooks.json`'s `hooks` (fails `whats-new-hook`), or remove `principles` from the copy's `marketplace.json` (fails `install`). Then `launch --target <copy>` and drive it. These are hand-made breaks, not past commits. `drive all` was run against the 35 commits on main that touch `plugins/bstack` or `.claude-plugin`. The 24 since beau-help and the hook were added pass 4/4. The 11 older ones fail only because a feature did not exist yet (no `bstack:beau-help`, no hook, or no bstack plugin), so no real bug in history fails these checks.
 
 ## Cleanup
 

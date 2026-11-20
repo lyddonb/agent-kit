@@ -393,8 +393,13 @@ def _kit_version(target: Path, plugin: str) -> Optional[str]:
 
 
 def _first_heading(skill_md: Path) -> Optional[str]:
+    """The skill's first `# ` heading, or None when the target has no such skill (an older commit)."""
+    try:
+        lines = skill_md.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
     in_front = False
-    for i, line in enumerate(skill_md.read_text(encoding="utf-8").splitlines()):
+    for i, line in enumerate(lines):
         if i == 0 and line.strip() == "---":
             in_front = True
             continue
@@ -601,7 +606,8 @@ def feature_slash_trigger(j: Journey) -> None:
         j.check(s, "that base directory is the target checkout's skill folder",
                 bool(base) and os.path.realpath(base.group(1).strip()) == os.path.realpath(want),
                 base.group(1).strip() if base else "no base directory line")
-        j.check(s, f"the same turn holds the skill's first heading ({heading})", bool(heading) and heading in body)
+        j.check(s, f"the same turn holds the skill's first heading ({heading})", bool(heading) and heading in body,
+                "" if heading else f"the target has no plugins/bstack/skills/{SLASH_SKILL}/SKILL.md")
     j.session(f"/bstack:{SLASH_SKILL} expands the skill body", f"/bstack:{SLASH_SKILL}", "slash-trigger", triggered)
 
 
