@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""stress-kit: run the verify-kit cold-start sequence N times in a row and count passes.
+
+Each run is exactly what SKILL.md tells a reader to do: `control-kit launch`, `doctor`, `drive all`,
+`cleanup`, each in a fresh workspace. No retries, and a failed run never stops the loop. A run passes
+only when every command exits as expected, the evidence survives cleanup with drive-all.json saying
+ok, the workspace is gone, and every expected write (the profile's plugin record, the seen-state file,
+the session file) was found inside the workspace before cleanup.
+
+The sha256 of the real ~/.agents/state/agent-kit-seen.json and ~/.claude/plugins/installed_plugins.json
+is recorded before and after as a note. A change is not a failure: the user's own sessions write them.
+
+Example: stress-kit --runs 20 --evidence-root /tmp/r27-stress
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import statistics
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+CONTROL = Path(__file__).resolve().parent / "control-kit"
+SKILL_REPO = Path(__file__).resolve().parents[4]
+REAL_FILES = {"agent-kit-seen.json": Path.home() / ".agents" / "state" / "agent-kit-seen.json",
+              "installed_plugins.json": Path.home() / ".claude" / "plugins" / "installed_plugins.json"}
+
+
+def real_hashes() -> Dict[str, str]:
+    return {name: hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "absent"
+            for name, p in REAL_FILES.items()}
+
+
+def machine() -> str:
+    cpu = platform.processor() or platform.machine()
+    try:
+        cpu = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True,
+                             timeout=5).stdout.strip() or cpu
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return f"{platform.system()} {platform.release()} {platform.machine()}, {cpu}, {os.cpu_count()} cpus"
+
+
+def expected_writes(ws: Path) -> List[str]:
+    """What a full drive must have written, found inside the workspace. Returns the problems."""
+    root = Path(os.path.realpath(ws))
+    wanted = {"profile plugin record": ws / "profile" / "plugins" / "installed_plugins.json",
+              "seen-state file": ws / "state" / "whats-new-hook.json"}
+    sessions = sorted((ws / "profile" / "projects").glob("*/*.jsonl"))
+    problems = []
+    for label, path in wanted.items():
+        if not path.is_file():
+            problems.append(f"{label} not written ({path})")
+        elif not Path(os.path.realpath(path)).is_relative_to(root):
+            problems.append(f"{label} landed outside the workspace ({path})")
+    if not sessions:
+        problems.append("no session file under profile/projects")
+    return problems
+
+
+def one_run(i: int, target: Path, evidence_root: Path) -> Dict[str, Any]:
+    start = time.monotonic()
+    rec: Dict[str, Any] = {"run": i, "steps": []}
+
+    def call(*args: str) -> subprocess.CompletedProcess:
+        proc = subprocess.run([sys.executable, str(CONTROL), *args], capture_output=True, text=True, timeout=600)
+        rec["steps"].append({"argv": ["control-kit", *args], "exit": proc.returncode,
+                             "stdout": proc.stdout[-4000:], "stderr": proc.stderr[-4000:]})
+        return proc
+
+    launch = call("launch", "--json", "--target", str(target), "--evidence-root", str(evidence_root))
+    ws: Optional[Path] = None
+    evidence: Optional[Path] = None
+    write_problems: List[str] = []
+    if launch.returncode == 0:
+        m = json.loads(launch.stdout)
+        ws, evidence = Path(m["workspace"]), Path(m["evidence"])
+        call("doctor", "--ws", str(ws))
+        call("drive", "all", "--ws", str(ws))
+        write_problems = expected_writes(ws)
+        call("cleanup", "--ws", str(ws))
+    rec["seconds"] = round(time.monotonic() - start, 3)
+    problems = [f"{' '.join(s['argv'][:2])} exit {s['exit']}" for s in rec["steps"] if s["exit"] != 0]
+    if len(rec["steps"]) != 4:
+        problems.append("did not reach every step")
+    problems += write_problems
+    summary = evidence / "drive-all.json" if evidence else None
+    if summary is None or not summary.is_file():
+        problems.append("no drive-all.json in the evidence after cleanup")
+    else:
+        data = json.loads(summary.read_text())
+        if data["ok"] is not True:
+            problems.append("drive-all.json says not ok: " + ", ".join(f["feature"] for f in data["features"]
+                                                                        if not f["ok"]))
+    if ws is not None and ws.exists():
+        problems.append(f"workspace {ws} still exists")
+    rec.update(ok=not problems, problems=problems, workspace=str(ws), evidence=str(evidence))
+    return rec
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="stress-kit", description=__doc__.split("\n\n")[1],
+                                epilog="Example: stress-kit --runs 20 --evidence-root /tmp/r27-stress")
+    p.add_argument("--runs", type=int, default=20, help="consecutive runs (default 20)")
+    p.add_argument("--target", default=str(SKILL_REPO), help="the agent-kit checkout under test (default: this one)")
+    p.add_argument("--evidence-root", default=str(SKILL_REPO / ".verify" / "kit-stress"),
+                   help="where each run's evidence folder goes; stress.jsonl and the summary land here too "
+                        "(default: <repo>/.verify/kit-stress)")
+    ns = p.parse_args()
+    root = Path(ns.evidence_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    target = Path(ns.target).resolve()
+    log = root / "stress.jsonl"
+    log.write_text("", encoding="utf-8")
+    print(f"stress-kit: {ns.runs} consecutive runs against {target}")
+    print(f"machine: {machine()}; python {platform.python_version()}")
+    before = real_hashes()
+    total_start = time.monotonic()
+    results = []
+    for i in range(1, ns.runs + 1):
+        r = one_run(i, target, root)
+        results.append(r)
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(r, sort_keys=True) + "\n")
+        print(f"run {i:>2}: {'PASS' if r['ok'] else 'FAIL'} {r['seconds']:6.2f}s"
+              + ("" if r["ok"] else "  " + "; ".join(r["problems"])))
+    total = time.monotonic() - total_start
+    after = real_hashes()
+    secs = [r["seconds"] for r in results]
+    passed = sum(r["ok"] for r in results)
+    changed = [n for n in before if before[n] != after[n]]
+    summary = {"runs": ns.runs, "passed": passed, "total_seconds": round(total, 2), "min": min(secs),
+               "median": round(statistics.median(secs), 3), "max": max(secs), "machine": machine(),
+               "python": platform.python_version(), "target": str(target),
+               "note_real_state_hashes": {"before": before, "after": after, "changed": changed,
+                                          "meaning": "a change is not a failure: the user's own sessions write "
+                                                     "these files too, and no run here is set up to"}}
+    (root / "stress-summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"per run min {min(secs):.2f}s, median {statistics.median(secs):.2f}s, max {max(secs):.2f}s")
+    print(f"note: real state files changed during the run: {', '.join(changed) if changed else 'none'}")
+    print(f"log: {log}")
+    print(f"{passed}/{ns.runs} passed in {total:.1f}s")
+    return 0 if passed == ns.runs else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
