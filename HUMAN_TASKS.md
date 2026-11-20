@@ -20,7 +20,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H12 | Create a verification skill in one real app | 🚧 **BLOCKER** for ROADMAP R18, R27 |
 | H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
-| H15 | Allow a weekly job to read local transcripts for skill use | 🚧 **BLOCKER** for ROADMAP R38 |
+| H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 
 ---
 
@@ -134,7 +134,10 @@ your call, per machine.
 2. Add `hooks` to `allow:` in your agentfiles profile, starting with the gate in `observe`.
 3. After a week of observe logs with no false block, decide whether to move to `enforce`.
 
-### H15. Allow a weekly job to read local transcripts for skill use — 🚧 BLOCKER for R38
+### H15. Allow a weekly job to read local transcripts for skill use — Done
+**Answer (2026-11-19):** Yes. Beau's words: "yes to H15 and H6". The quality books' H6 got the same
+yes. The limits in **Decide** below are the terms: counts and names only, no transcript text
+booked, none leaves the Mac.
 **Why a human:** Transcripts hold everything you typed and everything an agent read. Whether a
 scheduled job may read them, and what it may write down, is your call.
 **Decide:** May the weekly Mac job (a second pass in cfo's `weekly-claude-code.sh`) read this
