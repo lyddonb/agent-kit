@@ -185,21 +185,22 @@ them, and a phase that serves a goal names which lever it pulls.
 **Why not done:** Kept out of 0.11.0 so the spec format change landed alone.
 **Prioritize when:** the next VISION.md is written or upgraded.
 
-### R26. Two fixes that didn't hold go to root-cause; three failed rounds go to a person
-**What:** bstack 0.11.0's `root-cause` skill covers two failed *theories*. Extend the Bug fix
-playbook's trigger to two fixes that didn't hold: stop patching and run `root-cause` from the
-symptom with a fresh subagent that hasn't seen the failed fixes. And in the Bug fix, Feature
-and Autonomous run playbooks: when the same check still fails after three fix rounds, stop
-that thread, record a `gate` entry in a governed run, and tell the human which check, what
-was tried and why it is stuck. Independent work continues.
-**Where:** `plugins/bstack/skills/beau-mode/playbooks/bug-fix.md`, `feature.md`,
-`autonomous-run.md`.
+### R26. The round cap and the two-fix trigger, checked against a real case
+**What:** bstack 0.21.0 shipped the three-round cap (Bug fix, Feature, Autonomous run) and the
+Bug fix trigger that sends two fixes that didn't hold to `root-cause`. Three things are open.
+The trigger was worded without a real case: in 5 fixture runs the agent stopped patching and
+found the cause from facts itself, and never ran the `root-cause` skill. And the Perf issue
+playbook has no cap: one fixture run on it kept patching a latency check and reran it eight
+times until it passed. Its fix ladder has seven rungs, so three rounds may be the wrong number.
+Third, agents miscount: two runs that stopped after two rounds said they had made three, and
+one counted the user's two fixes and stopped at two. The snippet may need to say that several
+fixes checked by one run are one round.
+**Where:** `plugins/bstack/snippets/round-cap.md`, `playbooks/bug-fix.md`, `playbooks/perf-issue.md`.
 **Playbook:** Authoring a skill.
-**Done when:** a fresh beau-agent given a fixture whose test cannot pass stops after the third
-round with the check named, and has not skipped, loosened or retried the test.
-**Why not done:** Small, but it should come from a real case so the wording fits.
-**Prioritize when:** the first time a third patch is about to land. The three-round cap can
-land now: it needs no case to word.
+**Why not done:** No fixture got an agent past two rounds, so the third-round stop itself has
+only been seen reported, not forced.
+**Prioritize when:** the first real session where a third patch lands or a check is rerun
+until it passes.
 
 ## P2
 

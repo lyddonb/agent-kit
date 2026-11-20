@@ -17,9 +17,25 @@ source: pstack/skills/poteto-mode/playbooks/feature.md @ ccb5507
    - **Shared mutable state**: split it rather than coordinate it (`separate-before-serializing-shared-state`).
    - **Smallest safe decomposition**: if one worker is best, say why.
 4. Delegate implementation to `code` subagents with precise briefs: file paths, the named shape, and what done means. Review every diff yourself.
-5. Verify on the real surface with **verify-work**.
+5. Verify on the real surface with **verify-work**. A check that still fails after a fix is one round: count it, and follow **Round cap** below.
 6. Rebase into small ordered commits, each verified before the next (`sequence-verifiable-units`).
 7. If the design is contested or the diff is risky, run **interrogate** before shipping.
 8. Run **Opening a PR**.
+
+<!-- BEGIN GENERATED: snippet:round-cap (tools/kitgen.py; edit plugins/bstack/snippets/round-cap.md) -->
+**Round cap.** A round is one fix aimed at one failing check, then a run of that check. A check is the smallest thing that names the failure: a test, a CI job, a repro, a step of the predicate. Keep a count per check. The count is yours across every subagent you hand a fix to, so a fresh subagent doesn't start it again.
+
+- A fix that clears one failure and uncovers a different one further on is progress. The new failure starts its own count.
+- A failure that comes back keeps its count.
+
+When a check still fails after its third round, stop work on that check:
+
+1. Leave the check as it is. Don't skip, loosen, delete or special-case it, and don't run it again hoping for a pass.
+2. Take out your fixes that didn't move it. A fix someone else committed stays: say it didn't move the check and let them decide.
+3. Tell the human which check it is, the command and its last output, each fix you tried with what the check said after it, and why you think it is stuck.
+4. In a run with a ledger, record the stop as a `gate` entry that names the check, and the human's reply as a `gate-answer` entry.
+
+Independent work continues. "Don't stop" and "run until done" don't lift the cap: a fourth patch on the same check needs the human's answer.
+<!-- END GENERATED: snippet:round-cap -->
 
 **Reply:** what you built, what you chose and why (a table for design alternatives), the throughput checkpoint, and open decisions.
