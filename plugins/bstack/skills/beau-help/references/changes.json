@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "id": "bstack@0.21.0",
+      "date": "2026-11-19",
+      "plugin": "bstack",
+      "version": "0.21.0",
+      "changes": [
+        "beau-mode now caps fix rounds. In the Bug fix, Feature and Autonomous run playbooks, when the same check still fails after three fixes, the agent stops work on that check and tells you which check, what it tried and why it is stuck. It doesn't skip, loosen or rerun the check, and \"don't stop\" doesn't lift the cap. A fix that uncovers a different failure doesn't count against it, and other work carries on.",
+        "The Bug fix playbook now says what to do when two fixes haven't held: stop patching, go back to the symptom and run root-cause. In fixture runs the agent stopped patching and tested the premise both fixes shared, but didn't run the root-cause skill."
+      ],
+      "try": "make check still fails after my two fixes. Can you sort it out?"
+    },
+    {
       "id": "bstack@0.20.0",
       "date": "2026-11-19",
       "plugin": "bstack",

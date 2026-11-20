@@ -9,6 +9,14 @@
 
 - date: 2026-11-19
   plugin: bstack
+  version: 0.21.0
+  changes:
+    - "beau-mode now caps fix rounds. In the Bug fix, Feature and Autonomous run playbooks, when the same check still fails after three fixes, the agent stops work on that check and tells you which check, what it tried and why it is stuck. It doesn't skip, loosen or rerun the check, and \"don't stop\" doesn't lift the cap. A fix that uncovers a different failure doesn't count against it, and other work carries on."
+    - "The Bug fix playbook now says what to do when two fixes haven't held: stop patching, go back to the symptom and run root-cause. In fixture runs the agent stopped patching and tested the premise both fixes shared, but didn't run the root-cause skill."
+  try: "make check still fails after my two fixes. Can you sort it out?"
+
+- date: 2026-11-19
+  plugin: bstack
   version: 0.20.0
   changes:
     - "`quality.py summary --json` now reports where CI time goes outside the test suite: a `lifecycle` object per repo (run and queue times, time outside the suite counted run by run, slowest and failing steps; a run counts in the week of its first job), from the job books. It appears only once the job books are adopted; without them the output is unchanged."
