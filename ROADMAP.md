@@ -178,13 +178,6 @@ and passes on the fix. This is the persistent complaint log (ERRATA in the sourc
 log needs the `rejection` entry type in agent-ledger.
 **Prioritize when:** the same kind of rejection happens twice.
 
-### R24. Goals say what measures them, what moves them and the first move
-**What:** The `docs/VISION.md` goals table gains three columns: Measure, Lever and First move.
-`check-product.py` fails a goal row with any of them empty. The scaffold interview asks for
-them, and a phase that serves a goal names which lever it pulls.
-**Why not done:** Kept out of 0.11.0 so the spec format change landed alone.
-**Prioritize when:** the next VISION.md is written or upgraded.
-
 ### R26. The round cap and the two-fix trigger, checked against a real case
 **What:** bstack 0.21.0 shipped the three-round cap (Bug fix, Feature, Autonomous run) and the
 Bug fix trigger that sends two fixes that didn't hold to `root-cause`. Three things are open.
