@@ -41,7 +41,9 @@ emit `.codex-plugin/plugin.json` (Codex treats it as a fallback) or
 ### D4. Portability lint over trust
 `tools/validate.py` enforces the parts of the spec that differ between clients in
 practice (name/folder match, string metadata, placeholders, cross-plugin name
-collisions). `claude plugin validate --strict` covers Claude specifics in CI.
+collisions). It also checks that every kit script, subcommand and flag a skill names
+exists, read from the script's source. `claude plugin validate --strict` covers Claude
+specifics in CI.
 
 ### D5. This repo publishes; it does not curate
 Choosing third-party skills, grouping them into personas, and pinning versions is the
