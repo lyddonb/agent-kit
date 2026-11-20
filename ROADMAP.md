@@ -38,7 +38,12 @@ plugins (prompt cases + graders), so description changes that break triggering a
 **Why not done:** Evals need real prompts drawn from use; inventing them up front
 produces tests of the wrong things. They also cost API tokens in CI (needs a secret).
 **Prioritize when:** a skill misfires (does not trigger, or triggers wrongly) twice. Review
-evals get their cases from R34's escapes book.
+evals get their cases from R34's escapes book. The wait for real prompts ends with R38, which
+shows which sessions invoked a skill. The first evals are the tool-call checks in agent-ledger's
+M3 unit 1. Their criteria live in this repo and they need no `evals/` tree. Its trigger
+replaces this one for those checks: R38 has four weeks of rows, or beau-mode's non-negotiables
+are about to change. The triggering evals above are still planned and draw on the same
+sessions.
 
 ### R4. `skills-ref validate` in CI
 **What:** Run the reference validator from the Agent Skills project alongside
@@ -138,7 +143,10 @@ trigger on the right prompts and stay quiet on casual ones.
 **Why not done:** Same reason as R3: good eval prompts come from real use. Also costs model
 calls in CI.
 **Prioritize when:** before changing beau-mode's description or core rules, or after R10.
-`interrogate`'s cases come from R34.
+`interrogate`'s cases come from R34. The hard rules (a rule an agent must never break, checked
+on its tool calls) are agent-ledger's M3 unit 1, and its trigger replaces this one for them:
+R38 has four weeks of rows, or beau-mode's non-negotiables are about to change. The Eval
+playbook comparison and the triggering cases stay here and draw their sessions from R38.
 
 ### R14. Adopt upstream's distillation in the older bstack files
 **What:** Upstream commit 00b14f1 tightened the prompts of principles, reflect, unslop and
@@ -237,17 +245,22 @@ script to a small shared location (or have kitgen copy it into each skill that n
 installing one skill alone still works.
 **Why not done:** Both skills ship in bstack and install side by side in every supported tool,
 so the sibling path works today.
-**Prioritize when:** someone installs `recall` without `reflect`.
+**Prioritize when:** someone installs `recall` without `reflect`, or R38's weekly pass needs
+the script outside `reflect`.
 
 ### R25. Skills describe outcomes; cut steps a smarter model wouldn't need
 **What:** Audit each bstack skill and playbook with one test: would a stronger model need
 this step? Keep steps that enforce a gate, a verification or a record (those are the point).
-Cut steps that only teach how. Measure the always-on and per-skill token cost before and
-after.
+Cut steps that only teach how. The audit also covers the always-on block agentfiles writes
+(the mode plus profile `instructions:`), which every session pays for.
+**Method:** Ablation. A cut is proposed with the results of the evals from agent-ledger's M3
+unit 1 before and after it, and the always-on and per-skill token count before and after it.
+Text that no eval covers is not cut.
 **Why not done:** Playbooks are step-by-step on purpose, so weaker models in Codex or pi
 still hit the gates. Cutting needs evidence from runs in more than one tool (R10, R13).
-**Prioritize when:** R13's evals exist, so a cut can be shown not to lose a gate. R35's monthly
-prune brief supplies the size numbers.
+**Prioritize when:** agent-ledger's M3 unit 1 has an eval covering the text to cut (R13's cases
+add to them), so a cut can be shown not to lose a gate. R35's monthly prune brief supplies the
+size numbers, and R41 adds uses per skill.
 
 ---
 
@@ -512,10 +525,139 @@ with a closed `root-cause` case that found no cause attached, as a question. It 
 deletes. Needs Beau's answer in the books repo first (its H5).
 (3) **Prune on a schedule.** Rule-table and checklist entries carry `added`, `origin` and
 `review_by`. A monthly prune brief lists entries past review, checklist items that never
-triggered, and instruction-file size over time. This gives R25 a schedule.
+triggered, and instruction-file size over time. This gives R25 a schedule. R41 adds a skills
+table to this brief.
 **Depends on:** (2) the books repo's H5; (3) R30.
 **Playbook:** Authoring a skill.
 **Done when:** each unit's skill text is followed correctly by a fresh subagent on one fixture case.
 **Why not done:** None is urgent.
 **Prioritize when:** (1) the next rewrite or migration; (2) the first unsolved flake; (3) R30
 has run for a month.
+
+---
+
+# Skill ops
+
+From Akshay's "[Our Claude skills and guidance, six months later](https://akshay.co/posts/our-claude-skills-and-guidance-six-months-later/)"
+(read 2026-11-19). That team's skills passed lint and review and still did badly in use, so
+they added behavioral evals, a verdict on every invocation, and retirement after 60 days
+without use. The kit's checks are static too: nothing tests whether an agent follows a
+skill's text, and no skill use is booked. These items give skills what the Quality Director
+gives tests: measure them in use, test their behavior, then prune. Measuring comes first
+because it finds the real sessions R3 and R13 have waited for. Not-committed ideas from the
+same post are in [IDEAS.md](IDEAS.md).
+
+The work spans four repos. Each item has one full entry, in the repo where its code lands:
+
+| Item | Entry | Other repos |
+|---|---|---|
+| Book skill use from transcripts | R38 | The book and the brief row: quality phase 1c |
+| Lint: a skill never names a command that doesn't exist | R39 | None |
+| Behavioral evals, deterministic half | agent-ledger M3 unit 1 | The criteria live here. R3 and R13 point at it |
+| Every skill loads in every target tool | agentfiles R16 | `verify-kit` (R27) calls it |
+| A breaking format change ships with its sweep | R40 | Reads the quality books' `watched.csv` |
+| The prune brief covers skills | R41 | The profile half: agentfiles R18. The brief section: quality phase 1c |
+| Cuts are proposed by ablation | R25 (edited in place) | The always-on block is agentfiles' |
+| Upstream skills pass the same lint | agentfiles R17 | Uses R39's check |
+
+**How to work these.** The rules under Verification loops apply: one PR per entry or unit, its
+own worktree and branch, stop at merge-ready, and a new check is proven to fail on a real past
+commit, or on a planted fault with that said in the PR. Six more hold across all of it:
+
+- No new eval system. Receipts, the ledger and the quality books carry everything.
+- Verdicts come from rules and exit codes. No judge model until Beau says so.
+- No transcript text leaves the Mac. The books get counts, signals and verdicts.
+- Nothing retires a skill without Beau's answer. The Quality Director proposes and never acts.
+- `quality.py` stays standard library only, and `summary --json` stays byte-stable.
+- No health score and no dashboard. Skills get one section in the weekly brief.
+
+Order: R39 and R38's prototype now, in parallel (different files). agentfiles R17 after R39.
+agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
+weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
+rows.
+
+## P0
+
+### R38. Book skill use from transcripts
+**What:** A second pass inside cfo's `weekly-claude-code.sh`, which already reads this Mac's
+agent logs every week (one launchd job, one read), appends one row per skill invocation to
+`books/skill-uses.csv` in the quality books: week, skill, its source and version, tool, how it
+was invoked (explicit or auto), signals, verdict. The unit is every installed skill, keyed on
+`agentfiles.lock`, not only the kit's own. For governed
+runs the pass reads the redacted archives `ledger session add` keeps under
+`.audit/runs/<run>/sessions/`. Signals are deterministic: tool searches and tool errors in the
+window after the skill loads, and whether a correction followed. A correction comes from a
+ledger `rejection` entry (R23) where one exists, and only otherwise from the next user turn.
+Verdicts use the post's five names (unused bundle, ineffective, harmful, partially effective,
+effective). Only the ones a rule can decide are filled, and the rest stay `unjudged`.
+`quality.py summary --json` gains uses per skill and a list of skills with repeat
+non-effective verdicts. No transcript text is booked.
+**Units:** (1) Prototype: on four weeks of real transcripts, can an invocation and its signals
+be read reliably in Claude Code, Codex and Cursor? Stop with the numbers. (2) The pass and the
+`quality.py` changes. (3) In the books repo: the new book, the pin move and the brief section
+(quality phase 1c).
+**Where:** `plugins/cfo/skills/cfo-books/scripts/weekly-claude-code.sh`,
+`plugins/bstack/skills/qualitydirector/**`, `plugins/bstack/skills/reflect/scripts/find-transcripts.py`,
+tests, `kit.yaml`, `changes.yaml`, generated files.
+**Depends on:** H15 and the books repo's H6 (Beau allows the read and the booking). R19 if the
+transcript reader has to live outside `reflect`. R23 only for corrections from `rejection`
+entries. agentfiles H13 decides whether cfo's own skills are counted.
+**Playbook:** Prototype, then Feature.
+**Done when:** a run over the last four weeks of real transcripts books rows, `check` passes,
+a second run changes nothing, and ten rows picked at random match the transcripts by hand.
+**Why not done:** `find-transcripts.py` exists for `reflect` and `recall`, but nothing counts
+what a skill did after it loaded.
+**Prioritize when:** now. It feeds agent-ledger's M3 unit 1, R41 and R3.
+
+### R39. Lint: a skill never names a command that doesn't exist
+**What:** `tools/validate.py` extracts every script path, script subcommand and flag that a
+SKILL.md, playbook or reference names for the kit's own scripts. It fails when one doesn't
+resolve: the file is missing, or the subcommand or flag is absent from the script's argparse.
+The post counts a skill that names a missing tool or command as harmful.
+**Where:** `tools/validate.py`, `tests/`.
+**Depends on:** nothing.
+**Playbook:** Feature. Run `interrogate` before merge.
+**Done when:** the check fails on a real past commit where a skill named something stale, if
+`git log` has one, and otherwise on a planted fault with that said in the PR. It passes on
+main with no allowlist longer than five lines.
+**Why not done:** `validate.py` checks frontmatter, structure and relative links, not the
+subcommands and flags a skill tells an agent to run.
+**Prioritize when:** now. No model, no new dependency.
+
+## P1
+
+### R40. A breaking format change ships with its sweep
+**What:** One rule in the Authoring a skill playbook and one script. When a change breaks an
+artifact the kit generates in other repos (phase specs, `verify-<app>` skills, `REVIEW.md`),
+the PR lists the repos in the quality books' `watched.csv` that hold one, and opens or names
+the upgrade PR for each. CI only touches what changes, so old artifacts never meet a new rule
+unless something carries it to them. Add it to R30's checklist as a diff-triggered item.
+**Where:** `plugins/bstack/skills/beau-mode/playbooks/authoring-a-skill.md`, one script, R30's
+checklist file, tests.
+**Depends on:** R30.
+**Playbook:** Authoring a skill.
+**Done when:** replayed against the 0.12.0 spec change, it lists the product repos that broke.
+**Why not done:** 0.12.0's spec change was breaking for product repos, and no step lists the
+repos that hold an affected artifact.
+**Prioritize when:** R30 lands, or the next breaking format change.
+
+## P2
+
+### R41. The prune brief covers skills
+**What:** R35 unit 3's monthly prune brief gains a skills table from R38: uses in the last 60
+days per skill, per tool, and what the skill costs (its always-on tokens times sessions, priced
+with the CFO's pricing table). Proposals are ranked by cost as well as use. Third-party skills
+come first, because they can be measured and dropped but not fixed. The brief proposes at most
+three retirements, each as a question, and proposes dropping a skill from an agentfiles
+profile (agentfiles R18) before deleting it from the kit. A skill marked `rare: true` in
+`kit.yaml` with a reason (`root-cause`, the formal verification pair) is listed and never
+proposed.
+**Where:** `plugins/bstack/skills/qualitydirector/**`, `kit.yaml`, `tools/` (the `rare` field),
+generated files. The brief section lands in the books repo (quality phase 1c).
+**Depends on:** R38, R35 unit 3.
+**Playbook:** Authoring a skill.
+**Done when:** on fixture books with 60 days of rows, the brief lists every skill, proposes no
+more than three, proposes none marked `rare`, and every number matches `summary --json`.
+**Why not done:** R35 unit 3 prunes rules and checklist items. No skill has ever been retired
+on evidence, since there is none.
+**Prioritize when:** R38 has 60 days of rows.
