@@ -552,13 +552,13 @@ The work spans four repos. Each item has one full entry, in the repo where its c
 | Item | Entry | Other repos |
 |---|---|---|
 | Book skill use from transcripts | R38 | The book and the brief row: quality phase 1c |
-| Lint: a skill never names a command that doesn't exist | R39 | None |
+| Lint: a skill never names a command that doesn't exist | Done: `check_commands` in `tools/validate.py` | None |
 | Behavioral evals, deterministic half | agent-ledger M3 unit 1 | The criteria live here. R3 and R13 point at it |
 | Every skill loads in every target tool | agentfiles R16 | `verify-kit` (R27) calls it |
 | A breaking format change ships with its sweep | R40 | Reads the quality books' `watched.csv` |
 | The prune brief covers skills | R41 | The profile half: agentfiles R18. The brief section: quality phase 1c |
 | Cuts are proposed by ablation | R25 (edited in place) | The always-on block is agentfiles' |
-| Upstream skills pass the same lint | agentfiles R17 | Uses R39's check |
+| Upstream skills pass the same lint | agentfiles R17 | Uses the lint above (was R39) |
 
 **How to work these.** The rules under Verification loops apply: one PR per entry or unit, its
 own worktree and branch, stop at merge-ready, and a new check is proven to fail on a real past
@@ -571,7 +571,7 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 - `quality.py` stays standard library only, and `summary --json` stays byte-stable.
 - No health score and no dashboard. Skills get one section in the weekly brief.
 
-Order: R39 and R38's prototype now, in parallel (different files). agentfiles R17 after R39.
+Order: R38's prototype now. agentfiles R17 can start, since the lint it runs has shipped.
 agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
@@ -608,21 +608,6 @@ a second run changes nothing, and ten rows picked at random match the transcript
 **Why not done:** `find-transcripts.py` exists for `reflect` and `recall`, but nothing counts
 what a skill did after it loaded.
 **Prioritize when:** now. It feeds agent-ledger's M3 unit 1, R41 and R3.
-
-### R39. Lint: a skill never names a command that doesn't exist
-**What:** `tools/validate.py` extracts every script path, script subcommand and flag that a
-SKILL.md, playbook or reference names for the kit's own scripts. It fails when one doesn't
-resolve: the file is missing, or the subcommand or flag is absent from the script's argparse.
-The post counts a skill that names a missing tool or command as harmful.
-**Where:** `tools/validate.py`, `tests/`.
-**Depends on:** nothing.
-**Playbook:** Feature. Run `interrogate` before merge.
-**Done when:** the check fails on a real past commit where a skill named something stale, if
-`git log` has one, and otherwise on a planted fault with that said in the PR. It passes on
-main with no allowlist longer than five lines.
-**Why not done:** `validate.py` checks frontmatter, structure and relative links, not the
-subcommands and flags a skill tells an agent to run.
-**Prioritize when:** now. No model, no new dependency.
 
 ## P1
 
