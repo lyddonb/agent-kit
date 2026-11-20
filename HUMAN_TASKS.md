@@ -139,8 +139,10 @@ your call, per machine.
 scheduled job may read them, and what it may write down, is your call.
 **Decide:** May the weekly Mac job (a second pass in cfo's `weekly-claude-code.sh`) read this
 Mac's agent transcripts and book one row per skill invocation into the quality books? A row
-holds the week, the skill, its version, the tool, how it was invoked, counts of tool searches
-and tool errors, and a verdict. No transcript text is booked and none leaves the Mac.
+holds the week, the skill, its source and version, the tool, how it was invoked, counts of tool
+calls, tool searches and tool errors, and a verdict that stays `unjudged` for now. No transcript
+text is booked and none leaves the Mac. A prototype has already read four weeks of transcripts
+once, at your request, and printed counts and names only (R38 has what it found).
 **Related, in other repos:** the quality books' H6 (is that repo private enough for skill names
 and counts per week?), agentfiles H13 (are cfo's skills counted?), and agent-ledger H8 and H9
 (when the evals that use these rows start, and whether they may spend model calls in CI).
