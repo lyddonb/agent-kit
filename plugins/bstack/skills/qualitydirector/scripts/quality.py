@@ -3365,7 +3365,7 @@ class _YamlReader:
             after = text[end:].lstrip(" ")
             if after[:1] != ":" or after[1:2] not in ("", " "):
                 return None
-            if end > MAX_YAML_KEY:
+            if len(text) - len(after) > MAX_YAML_KEY:  # PyYAML measures from the key's start to its colon, spaces included
                 raise _refuse(no, "a key longer than PyYAML reads")
             return key, after[1:].lstrip(" ")
         colon = text.find(":")
@@ -3374,7 +3374,7 @@ class _YamlReader:
         key = text[:colon].rstrip(" ")
         if _PLAIN_KEY.fullmatch(key) is None:
             return None
-        if len(key) > MAX_YAML_KEY:
+        if colon > MAX_YAML_KEY:
             raise _refuse(no, "a key longer than PyYAML reads")
         return key, text[colon + 1:].lstrip(" ")
 
@@ -3535,9 +3535,8 @@ class WorkflowFacts(NamedTuple):
 
 _NO_CONCURRENCY = Concurrency(False, "no", None)
 _MATRIX_UNKNOWN = Matrix({}, 0, 0, "unknown", "unknown")
-_PR_EVENT = "github.event_name=='pull_request'"
-_PR_TARGET_EVENT = "github.event_name=='pull_request_target'"
-_PR_ONLY_EXPRESSIONS = frozenset({_PR_EVENT, f"{_PR_EVENT}||{_PR_TARGET_EVENT}", f"{_PR_TARGET_EVENT}||{_PR_EVENT}"})
+_EVENT_IS = r"github\.event_name\s*==\s*'(pull_request|pull_request_target)'"
+_PR_ONLY = re.compile(rf"\s*{_EVENT_IS}\s*(?:\|\|\s*{_EVENT_IS}\s*)?")
 
 
 def _audit_text(value: object) -> str:
@@ -3547,8 +3546,11 @@ def _audit_text(value: object) -> str:
 
 
 def _is_pr_only(expression: str) -> bool:
+    """True for a test of the event name against pull_request, alone or joined to pull_request_target. Spaces count only around
+    `==` and `||`, and only single-quoted strings, which is all GitHub reads."""
     inner = re.fullmatch(r"\$\{\{(.*)\}\}", expression.strip(), re.S)
-    return inner is not None and re.sub(r"\s+", "", inner.group(1)).replace('"', "'") in _PR_ONLY_EXPRESSIONS
+    match = _PR_ONLY.fullmatch(inner.group(1)) if inner else None
+    return match is not None and "pull_request" in match.groups() and match.group(1) != match.group(2)
 
 
 def _kind(value: object) -> str:
@@ -3578,7 +3580,7 @@ def _mentions_event(value: object) -> bool:
     return isinstance(value, dict) and any(_mentions_event(v) for v in value.values())
 
 
-def _matrix(job: dict, on_pull_request: bool) -> Matrix | None:
+def _matrix(job: dict, on_pull_request: bool, called: bool) -> Matrix | None:
     strategy = job.get("strategy")
     if isinstance(strategy, str) and strategy != "":
         return _MATRIX_UNKNOWN
@@ -3588,16 +3590,15 @@ def _matrix(job: dict, on_pull_request: bool) -> Matrix | None:
     if not isinstance(matrix, dict):
         return _MATRIX_UNKNOWN
     axes: dict[str, int | str] = {}
-    mentions = _mentions_event(job.get("if"))
+    conditional = job.get("if") not in (None, "")  # any condition may skip the job on a pull request; none is evaluated here
+    mentions = False
     for key, value in matrix.items():
         if key in ("include", "exclude"):
             continue
         if isinstance(value, list):
             axes[_audit_text(key)] = len(value)
-        elif isinstance(value, str) and "${{" in value:
-            axes[_audit_text(key)] = "unknown"
         else:
-            continue
+            axes[_audit_text(key)] = "unknown"
         mentions = mentions or _mentions_event(value)
     combinations: int | str = "unknown"
     if axes and "include" not in matrix and "exclude" not in matrix and all(type(n) is int for n in axes.values()):
@@ -3608,7 +3609,8 @@ def _matrix(job: dict, on_pull_request: bool) -> Matrix | None:
                 combinations = "unknown"
                 break
     include, exclude = matrix.get("include"), matrix.get("exclude")
-    full = "unknown" if combinations == "unknown" or mentions else ("yes" if on_pull_request else "no")
+    # A called workflow runs in its caller's event, so it may run on pull requests.
+    full = "unknown" if combinations == "unknown" or mentions or conditional or (called and not on_pull_request) else ("yes" if on_pull_request else "no")
     return Matrix(axes, len(include) if isinstance(include, list) else 0, len(exclude) if isinstance(exclude, list) else 0, combinations, full)
 
 
@@ -3624,7 +3626,7 @@ def _caching(steps: list) -> list[str]:
         cache = options.get("cache")
         if action in ("actions/cache", "actions/cache/restore"):
             found.add("actions/cache")
-        elif action.startswith("actions/setup-") and isinstance(cache, str) and cache.strip() != "":
+        elif action.startswith("actions/setup-") and isinstance(cache, str) and cache.strip() not in ("", "false"):
             found.add(f"{action} cache: {'expression' if '${{' in cache else cache.strip()}")
         elif action == "astral-sh/setup-uv" and options.get("enable-cache") == "true":
             found.add("astral-sh/setup-uv cache")
@@ -3640,12 +3642,12 @@ def _timeout_minutes(job: dict, reusable: bool) -> int | str | None:
     return int(value) if isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value) else "unknown"
 
 
-def _job_facts(job_id: str, job: dict, on_pull_request: bool) -> JobFacts:
+def _job_facts(job_id: str, job: dict, on_pull_request: bool, called: bool) -> JobFacts:
     reusable = isinstance(job.get("uses"), str)
     steps = job.get("steps")
     steps = steps if isinstance(steps, list) else []
     return JobFacts(_audit_text(job_id), reusable, _timeout_minutes(job, reusable), _concurrency(job.get("concurrency")),
-                    _matrix(job, on_pull_request), _caching(steps), len(steps))
+                    _matrix(job, on_pull_request, called), _caching(steps), len(steps))
 
 
 def _strings(value: object) -> list[str]:
@@ -3672,7 +3674,7 @@ def _workflow_facts(path: str, sha256: str, doc: object) -> WorkflowFacts:
     name = doc.get("name")
     return WorkflowFacts(path, sha256, None, _audit_text(name) if isinstance(name, str) and name != "" else None, triggers,
                          on_pull_request, _concurrency(doc.get("concurrency")), filters,
-                         [_job_facts(job_id, job, on_pull_request) for job_id, job in jobs.items()])
+                         [_job_facts(job_id, job, on_pull_request, "workflow_call" in triggers) for job_id, job in jobs.items()])
 
 
 def _unreadable(path: str, sha256: str | None, why: str) -> WorkflowFacts:

@@ -189,6 +189,16 @@ class ReaderDifferential(unittest.TestCase):
             with self.assertRaisesRegex(quality.WorkflowUnreadable, r"^line \d+: ", msg=name):
                 quality.read_workflow_yaml(text)
 
+    def test_a_key_pyyaml_finds_too_long_is_refused(self):
+        for text in ["a" * 1000 + " " * 30 + ": b\n", '"' + "a" * 998 + '"' + " " * 40 + ": b\n", "- " + "a" * 1000 + " " * 30 + ": b\n",
+                     "a" * 1100 + ": b\n", "a" * 1023 + ": b\n", "a" * 1024 + ": b\n", "a" * 1025 + ": b\n", "a" * 900 + " " * 124 + ": b\n"]:
+            same_as_pyyaml(text)  # raises when the reader reads what PyYAML refuses
+        self.assertFalse(same_as_pyyaml("a" * 1000 + " " * 30 + ": b\n"))
+
+    def test_a_colon_inside_a_flow_list_item_equals_pyyaml_or_is_refused(self):
+        for text in ["a: [a:]\n", "a: [a: b]\n", "a: [x, b: c]\n", "a: [a:b]\n"]:
+            same_as_pyyaml(text)
+
     def test_block_scalars_equal_pyyaml_or_are_refused(self):
         fixtures = block_scalar_fixtures()
         read = sum(same_as_pyyaml(text) for text in fixtures)
@@ -231,16 +241,16 @@ class Concurrency(TempRepo):
 
     def test_the_pull_request_only_expressions(self):
         for expression in ["${{ github.event_name == 'pull_request' }}", "${{github.event_name=='pull_request'}}",
-                           "${{ github.event_name == \"pull_request\" }}",
                            "${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}",
                            "${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}"]:
-            got = self.cancel(f"\n  group: g\n  cancel-in-progress: '{expression}'" if '"' in expression else f"\n  group: g\n  cancel-in-progress: {expression}")
+            got = self.cancel(f"\n  group: g\n  cancel-in-progress: {expression}")
             self.assertEqual(got["cancel_in_progress"], "pull_requests_only", expression)
             self.assertEqual(got["raw"], expression)
 
     def test_any_other_expression_is_unknown(self):
         for expression in ["${{ github.ref != 'refs/heads/main' }}", "${{ github.event_name == 'push' }}", "${{ inputs.cancel }}", "yes",
-                           "${{ github.event_name == 'pull_request' && true }}"]:
+                           "${{ github.event_name == 'pull_request' && true }}", "${{ github.event_name == 'pull _request' }}",
+                           "${{ github.event_name == 'pull_request ' }}", "${{ github . event_name == 'pull_request' }}"]:
             self.assertEqual(self.cancel(f"\n  group: g\n  cancel-in-progress: {expression}"),
                              {"set": True, "cancel_in_progress": "unknown", "raw": expression}, expression)
 
@@ -314,6 +324,28 @@ class Jobs(TempRepo):
         self.assertIsNone(self.job(PR_WORKFLOW)["matrix"])
         self.assertIsNone(self.matrix("      fail-fast: false"))
 
+    def test_a_double_quoted_event_name_is_unknown_because_github_rejects_it(self):
+        expression = '${{ github.event_name == "pull_request" }}'
+        got = self.one(f"on: push\nconcurrency:\n  group: g\n  cancel-in-progress: '{expression}'\njobs:\n  a:\n    steps: []\n")
+        self.assertEqual(got["concurrency"]["cancel_in_progress"], "unknown")
+
+    def test_a_reusable_workflow_job_has_no_timeout_even_when_one_is_written(self):
+        job = self.job("on: push\njobs:\n  test:\n    uses: ./.github/workflows/x.yml\n    timeout-minutes: 5\n")
+        self.assertEqual(job["timeout_minutes"], "not applicable")
+
+    def test_any_job_condition_makes_the_pull_request_answer_unknown(self):
+        for condition in ["github.ref == 'refs/heads/main'", "github.EVENT_NAME == 'push'", "${{ always() }}"]:
+            got = self.matrix("      matrix:\n        os: [a, b, c]", job_extra=f"    if: {condition}\n")
+            self.assertEqual((got["combinations"], got["full_on_pull_request"]), (3, "unknown"), condition)
+
+    def test_a_called_workflow_may_run_on_pull_requests(self):
+        for on in ["workflow_call", "[push, workflow_call]"]:
+            self.assertEqual(self.matrix("      matrix:\n        os: [a, b]", on=on)["full_on_pull_request"], "unknown", on)
+
+    def test_an_axis_that_is_not_a_list_makes_the_count_unknown(self):
+        got = self.matrix("      matrix:\n        os: [a, b]\n        x: foo\n        y:\n          k: v")
+        self.assertEqual((got["axes"], got["combinations"]), ({"os": 2, "x": "unknown", "y": "unknown"}, "unknown"))
+
     def test_a_literal_matrix_is_counted_and_runs_in_full_on_pull_requests(self):
         self.assertEqual(self.matrix("      matrix:\n        os: [a, b]\n        python: ['3.10', '3.11', '3.12']\n        fast:\n          - x"), {
             "axes": {"fast": 1, "os": 2, "python": 3}, "include": 0, "exclude": 0, "combinations": 6, "full_on_pull_request": "yes"})
@@ -359,6 +391,13 @@ class Jobs(TempRepo):
                  "      - uses: astral-sh/setup-uv@v3\n        with:\n          enable-cache: true\n")
         self.assertEqual(self.caching(steps), ["actions/cache", "actions/setup-node cache: expression", "actions/setup-python cache: pip",
                                                "astral-sh/setup-uv cache"])
+        self.assertEqual(self.caching("      - uses: actions/cache/restore@v4\n"), ["actions/cache"])
+
+    def test_a_cache_option_that_is_false_is_not_caching(self):
+        steps = "      - uses: actions/setup-go@v5\n        with:\n          cache: false\n      - uses: actions/setup-node@v4\n        with:\n          cache: 'false'\n"
+        self.assertEqual(self.caching(steps), [])
+        code, report = self.audit("on: push\njobs:\n  a:\n    steps:\n" + steps)
+        self.assertEqual(report["summary"]["jobs_with_caching"], 0)
 
     def test_nothing_else_is_guessed_as_caching(self):
         steps = ("      - uses: actions/setup-python@v5\n      - uses: actions/setup-node@v4\n        with:\n          cache: ''\n"
