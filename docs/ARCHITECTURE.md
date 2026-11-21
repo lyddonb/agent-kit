@@ -92,6 +92,74 @@ roles. A new role would need a change in agentfiles and in every profile; a mapp
 skill text costs nothing. Add a role only when one job's model choice genuinely conflicts with
 another's.
 
+## Can a pull request change the check that judges it?
+
+An audit of every verification gate in the runtime's five repos, as of 2026-11-21 (roadmap
+R29, unit 1). It answers one question per gate: when a pull request is checked, do the
+check's code and config come from somewhere the pull request can write? A gate that answers
+"the PR" can be turned off by the change it is meant to judge. Nothing is fixed here. The
+table is the input to H13 in `HUMAN_TASKS.md`.
+
+Each cell was read from the workflow files on each repo's `main` and from
+`gh api repos/lyddonb/REPO/rulesets/ID` (for agent-ledger, `branches/main/protection`), unless
+it is marked inferred or untested.
+
+Three rules decide every row:
+
+- A workflow triggered by `pull_request` is read from the pull request's merge commit. The
+  pull request can edit the workflow file, and with it any pin, flag or argument written there.
+- A workflow triggered by `pull_request_target` is read from the base branch. The pull
+  request cannot edit it. Whether it is safe then depends on what it checks out and runs.
+- A required check is matched by its name and by the GitHub Actions app. The requirement
+  doesn't say which workflow file or event must produce it.
+
+| Gate (check name) | Repo | Required on `main` | Code at PR time | Config at PR time | Who can change it | Fix or owner |
+|---|---|---|---|---|---|---|
+| `books` | finances | Yes (ruleset) | `books.py check` from agent-kit, at a commit SHA written in `books.yml` | `books.yml`: the SHA and the `--base origin/main` argument. Trigger is `pull_request` | **The PR** | H13, or fix A below |
+| `books` | quality | Yes (ruleset) | `quality.py check` from agent-kit, at a commit SHA written in `books.yml` | `books.yml`, same as above. Trigger is `pull_request` | **The PR** | H13, or fix A |
+| `ledger-verify` | finances, quality | Yes (ruleset) | The `lyddonb/agent-ledger` Action at a commit SHA. It runs its own copy of the CLI under `python -I` and checks out the pull request's merge commit as data | `ledger.yml` on the base branch. Trigger is `pull_request_target`. The CLI reads no settings file from the tree it checks (read: `scan.py` and `repo_verify.py` have no allow or ignore list) | Not the PR. One gap: a pull request could add a second job with the same name (untested, see below) | H13 decides the name gap |
+| `ledger-verify` | agent-ledger | Yes (branch protection) | The Action as the base commit has it (`ref: base.sha`, checked out to `trusted/`), with the pull request's merge commit as data | `ledger.yml` on the base branch for the `pull_request_target` run | Not the PR for that run. The same file also triggers on `pull_request`, where the pull request's copy defines a job with the same name. Today it is skipped by an `if:`, and each pull request already shows two `ledger-verify` check runs (measured on PRs 29 to 31) | H13 decides the name gap |
+| `ledger-verify-self` | agent-ledger | No | The pull request's own Action | The pull request's `ledger.yml` | **The PR**, by design: it exercises Action changes before they merge | Owner: Beau. Never add it to the required list |
+| `test (3.10)`, `test (3.12)`, `test (3.13)` | agent-ledger | Yes (branch protection) | The pull request's tests and source. The recorder is `quality.py record` from agent-kit, at a SHA written in `test.yml` | `test.yml`. Trigger is `pull_request` | **The PR** | H13 for `test.yml`. R29 unit 3 for a diff that weakens tests |
+| `test` | agentfiles | No. The ruleset requires no checks | The pull request's tests and source. Recorder pinned in `ci.yml` | `ci.yml`. Trigger is `pull_request` | **The PR**, and a red run doesn't block the merge | H13: require `test` first, then protect `ci.yml`. R29 unit 3 for the tests |
+| `validate` | agent-kit | Yes (ruleset) | All from the pull request: `validate.yml`, the `Makefile`, `tools/*.py`, `tests/` | The same files, plus `kit.yaml` | **The PR**. This repo is the checker's source, so a pin can't help | H13 for `validate.yml`. R29 unit 3 for the tests. Changes to `tools/` rely on review |
+| `change-record` (a step of `validate`, `--observe`) | agent-kit | Only as part of `validate`. In observe it can't fail on content | `debrief.py` from the pull request | `validate.yml`: the `--observe` flag | **The PR** | H13. Keep it in observe until then |
+| `change-record` (`--observe`) | agent-ledger, finances, quality | quality: yes (ruleset). The other two: no | `debrief.py check --base` from agent-kit, at a SHA written in `changes.yml`. The list of files that need no record is inside that script | `changes.yml`: the SHA and the `--observe` flag. Trigger is `pull_request` | **The PR** | H13, or fix A. Keep it in observe until then |
+| `check-product.py` | None of the five. A product repo's agent runs it before each PR | Not a CI check anywhere | The copy in the bstack plugin installed on the author's machine (inferred from the Product phase playbook; no workflow calls it) | The repo's `docs/` files in the pull request | **The PR**: its author decides whether to run it, and nothing records that it ran | R22 puts it in CI. R29 unit 2 covers a probe edited in the diff that checks its box |
+| Receipts (`receipt.py`, `check-product.py --receipts`) | None of the five, same as above | Not a CI check anywhere | The installed plugin copy and `ledger` on the author's PATH (inferred, as above) | The criterion's `Probe:` text and the command given to `receipt.py`, both chosen in the pull request | **The PR**. Where `ledger-verify` runs, it proves the ledger holding the receipts is intact. It doesn't check that a ticked box has a receipt (read: `verify.py` and `repo_verify.py` don't mention receipts) | R29 unit 2, then the receipts gate in R32 |
+
+**Fix A, the pattern `ledger-verify` already uses in finances and quality.** Trigger on
+`pull_request_target`, keep the checker's SHA in the base branch's workflow, check out the
+pull request's merge commit as data, and run the checker in a way that can't import from that
+checkout. It fits `books` and `change-record`, which only read files. It doesn't fit `test` or
+`validate`, which run the pull request's own code by design. It needs no admin rights, only a
+pull request in each repo, and that pull request is the last one able to change its own check.
+
+**The name gap is untested.** The agent-ledger rows show two check runs named `ledger-verify`
+on every pull request, one a success and one skipped, and the merges went through. Nobody has
+tried a pull request where the base-branch run fails and a second run of the same name passes.
+H13 should try that once on a scratch pull request before treating any `pull_request_target`
+check as out of reach.
+
+**What H13 has to work with.** No repo has a `CODEOWNERS` file. Every ruleset and
+agent-ledger's branch protection ask for a pull request with zero approvals. The last 30
+merged pull requests in each repo were all opened by the owner's account, agents included, and
+GitHub doesn't let an author approve their own pull request. So "a change under
+`.github/workflows/**` needs your review" can't be met by a review rule alone while agents
+open pull requests as that account. The options are fix A where it fits, a second account for agents so that a
+code-owner review means something, or a ruleset that restricts who may change those paths
+(not checked: whether GitHub offers that rule for these repos).
+
+**Other things the audit turned up.**
+
+- quality requires `change-record` while the check runs with `--observe`. The requirement
+  proves the job ran, not that a record exists.
+- agent-ledger's `ledger.yml` lacks the step the finances and quality copies have, which fails
+  the run when `refs/pull/N/merge` doesn't yet hold the pull request's current head.
+- Every workflow uses `actions/checkout@v4`, `actions/setup-python@v5` and the like by tag.
+  A pull request can't move those tags, so they are outside this question, but they are not
+  pinned by SHA.
+
 ## Generated vs. authored files
 
 | Authored | Generated (`make gen`) |
