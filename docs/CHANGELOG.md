@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.30.0 (2026-11-21)
+
+- A repo can keep a reliability checklist, `.agents/checklist.json`: the mistakes that already happened there, each with a trigger read from the diff and a check to run. `verify-work` now runs `checklist.py --base REF` before a verdict and gets only the items the change could repeat, each with the line that fired it. A docs change gets no list. A failed item makes the verdict NOT VERIFIED, and one you could not check makes it INCONCLUSIVE.
+- `correct` sends a mistake that a diff can show to the checklist instead of the rule table. agent-kit's own checklist starts with five items: a books layout change, a phase spec format change, anything under `plugins/`, a `gh` call, and a skill description change.
+- Try: `Run the reliability checklist against origin/main and check each item it prints.`
+
 ## bstack 0.29.0 (2026-11-21)
 
 - `quality.py summary` now lists a watched repo whose CI has no test recorder. With the job books adopted, a repo with CI runs in the week and no test records appears as `{lifecycle, recorded: false}`: its job and step numbers, and nothing it did not measure. Every listed repo also says `recorded`, so a weekly brief can say which repos have no test records instead of leaving them out.
