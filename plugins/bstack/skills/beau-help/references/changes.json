@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.24.0",
+      "date": "2026-11-21",
+      "plugin": "bstack",
+      "version": "0.24.0",
+      "changes": [
+        "The Quality Director now has a speed ladder (`references/speed-ladder.md`): the order in which it may propose making a repo's CI faster. Seven rungs (delete, budget, stage, cache, parallelize, select, shard), each opened by values `summary --json` and `audit-ci` print, each with the proof a proposal must show and the question to ask. It proposes from the first open rung only and still changes no workflow."
+      ],
+      "try": "Which speed proposals are open for agent-ledger this week?"
+    },
+    {
       "id": "bstack@0.23.0",
       "date": "2026-11-19",
       "plugin": "bstack",
