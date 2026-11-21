@@ -1,0 +1,127 @@
+{
+  "generated_from": {
+    "failures": 2,
+    "runs": 2,
+    "weekly_rows": 3
+  },
+  "repos": {
+    "agentfiles": {
+      "by_kind": {
+        "differential": {
+          "caught_on_pr": 0,
+          "failed_on_main": 0,
+          "tests": 0,
+          "total_ms": 0
+        },
+        "e2e": {
+          "caught_on_pr": 0,
+          "failed_on_main": 0,
+          "tests": 0,
+          "total_ms": 0
+        },
+        "property": {
+          "caught_on_pr": 0,
+          "failed_on_main": 0,
+          "tests": 0,
+          "total_ms": 0
+        },
+        "unit": {
+          "caught_on_pr": 2,
+          "failed_on_main": 0,
+          "tests": 3,
+          "total_ms": 84
+        }
+      },
+      "caught_on_pr": {
+        "count": 2,
+        "failures": [
+          {
+            "evidence": "https://github.com/example/agentfiles/actions/runs/102/attempts/1",
+            "outcome": "error",
+            "python": "3.12",
+            "sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "test_id": "tests.test_a.A.test_four"
+          },
+          {
+            "evidence": "https://github.com/example/agentfiles/actions/runs/102/attempts/1",
+            "outcome": "fail",
+            "python": "3.12",
+            "sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "test_id": "tests.test_a.A.test_two"
+          }
+        ]
+      },
+      "ci_wall_ms": 8590,
+      "failed_on_main": [],
+      "flaky": [],
+      "over_threshold": false,
+      "red_runs": 1,
+      "runs": 2,
+      "slowest_tests": [
+        {
+          "max_ms": 40,
+          "mean_ms": 12,
+          "runs": 5,
+          "test_id": "tests.test_a.A.test_one"
+        },
+        {
+          "max_ms": 9,
+          "mean_ms": 9,
+          "runs": 1,
+          "test_id": "tests.test_a.A.test_four"
+        },
+        {
+          "max_ms": 3,
+          "mean_ms": 3,
+          "runs": 5,
+          "test_id": "tests.test_a.A.test_two"
+        }
+      ],
+      "suite_ms": {
+        "by_python": {
+          "3.12": {
+            "median": 4210,
+            "runs": 2
+          }
+        },
+        "max": 4380,
+        "median": 4210
+      },
+      "suite_ms_change": null,
+      "suite_ms_prior4": {
+        "median": null,
+        "weeks": 0
+      },
+      "tests": 80,
+      "tests_added": [],
+      "tests_removed": []
+    }
+  },
+  "slowest_tests": [
+    {
+      "max_ms": 40,
+      "mean_ms": 12,
+      "repo": "agentfiles",
+      "runs": 5,
+      "test_id": "tests.test_a.A.test_one"
+    },
+    {
+      "max_ms": 9,
+      "mean_ms": 9,
+      "repo": "agentfiles",
+      "runs": 1,
+      "test_id": "tests.test_a.A.test_four"
+    },
+    {
+      "max_ms": 3,
+      "mean_ms": 3,
+      "repo": "agentfiles",
+      "runs": 5,
+      "test_id": "tests.test_a.A.test_two"
+    }
+  ],
+  "thresholds": {
+    "suite_median_ms": 300000
+  },
+  "week": "2026-W46"
+}

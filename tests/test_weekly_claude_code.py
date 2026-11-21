@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "plugins/cfo/skills/cfo-books/scripts/weekly-claude-code.sh"
 BOOKS = ROOT / "tests/fixtures/books"
 REPO = "owner/books"
+QREPO = "owner/quality"
+QUALITY_BOOKS_FIXTURE = ROOT / "tests/fixtures/quality/books"
+SKILL_HEADER = "week,skill,source,version,tool,how,calls,searches,errors,verdict,use\n"
 
 STUB_GH = r"""#!/usr/bin/env python3
 import json, os, sys
@@ -26,6 +29,10 @@ elif args[:2] == ["api", "repos/owner/books/pulls?state=open&per_page=100"]:
     print(open(os.environ["STUB_PULLS"]).read())
 elif args[:2] == ["api", "repos/owner/books/pulls"] and "-f" in args:
     print("https://example.invalid/owner/books/pull/9")
+elif args[:2] == ["api", "repos/owner/quality/pulls?state=open&per_page=100"]:
+    print(open(os.environ["STUB_QUALITY_PULLS"]).read())
+elif args[:2] == ["api", "repos/owner/quality/pulls"] and "-f" in args:
+    print("https://example.invalid/owner/quality/pull/4")
 else:
     sys.exit(f"stub gh: unexpected call {args}")
 """
@@ -141,7 +148,10 @@ class WeeklyJob(unittest.TestCase):
         self.calls = self.tmp / "calls.jsonl"
         self.pulls = self.tmp / "pulls.json"
         self.pulls.write_text("[]")
-        self.env = {**os.environ, "HOME": str(self.home), "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        self.quality_pulls = self.tmp / "quality-pulls.json"
+        self.quality_pulls.write_text("[]")
+        inherited = {k: v for k, v in os.environ.items() if not k.startswith(("QUALITY_", "AGENTFILES_", "CFO_"))}
+        self.env = {**inherited, "HOME": str(self.home), "STUB_QUALITY_PULLS": str(self.quality_pulls), "PATH": f"{bin_dir}:{os.environ['PATH']}",
                     "STUB_CALLS": str(self.calls), "STUB_PULLS": str(self.pulls),
                     "CFO_CLONE_URL": str(self.tmp / "origin.git"), "CFO_LOGS": str(self.tmp / "logs"),
                     "CFO_PYTHON": sys.executable, "CFO_TZ": TZ, "STUB_NOTES": str(self.notes),
@@ -155,6 +165,45 @@ class WeeklyJob(unittest.TestCase):
         self.git(seed, "commit", "-q", "-m", "seed")
         self.git(self.tmp, "clone", "-q", "--bare", str(seed), str(self.tmp / "origin.git"))
         self.main_sha = self.rev("main")
+
+    def make_quality(self, skills_csv: bool = True) -> Path:
+        """A bare quality books repo from the small fixture; the skill-use book holds only its header."""
+        seed = self.tmp / "qseed"
+        shutil.copytree(QUALITY_BOOKS_FIXTURE, seed / "books")
+        if skills_csv:
+            (seed / "books/skill-uses.csv").write_text(SKILL_HEADER)
+        self.git(seed, "init", "-q", "-b", "main")
+        self.git(seed, "add", ".")
+        self.git(seed, "commit", "-q", "-m", "seed")
+        bare = self.tmp / "quality.git"
+        self.git(self.tmp, "clone", "-q", "--bare", str(seed), str(bare))
+        self.env["QUALITY_CLONE_URL"] = str(bare)
+        return bare
+
+    def write_skill_transcript(self):
+        """One use of demo:alpha last week: a Skill call, then a tool result. Invented names only."""
+        stamp = f"{self.last_week.isoformat()}T10:00:00.000Z"
+        records = [
+            {"type": "assistant", "timestamp": stamp, "isSidechain": False, "uuid": "u1",
+             "message": {"role": "assistant", "content": [
+                 {"type": "tool_use", "id": "toolu_01", "name": "Skill", "input": {"skill": "demo:alpha"}}]}},
+            {"type": "user", "timestamp": stamp, "isSidechain": False, "uuid": "u2",
+             "message": {"role": "user", "content": [
+                 {"type": "tool_result", "tool_use_id": "toolu_02", "is_error": False, "content": "x"}]}},
+        ]
+        (self.logs / "skills.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+
+    def quality_git(self, *args) -> str:
+        return self.git(self.tmp / "quality.git", *args)
+
+    def quality_branches(self) -> list[str]:
+        return sorted(self.quality_git("for-each-ref", "--format=%(refname:short)", "refs/heads").split())
+
+    def quality_rows(self, ref: str) -> list[str]:
+        return self.quality_git("show", f"{ref}:books/skill-uses.csv").splitlines()[1:]
+
+    def quality_run(self, *extra) -> subprocess.CompletedProcess:
+        return self.run_job("--quality-repo", QREPO, *extra)
 
     def git(self, cwd, *args) -> str:
         return subprocess.run(["git", *args], cwd=cwd, env=self.env, check=True, capture_output=True,
@@ -447,6 +496,167 @@ class WeeklyJob(unittest.TestCase):
         plist = plistlib.loads(r.stdout.encode())
         self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
         self.assertEqual(plist["StartCalendarInterval"], {"Weekday": 0, "Hour": 6, "Minute": 0})
+
+    def test_skill_uses_are_pushed_to_a_quality_brief_branch_with_a_pr(self):
+        self.make_quality()
+        self.write_skill_transcript()
+        main_before = self.quality_git("rev-parse", "main")
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        branch = f"quality/brief-{this_sunday().isoformat()}"
+        self.assertEqual(self.quality_branches(), sorted(["main", branch]))
+        self.assertEqual(self.quality_git("rev-parse", "main"), main_before, "main must never move")
+        [row] = self.quality_rows(branch)
+        self.assertTrue(row.startswith(f"{week(self.last_week)},alpha,"), row)
+        self.assertEqual(self.quality_git("log", "-1", "--format=%s", branch), f"Skill uses for {week(self.last_week)}")
+        self.assertEqual(self.quality_git("diff", "--name-only", "main", branch), "books/skill-uses.csv")
+        creates = [c for c in self.gh_calls() if "-f" in c and c[1] == f"repos/{QREPO}/pulls"]
+        self.assertEqual(len(creates), 1, self.gh_calls())
+        self.assertIn(f"head={branch}", creates[0])
+        self.assertIn(f"title=Quality brief {this_sunday().isoformat()}: skill uses (brief pending)", creates[0])
+        self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", self.ledger(f"cfo/brief-{this_sunday().isoformat()}"),
+                      "the cfo rows land as before")
+        for where, text in (("stdout", r.stdout), ("stderr", r.stderr), ("gh calls", json.dumps(self.gh_calls()))):
+            self.assertNotIn("alpha", text, f"a skill name leaked into {where}")
+            self.assertNotIn("demo", text, f"a plugin name leaked into {where}")
+
+    def test_second_run_books_no_skill_uses_again(self):
+        self.make_quality()
+        self.write_skill_transcript()
+        self.assertEqual(self.quality_run().returncode, 0)
+        branch = f"quality/brief-{this_sunday().isoformat()}"
+        after_first = self.quality_git("rev-parse", branch)
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("no new skill uses", r.stdout)
+        self.assertEqual(self.quality_git("rev-parse", branch), after_first)
+        self.assertEqual(len([c for c in self.gh_calls() if "-f" in c and c[1] == f"repos/{QREPO}/pulls"]), 1)
+
+    def test_open_quality_pr_takes_the_rows_and_no_new_pr_is_opened(self):
+        bare = self.make_quality()
+        self.write_skill_transcript()
+        seed = self.tmp / "qpr"
+        self.git(self.tmp, "clone", "-q", str(bare), str(seed))
+        self.git(seed, "checkout", "-q", "-b", "quality/brief-2026-01-04")
+        (seed / "note.md").write_text("an earlier brief\n")
+        self.git(seed, "add", ".")
+        self.git(seed, "commit", "-q", "-m", "earlier brief")
+        self.git(seed, "push", "-q", "origin", "quality/brief-2026-01-04")
+        self.quality_pulls.write_text(json.dumps([
+            {"head": {"ref": "quality/brief-2026-01-04", "repo": {"full_name": QREPO}}, "created_at": "2026-01-02T00:00:00Z"},
+            {"head": {"ref": "quality/brief-2026-01-11", "repo": {"full_name": "fork/quality"}}, "created_at": "2026-01-01T00:00:00Z"}]))
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.quality_branches(), ["main", "quality/brief-2026-01-04"])
+        self.assertEqual(len(self.quality_rows("quality/brief-2026-01-04")), 1)
+        self.assertEqual([c for c in self.gh_calls() if "-f" in c and c[1] == f"repos/{QREPO}/pulls"], [])
+
+    def test_rejected_quality_push_is_retried_once(self):
+        bare = self.make_quality()
+        self.write_skill_transcript()
+        hook = bare / "hooks/pre-receive"
+        flag = self.tmp / "q-rejected-once"
+        hook.write_text(f"#!/bin/sh\n[ -e {flag} ] && exit 0\ntouch {flag}\necho simulated race >&2\nexit 1\n")
+        hook.chmod(0o755)
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("retrying once", r.stdout)
+        self.assertEqual(len(self.quality_rows(f"quality/brief-{this_sunday().isoformat()}")), 1)
+
+    def test_without_a_quality_repo_the_quality_books_are_never_touched(self):
+        bare = self.make_quality()
+        self.write_skill_transcript()
+        r = self.run_job()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("skipping skill uses", r.stdout)
+        self.assertEqual(self.quality_branches(), ["main"])
+        self.assertFalse([c for c in self.gh_calls() if "quality" in json.dumps(c)], self.gh_calls())
+        self.assertEqual(self.branches(), sorted(["main", f"cfo/brief-{this_sunday().isoformat()}"]))
+        self.assertEqual(r.stderr, "")
+
+    def test_quality_repo_defaults_from_the_quality_books_remote(self):
+        checkout = self.tmp / "quality-checkout"
+        self.git(self.tmp, "init", "-q", str(checkout))
+        self.git(checkout, "remote", "add", "origin", "git@github.com:owner/quality.git")
+        self.env["QUALITY_BOOKS"] = str(checkout)
+        import plistlib
+        plist = plistlib.loads(self.run_job("--print-plist").stdout.encode())
+        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO])
+
+    def test_plist_carries_the_quality_repo_only_when_set(self):
+        import plistlib
+        with_flag = plistlib.loads(self.quality_run("--print-plist").stdout.encode())
+        self.assertEqual(with_flag["ProgramArguments"],
+                         ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO])
+        without = self.run_job("--print-plist").stdout
+        self.assertNotIn("quality", without)
+        self.assertEqual(plistlib.loads(without.encode())["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
+
+    def test_a_malformed_quality_repo_is_refused(self):
+        r = self.run_job("--quality-repo", "not a repo")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("Not a GitHub OWNER/NAME", r.stderr)
+
+    def test_books_without_skill_uses_csv_skip_the_pass(self):
+        self.make_quality(skills_csv=False)
+        self.write_skill_transcript()
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("skill-uses.csv is not in the quality books yet; skipping", r.stdout)
+        self.assertEqual(self.quality_branches(), ["main"])
+        self.assertEqual([c for c in self.gh_calls() if "-f" in c and c[1] == f"repos/{QREPO}/pulls"], [])
+        self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", self.ledger(f"cfo/brief-{this_sunday().isoformat()}"))
+
+    def test_missing_quality_py_skips_the_pass(self):
+        self.make_quality()
+        self.env["QUALITY_PY"] = str(self.tmp / "no-such-quality.py")
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("skipping skill uses", r.stdout)
+        self.assertEqual(self.quality_branches(), ["main"])
+
+    def test_a_failing_pass_still_pushes_the_cfo_rows_then_fails(self):
+        self.make_quality()
+        failing = self.tmp / "failing_quality.py"
+        failing.write_text("import sys\nprint('1 problems; refusing')\nsys.exit(1)\n")
+        broken_clone = self.tmp / "no-such-quality.git"
+        for case in ("quality.py exits 1", "clone fails"):
+            with self.subTest(case=case):
+                self.notes.unlink(missing_ok=True)
+                if case == "clone fails":
+                    self.env["QUALITY_CLONE_URL"] = str(broken_clone)
+                else:
+                    self.env["QUALITY_PY"] = str(failing)
+                r = self.quality_run()
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn("skill uses", r.stderr.split("FAILED")[-1])
+                self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", self.ledger(f"cfo/brief-{this_sunday().isoformat()}"),
+                              "the cfo rows are pushed first")
+                self.assertEqual(self.quality_branches(), ["main"])
+                self.assertEqual(len(self.notes.read_text().splitlines()), 1, self.notes.read_text())
+
+    def test_a_vercel_problem_and_a_skills_problem_are_both_reported(self):
+        self.make_quality()
+        failing = self.tmp / "failing_quality.py"
+        failing.write_text("import sys\nsys.exit(1)\n")
+        self.env.update(QUALITY_PY=str(failing), STUB_VERCEL_MODE="api-fail")
+        r = self.quality_run()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        final = r.stderr.split("FAILED:")[-1]
+        self.assertIn("Vercel: vercel api exited 1", final)
+        self.assertIn("skill uses", final)
+        self.assertEqual(len(self.notes.read_text().splitlines()), 1)
+
+    def test_dry_run_pushes_nothing_to_the_quality_repo(self):
+        self.make_quality()
+        self.write_skill_transcript()
+        r = self.quality_run("--dry-run")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("would book 1 skill uses", r.stdout)
+        self.assertIn(f"would push skill uses to quality/brief-{this_sunday().isoformat()}", r.stdout)
+        self.assertEqual(self.quality_branches(), ["main"])
+        self.assertEqual(self.branches(), ["main"])
+        self.assertEqual([c for c in self.gh_calls() if "-f" in c], [])
 
 
 if __name__ == "__main__":

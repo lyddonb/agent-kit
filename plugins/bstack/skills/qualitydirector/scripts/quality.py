@@ -10,6 +10,8 @@ Usage:
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
     uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json]
     uv run --python 3.12 quality.py audit-ci REPO_DIR [--json]
+    uv run --python 3.12 quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE]
+                                                [--since YYYY-MM-DD] [--dry-run] [--json]
 
 `record` runs `python -m unittest discover -s TESTS_DIR` and writes what happened to FILE as
 JSON Lines: a run header, then one line per test with its outcome (pass, fail, error, skip) and
@@ -178,6 +180,38 @@ neither skipped nor timed, and a `runs.csv` row (any week); `outside_suite_ms` i
 minus suite wall time, each floored at 0, and `runs_floored` says how many runs the floor acted on. See SKILL.md for
 each key.
 
+Skill use. books/skill-uses.csv (`week,skill,source,version,tool,how,calls,searches,errors,verdict,use`) has one
+row per skill invocation and is append only. It is optional until created with its header: without the file every
+command prints, returns and writes what it did before, and `book-skills` exits 2. With it, `check` holds each row to
+`SKILL_RULES` (a real ISO week; `skill` matching [A-Za-z0-9][A-Za-z0-9._-]{0,99}; `tool` claude-code or cursor;
+`verdict` unjudged; `use` 16 hex and unique; a claude-code row with `how` one of typed, named, auto, subagent and
+`calls` at most 20 with `searches` and `errors` each at most `calls`; a cursor row with those four cells empty), and
+`summary --json` gains `skills` for the week: `uses`, `window` (20) and `by_skill`, most used first, each with
+`skill`, `source`, `uses`, `by_how`, `by_tool`, the sums `calls`, `searches` and `errors`, and `unjudged`.
+
+`book-skills` reads this machine's agent transcripts and appends the uses it has not booked. It runs on the machine
+that has the transcripts, never in CI. A Claude Code use is a `Skill` tool call, a slash command followed by the record
+that loads a skill, or the first `Read` of a SKILL.md under a folder a tool installs skills into (INSTALLED_ROOTS,
+under the home folder) for a skill that chain has not loaded another way; a SKILL.md read anywhere else is a checkout
+being edited. Only `user` and `assistant` records are read. `how` is `subagent` in a sidechain; `typed` for a slash
+command whose record has `origin.kind` human or no origin at all (those are counted and reported); `named` when the
+last text a user record carried names the skill (see `names_skill`), or for a slash command another session sent;
+otherwise `auto`. `calls`, `searches` (ToolSearch calls) and `errors` (`is_error` true) count the tool results that
+follow the load in the same chain, up to the next turn a human typed or 20 results. A use that sits in two files (a
+resumed or forked session) is booked once, with its longest window. Cursor's only trace is a read of an installed
+SKILL.md: one row per transcript and skill, in the week of the file's modification time, with no `how` and no counts.
+Only closed ISO weeks (UTC) are booked, since a session still running has a window still growing; `--since` leaves
+out earlier days (the weekly job passes the start of the weeks Claude Code's log retention still holds whole).
+`source` and `version` come from `--lock`, agentfiles' lock file, as git has it on the day of the use (the file on
+disk when git has no commit that early): the lock item that installs the skill, such as `mine:@bstack`, and its
+commit. A skill invoked by its bare name takes its plugin from the folder it loaded from, when that folder still
+exists. A skill no lock item installs (a project's own, one bundled with the tool, a plugin outside every profile)
+is booked with its plugin name as `source` and an empty `version`, and counted as not in the lock. `use` is the first
+16 hex of a SHA-256 over the tool-call id (the record id for a slash command; the transcript path and skill for
+Cursor): it makes a second run add nothing and says nothing about the session. No transcript text is read into a
+row or printed: a row holds names and counts, a name that fails the rules is counted and left out, and the output is
+counts and weeks. Exit 0 when it ran, 1 when the books fail `check`, 2 on bad usage or books without the file.
+
 Standard library only; needs Python 3.10 or later (run it through uv).
 
 Shape: `Books` is loaded once (the CSV tables with line numbers; the job books only when the files exist). Each entry in `CHECKS`
@@ -230,6 +264,7 @@ WATCHED = "books/watched.csv"
 JOBS = "books/jobs.csv"  # optional until adopted together with STEPS: see check_adoption
 STEPS = "books/steps.csv"
 KINDS = "books/kinds.csv"  # optional: a book without it is valid and every test is a unit test
+SKILLS = "books/skill-uses.csv"  # optional until created with its header: one row per skill invocation, append only
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
 FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "evidence")
@@ -242,7 +277,12 @@ STEPS_SCHEMA = ("started", "repo", "job_id", "number", "step", "conclusion", "ms
 SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}  # the files every book has
 # The files a book may leave out. ingest never writes kinds.csv. The job books come as a pair: neither file means
 # they are not adopted and every command behaves as it did before they existed; exactly one is a check problem.
-OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA}
+SKILLS_SCHEMA = ("week", "skill", "source", "version", "tool", "how", "calls", "searches", "errors", "verdict", "use")
+OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA}
+SKILL_TOOLS = ("claude-code", "cursor")
+SKILL_HOWS = ("typed", "named", "auto", "subagent")
+SKILL_VERDICTS = ("unjudged",)  # no rule fills a verdict yet
+SKILL_WINDOW = 20  # tool results counted after a skill loads
 JOB_BOOKS = (JOBS, STEPS)
 TABLE_SCHEMAS = {**SCHEMAS, **OPTIONAL_SCHEMAS}
 KIND_NAMES = ("unit", "e2e", "property", "differential")
@@ -1087,6 +1127,47 @@ STEP_RULES: dict[str, Rule] = {
 }
 
 
+_SKILL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+_SKILL_SOURCE = re.compile(r"([A-Za-z0-9][A-Za-z0-9._:@/-]{0,199})?")
+_SKILL_VERSION = re.compile(r"([0-9a-f]{40})?")
+_SKILL_USE = re.compile(r"[0-9a-f]{16}")
+_SKILL_COUNTS = ("calls", "searches", "errors")
+
+
+def _skill_cells_rule(cells: dict) -> Iterator[str]:
+    for name, pattern, want in (("skill", _SKILL_NAME, "match [A-Za-z0-9][A-Za-z0-9._-]{0,99}"),
+                                ("source", _SKILL_SOURCE, "be empty or match [A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}"),
+                                ("version", _SKILL_VERSION, "be empty or 40 lowercase hex characters"),
+                                ("use", _SKILL_USE, "be 16 lowercase hex characters")):
+        if not pattern.fullmatch(cells[name]):
+            yield f"{name} must {want}, got {_show(cells[name])}"
+    if cells["tool"] not in SKILL_TOOLS:
+        yield f"tool must be one of {', '.join(SKILL_TOOLS)}, got {_show(cells['tool'])}"
+    if cells["verdict"] not in SKILL_VERDICTS:
+        yield f"verdict must be one of {', '.join(SKILL_VERDICTS)}, got {_show(cells['verdict'])}"
+
+
+def _skill_window_rule(cells: dict) -> Iterator[str]:
+    """Cursor records no tool results, so its rows carry a use and nothing else. A Claude Code row has all four."""
+    measured = ("how",) + _SKILL_COUNTS
+    if cells["tool"] == "cursor":
+        if any(cells[name] for name in measured):
+            yield "a cursor row has empty how, calls, searches and errors"
+        return
+    if cells["tool"] != "claude-code":
+        return
+    if cells["how"] not in SKILL_HOWS:
+        yield f"how must be one of {', '.join(SKILL_HOWS)}, got {_show(cells['how'])}"
+    counts = _counts_ok(cells, _SKILL_COUNTS)
+    if counts is None:
+        yield "calls, searches and errors must be non-negative integers"
+    elif counts[0] > SKILL_WINDOW or max(counts[1:]) > counts[0]:
+        yield f"calls is at most {SKILL_WINDOW}, and searches and errors are each at most calls"
+
+
+SKILL_RULES: dict[str, Rule] = {"week": _week_rule, "cells": _skill_cells_rule, "window": _skill_window_rule}
+
+
 def rule_messages(rules: dict[str, Rule], cells: dict) -> Iterator[str]:
     for rule in rules.values():
         yield from rule(cells)
@@ -1263,6 +1344,11 @@ def check_steps_match_jobs(books: Books) -> Iterator[Problem]:
             yield Problem(STEPS, row.line, f"repo {_show(c['repo'])} differs from {JOBS} line {job.line} ({_show(job.cells['repo'])})")
 
 
+def check_skill_uses(books: Books) -> Iterator[Problem]:
+    yield from _check_rows(books, SKILLS, SKILL_RULES)
+    yield from _unique_rows(books, SKILLS, lambda c: (c["use"],), "use")
+
+
 def _base_problem(books: Books) -> Problem | None:
     ref = books.base
     try:
@@ -1300,7 +1386,7 @@ def check_append_only(books: Books) -> Iterator[Problem]:
         yield Problem(RUNS, 1, f"cannot check against {ref}: the books folder must be the top level of its git "
                                f"work tree, but {where}")
         return
-    for rel in APPEND_ONLY + JOB_BOOKS:
+    for rel in APPEND_ONLY + JOB_BOOKS + (SKILLS,):
         yield from _append_only(books, rel)
 
 
@@ -1312,8 +1398,8 @@ def _append_only(books: Books, rel: str) -> Iterator[Problem]:
         return
     if not listed.stdout.strip():
         return  # the file did not exist at the base
-    if rel in JOB_BOOKS and not books.tables[rel].present:
-        yield Problem(rel, 1, f"removed since {ref}")  # a job book that was adopted at the base, now gone
+    if rel in OPTIONAL_SCHEMAS and not books.tables[rel].present:
+        yield Problem(rel, 1, f"removed since {ref}")  # an optional book that was adopted at the base, now gone
         return
     shown = _git(books.dir, "show", f"{ref}:./{rel}")
     if shown.returncode != 0:
@@ -1342,6 +1428,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("jobs", check_jobs),
     ("steps", check_steps),
     ("steps-match-jobs", check_steps_match_jobs),
+    ("skill-uses", check_skill_uses),
     ("append-only", check_append_only),
 )
 
@@ -1437,6 +1524,20 @@ class StepRow(NamedTuple):
     conclusion: str
     ms: int | None
     evidence: str
+
+
+class SkillUseRow(NamedTuple):
+    week: str
+    skill: str
+    source: str
+    version: str
+    tool: str
+    how: str
+    calls: int | None
+    searches: int | None
+    errors: int | None
+    verdict: str
+    use: str
 
 
 def _typed_rows(books: Books, rel: str, cls) -> list:
@@ -2449,13 +2550,14 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
 
 def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow], week: str,
               kinds: Iterable[KindRow] = (), jobs: list[JobRow] | None = None,
-              steps: list[StepRow] | None = None) -> dict:
+              steps: list[StepRow] | None = None, skill_uses: list[SkillUseRow] | None = None) -> dict:
     """The week's numbers as plain data: integers, strings, lists and dicts, nothing else. `jobs` and `steps` are
-    given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle`."""
+    given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle`. `skill_uses` is given
+    (possibly empty) only when books/skill-uses.csv exists; the result then has `skills`."""
     repos = sorted({r.repo for r in runs if week_of(r.started) == week})
     kinds = list(kinds)
     rules = {repo: {k.prefix: k.kind for k in kinds if k.repo == repo} for repo in repos}
-    return {
+    result = {
         "generated_from": {"failures": len(failures), "runs": len(runs), "weekly_rows": len(weekly)},
         "repos": {repo: _repo_summary(repo, week, runs, failures, weekly, rules[repo], jobs, steps)
                   for repo in repos},
@@ -2463,6 +2565,26 @@ def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[Weekl
         "thresholds": {"suite_median_ms": SUITE_MEDIAN_THRESHOLD_MS},
         "week": week,
     }
+    if skill_uses is not None:
+        result["skills"] = _skills_summary([u for u in skill_uses if u.week == week])
+    return result
+
+
+def _skills_summary(uses: list[SkillUseRow]) -> dict:
+    """Uses per skill in one week, most used first. `calls`, `searches` and `errors` are sums over the Claude Code
+    rows (a Cursor row has none), each row counting at most the first SKILL_WINDOW tool results after the load."""
+    groups: dict[tuple[str, str], list[SkillUseRow]] = {}
+    for u in uses:
+        groups.setdefault((u.skill, u.source), []).append(u)
+    by_skill = [{"skill": skill, "source": source, "uses": len(rows),
+                 "by_how": {how: sum(r.how == how for r in rows) for how in SKILL_HOWS},
+                 "by_tool": {tool: sum(r.tool == tool for r in rows) for tool in SKILL_TOOLS},
+                 "calls": sum(r.calls or 0 for r in rows), "searches": sum(r.searches or 0 for r in rows),
+                 "errors": sum(r.errors or 0 for r in rows),
+                 "unjudged": sum(r.verdict == "unjudged" for r in rows)}
+                for (skill, source), rows in groups.items()]
+    by_skill.sort(key=lambda s: (-s["uses"], s["skill"], s["source"]))
+    return {"by_skill": by_skill, "uses": len(uses), "window": SKILL_WINDOW}
 
 
 def _render_lifecycle(lc: dict) -> list[str]:
@@ -2498,6 +2620,8 @@ def render_summary(s: dict) -> str:
             lines.append(f"  slow: {printable(t['test_id'])} mean {t['mean_ms']} ms over {t['runs']} runs")
         if r.get("lifecycle"):
             lines.extend(_render_lifecycle(r["lifecycle"]))
+    if "skills" in s:
+        lines.append(f"skills: {s['skills']['uses']} uses of {len(s['skills']['by_skill'])} skills")
     lines.append(f"threshold: suite median above {s['thresholds']['suite_median_ms']} ms")
     return "\n".join(lines)
 
@@ -2523,7 +2647,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
     job_rows = _typed_rows(books, JOBS, JobRow) if adopted(books) else None
     step_rows = _typed_rows(books, STEPS, StepRow) if adopted(books) else None
     result = summarize(runs, _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), week,
-                       _typed_rows(books, KINDS, KindRow), job_rows, step_rows)
+                       _typed_rows(books, KINDS, KindRow), job_rows, step_rows,
+                       _typed_rows(books, SKILLS, SkillUseRow) if books.tables[SKILLS].present else None)
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_summary(result))
     return 0
 
@@ -3812,6 +3937,408 @@ def cmd_audit_ci(args: argparse.Namespace) -> int:
     return 1 if report["summary"]["unreadable"] else 0
 
 
+# ---------------------------------------------------------------------------
+# book-skills: skill use from this machine's agent transcripts into books/skill-uses.csv
+# ---------------------------------------------------------------------------
+#
+# The transcripts are private conversations. This section reads them for structure only (which tool was
+# called, with which skill name, how many results followed) and nothing it reads is printed or booked except a
+# skill name held to _SKILL_NAME, a plugin name held to the same pattern, and counts.
+
+# Where a tool keeps the skills it loads, relative to the home folder. A SKILL.md read from anywhere else is a
+# checkout: someone editing the skill, not using it.
+INSTALLED_ROOTS = (".claude/skills/", ".claude/plugins/", ".agents/skills/", ".cursor/skills/", ".cursor/skills-cursor/",
+                   ".cursor/plugins/", ".local/share/agentfiles/", "Library/Application Support/Claude/")
+_COMMAND = re.compile(r"<command-name>/([^<\s]+)</command-name>")
+_SKILL_BASE = "Base directory for this skill:"
+_VERSION_DIR = re.compile(r"[0-9]+\.[0-9].*|[0-9a-f]{12,}")
+_CURSOR_READS = ("Read", "ReadFile")
+
+
+class SkillUse(NamedTuple):
+    """One invocation as a transcript shows it. `key` names it across copies of the same session and never
+    reaches the books: the `use` cell is a hash of it."""
+    day: date  # UTC
+    skill: str
+    plugin: str  # the namespace it was invoked or loaded under, "" when there is none
+    tool: str
+    how: str
+    calls: int | None
+    searches: int | None
+    errors: int | None
+    key: str
+    no_origin: bool = False  # a slash command in a record with no `origin`: booked as typed, and counted
+
+
+def _parts(record: dict, kind: str) -> list[dict]:
+    content = record["message"].get("content")
+    return [p for p in content if isinstance(p, dict) and p.get("type") == kind] if isinstance(content, list) else []
+
+
+def _text_of(record: dict) -> str:
+    content = record["message"].get("content")
+    if isinstance(content, str):
+        return content
+    return "\n".join(p["text"] for p in _parts(record, "text") if isinstance(p.get("text"), str))
+
+
+def _origin(record: dict) -> str | None:
+    origin = record.get("origin")
+    return origin.get("kind") if isinstance(origin, dict) and isinstance(origin.get("kind"), str) else None
+
+
+def _split_name(name: str) -> tuple[str, str]:
+    """('bstack', 'how') from 'bstack:how' or '/bstack:how'; ('', 'how') from 'how'."""
+    plugin, _, skill = name.lstrip("/").rpartition(":")
+    return plugin, skill
+
+
+def skill_of_path(path: str) -> tuple[str, str]:
+    """(plugin, skill) from a skill folder or its SKILL.md: .../<plugin>[/<version>]/skills/<skill>. The plugin is ""
+    when the folder above `skills` is a dot folder or an opaque id, which name no plugin."""
+    segments = [s for s in path.split("/") if s]
+    if segments and segments[-1] == "SKILL.md":
+        segments.pop()
+    if not segments:
+        return "", ""
+    owners = segments[:-2][::-1] if len(segments) >= 2 and segments[-2] == "skills" else []
+    if owners and _VERSION_DIR.fullmatch(owners[0]):
+        owners = owners[1:]
+    plugin = owners[0] if owners else ""
+    return ("" if plugin.startswith((".", "plugin_")) else plugin), segments[-1]
+
+
+def plugin_of_folder(folder: str) -> str:
+    """The plugin a skill folder belongs to: from its path, else from where the path really leads (agentfiles links
+    ~/.agents/skills/<skill> into the plugin's tree), else from the plugin manifest two folders up. "" when the
+    folder is gone or belongs to no plugin."""
+    for path in (folder, os.path.realpath(folder)):
+        plugin = skill_of_path(path)[0]
+        if plugin:
+            return plugin
+    try:
+        with open(os.path.join(folder, "..", "..", ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
+            name = json.load(f).get("name")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return name if isinstance(name, str) else ""
+
+
+def _installed(path: str, home: str) -> bool:
+    return path.startswith(home + "/") and path[len(home) + 1:].startswith(INSTALLED_ROOTS)
+
+
+def names_skill(text: str, skill: str) -> bool:
+    """The text names the skill: its name as a whole word, with a space allowed for a hyphen. A one-word name
+    (`how`, `why`) is also an ordinary word, so it counts only as `/how`, `plugin:how`, `how skill` or `skill how`."""
+    low = text.lower()
+    pattern = r"(?<![a-z0-9_-])" + re.escape(skill.lower()).replace(r"\-", "[- ]") + r"(?![a-z0-9_-])"
+    for m in re.finditer(pattern, low):
+        if "-" in skill or low[max(m.start() - 1, 0):m.start()] in ("/", ":"):
+            return True
+        if re.search(r"\bskill\s*$", low[:m.start()]) or re.match(r"\s*skill\b", low[m.end():]):
+            return True
+    return False
+
+
+def _records(path: str) -> list[dict]:
+    """The user and assistant records of a Claude Code transcript. The other record types repeat their content."""
+    records = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if '"user"' not in line and '"assistant"' not in line:
+                continue
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(record, dict) and record.get("type") in ("user", "assistant") and isinstance(record.get("message"), dict):
+                records.append(record)
+    return records
+
+
+def _record_day(record: dict) -> date | None:
+    try:
+        return datetime.fromisoformat(str(record.get("timestamp")).replace("Z", "+00:00")).astimezone(timezone.utc).date()
+    except ValueError:
+        return None
+
+
+def _base_dir(record: dict, tool_id: str | None) -> str | None:
+    """The folder a skill was loaded from, when this record is the load that follows a slash command (tool_id
+    None) or the given Skill call."""
+    if record["type"] != "user" or not record.get("isMeta") or record.get("sourceToolUseID") != tool_id:
+        return None
+    text = _text_of(record)
+    return text.split("\n", 1)[0][len(_SKILL_BASE):].strip() if text.startswith(_SKILL_BASE) else None
+
+
+def _window(records: list[dict], start: int, chain: str, own_id: str | None, tool_names: dict[str, str]) -> tuple[int, int, int]:
+    """(calls, searches, errors) over the tool results that follow a load in the same chain, up to the next turn a
+    human typed or SKILL_WINDOW results, whichever comes first. The load's own result is not counted."""
+    calls = searches = errors = 0
+    for record in records[start + 1:]:
+        if record["type"] != "user" or (record.get("agentId") or "") != chain:
+            continue
+        results = _parts(record, "tool_result")
+        if not results and not record.get("isMeta") and _origin(record) == "human":
+            break
+        for part in results:
+            if part.get("tool_use_id") == own_id:
+                continue
+            calls += 1
+            searches += tool_names.get(part.get("tool_use_id")) == "ToolSearch"
+            errors += part.get("is_error") is True
+            if calls == SKILL_WINDOW:
+                return calls, searches, errors
+    return calls, searches, errors
+
+
+def claude_code_uses(path: str, home: str) -> Iterator[SkillUse]:
+    """The skill uses in one Claude Code transcript: a Skill tool call, a slash command that loads a skill, or the
+    first Read of an installed SKILL.md for a skill the chain has not loaded another way."""
+    records = _records(path)
+    tool_names = {p["id"]: p.get("name") for r in records if r["type"] == "assistant"
+                  for p in _parts(r, "tool_use") if isinstance(p.get("id"), str)}
+    prompt: dict[str, str] = {}  # per chain, the last text a user record carried
+    loaded: set[tuple[str, str]] = set()
+    for i, record in enumerate(records):
+        chain = record.get("agentId") or ""
+        day = _record_day(record)
+        found: list[tuple[str, str, str | None, str, bool]] = []  # plugin, skill, own tool id, key, is a slash command
+        if record["type"] == "user":
+            text = _text_of(record)
+            if record.get("isMeta") or _parts(record, "tool_result") or not text:
+                continue
+            prompt[chain] = text
+            command = _COMMAND.search(text)
+            base = _base_dir(records[i + 1], None) if command and i + 1 < len(records) else None
+            if base is not None and isinstance(record.get("uuid"), str):
+                plugin, skill = _split_name(command[1])
+                found.append((plugin or plugin_of_folder(base), skill, None, record["uuid"], True))
+        else:
+            for part in _parts(record, "tool_use"):
+                tool_id, given = part.get("id"), part.get("input")
+                if not isinstance(tool_id, str) or not isinstance(given, dict):
+                    continue
+                if part.get("name") == "Skill" and isinstance(given.get("skill"), str):
+                    plugin, skill = _split_name(given["skill"])
+                    if not plugin:
+                        bases = (_base_dir(r, tool_id) for r in records[i + 1:i + 8])
+                        plugin = next((plugin_of_folder(b) for b in bases if b is not None), "")
+                    found.append((plugin, skill, tool_id, tool_id, False))
+                elif part.get("name") == "Read" and isinstance(given.get("file_path"), str):
+                    target = given["file_path"]
+                    if target.endswith("/SKILL.md") and _installed(target, home) and (chain, skill_of_path(target)[1]) not in loaded:
+                        found.append((plugin_of_folder(os.path.dirname(target)), skill_of_path(target)[1], tool_id, tool_id, False))
+        for plugin, skill, own_id, key, typed in found:
+            loaded.add((chain, skill))
+            if day is None:
+                continue
+            kind = _origin(record)
+            if record.get("isSidechain"):
+                how = "subagent"
+            elif typed:
+                how = "typed" if kind in (None, "human") else "named"
+            else:
+                how = "named" if names_skill(prompt.get(chain, ""), skill) else "auto"
+            yield SkillUse(day, skill, plugin, "claude-code", how, *_window(records, i, chain, own_id, tool_names),
+                           "claude-code:" + key, typed and how == "typed" and kind is None)
+
+
+def cursor_uses(path: str, root: str, home: str) -> Iterator[SkillUse]:
+    """Cursor's only trace of a skill is a read of an installed SKILL.md: one use per transcript and skill, dated by
+    the file because its records carry no time, with no counts because it records no tool results."""
+    day = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).date()
+    session = os.path.relpath(path, root)
+    seen: set[str] = set()
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if "SKILL.md" not in line:
+                continue
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(record, dict) or not isinstance(record.get("message"), dict):
+                continue
+            for part in _parts(record, "tool_use"):
+                given = part.get("input")
+                target = given.get("path") if isinstance(given, dict) else None
+                if part.get("name") not in _CURSOR_READS or not isinstance(target, str):
+                    continue
+                if not target.endswith("/SKILL.md") or not _installed(target, home):
+                    continue
+                skill = skill_of_path(target)[1]
+                if skill not in seen:
+                    seen.add(skill)
+                    yield SkillUse(day, skill, plugin_of_folder(os.path.dirname(target)), "cursor", "", None, None, None, f"cursor:{session}:{skill}")
+
+
+class SkillLock:
+    """agentfiles.lock as it stood on a day: the last commit of the file on or before that day (UTC), or the file
+    on disk when git has no such commit. The transcript almost never says which version of a skill loaded."""
+
+    def __init__(self, path: str | None):
+        self.path = path
+        self._days: dict[date, dict] = {}
+
+    def _items(self, day: date) -> dict:
+        if self.path is None:
+            return {}
+        if day not in self._days:
+            folder, name = os.path.split(os.path.abspath(self.path))
+            data = None
+            with contextlib.suppress(OSError):  # no git on PATH: the file on disk
+                found = _git(folder, "log", "-1", "--format=%H", f"--before={day + timedelta(days=1)}T00:00:00Z", "--", name)
+                commit = found.stdout.decode("ascii", "replace").strip() if found.returncode == 0 else ""
+                shown = _git(folder, "show", f"{commit}:./{name}") if commit else None
+                data = shown.stdout if shown is not None and shown.returncode == 0 else None
+            if data is None:
+                data = _read(self.path)
+            try:
+                items = json.loads(data).get("items") if isinstance(data, bytes) else None
+            except (ValueError, AttributeError):
+                items = None
+            self._days[day] = items if isinstance(items, dict) else {}
+        return self._days[day]
+
+    def entry(self, day: date, plugin: str, skill: str) -> tuple[str, str]:
+        """(source, version) for a skill: the lock item that installs it (`mine:@bstack`) and its commit. A `plugin:`
+        item is matched on the plugin's name, then a `skill:` item on the skill's (agentfiles may prefix it with the
+        source). A skill no item installs keeps its plugin name as the source, with an empty version."""
+        hits: dict[str, tuple[str, str]] = {}
+        for key, item in sorted(self._items(day).items()):
+            kind, _, rest = key.partition(":")
+            source, _, where = rest.partition(":")
+            tail = where.rsplit("/", 1)[-1].lstrip("@")
+            commit = item.get("commit") if isinstance(item, dict) else None
+            hit = tail == plugin if kind == "plugin" else kind == "skill" and skill in (tail, f"{source}-{tail}")
+            if hit and _SKILL_SOURCE.fullmatch(rest) and isinstance(commit, str) and _SHA.fullmatch(commit):
+                hits.setdefault(kind, (rest, commit))
+        return hits.get("plugin") or hits.get("skill") or (plugin, "")
+
+
+def _transcripts(root: str, since: date | None) -> list[str]:
+    """Every .jsonl under root that was written to on or after `since`."""
+    paths = []
+    for folder, _, names in os.walk(root):
+        for name in names:
+            path = os.path.join(folder, name)
+            if name.endswith(".jsonl") and (since is None or datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).date() >= since):
+                paths.append(path)
+    return sorted(paths)
+
+
+def _iso_week(day: date) -> str:
+    iso = day.isocalendar()
+    return f"{iso[0]:04d}-W{iso[1]:02d}"
+
+
+def scan_skill_uses(claude_logs: str, cursor_logs: str, home: str, since: date | None) -> tuple[list[SkillUse], int]:
+    """Every use the transcripts hold, one per key, and how many files could not be read. A resumed or forked
+    session repeats its records in another file; the copy with the longest window is kept, so the choice does not
+    depend on which file is read first."""
+    uses: dict[str, SkillUse] = {}
+    unreadable = 0
+    sources = [(claude_logs, lambda path: claude_code_uses(path, home)),
+               (cursor_logs, lambda path: cursor_uses(path, cursor_logs, home))]
+    for root, read in sources:
+        for path in _transcripts(root, since) if os.path.isdir(root) else []:
+            try:
+                for use in read(path):
+                    uses[use.key] = max(uses.get(use.key, use), use, key=lambda u: (u.calls or 0, u.searches or 0, u.errors or 0, u.how, u.day))
+            except OSError:
+                unreadable += 1
+    return [uses[key] for key in sorted(uses)], unreadable
+
+
+def cmd_book_skills(args: argparse.Namespace) -> int:
+    if not os.path.isdir(args.books_dir):
+        print(f"quality.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    days = {}
+    for flag in ("since", "today"):
+        text = getattr(args, flag)
+        days[flag] = _day(text) if text is not None else None
+        if text is not None and days[flag] is None:
+            print(f"quality.py: --{flag} must be a date like 2026-11-15, got {text!r}", file=sys.stderr)
+            return 2
+    if args.lock is not None and not os.path.isfile(args.lock):
+        print(f"quality.py: --lock is not a file: {args.lock}", file=sys.stderr)
+        return 2
+    books = load(args.books_dir)
+    problems = run_checks(books)
+    if problems:
+        _print_problems(problems)
+        print(f"{len(problems)} problems; refusing to book into books that fail check")
+        return 1
+    if not books.tables[SKILLS].present:
+        print(f"quality.py: book-skills needs {SKILLS}: create it with its header in the books folder first",
+              file=sys.stderr)
+        return 2
+    home = os.path.expanduser("~")
+    this_week = _iso_week(days["today"] or datetime.now(timezone.utc).date())
+    found, unreadable = scan_skill_uses(args.claude_logs or os.path.join(home, ".claude", "projects"),
+                                        args.cursor_logs or os.path.join(home, ".cursor", "projects"), home, days["since"])
+    lock = SkillLock(args.lock)
+    booked = {row.cells["use"] for row in books.tables[SKILLS].rows}
+    totals = {"found": len(found), "booked": 0, "already_booked": 0, "open_week": 0, "before_since": 0, "bad_names": 0,
+              "not_in_lock": 0, "no_origin": 0, "unreadable_files": unreadable}
+    rows: list[dict[str, str]] = []
+    for use in found:
+        cells = _cells(SKILLS_SCHEMA, week=_iso_week(use.day), skill=use.skill, tool=use.tool, how=use.how,
+                       calls="" if use.calls is None else use.calls, searches="" if use.searches is None else use.searches,
+                       errors="" if use.errors is None else use.errors, verdict=SKILL_VERDICTS[0],
+                       use=hashlib.sha256(use.key.encode("utf-8")).hexdigest()[:16], source="", version="")
+        if days["since"] is not None and use.day < days["since"]:
+            totals["before_since"] += 1
+        elif cells["week"] >= this_week:
+            totals["open_week"] += 1  # its window may still be growing; next week's run books it
+        elif cells["use"] in booked:
+            totals["already_booked"] += 1
+        elif not _SKILL_NAME.fullmatch(use.skill) or not _SKILL_SOURCE.fullmatch(use.plugin):
+            totals["bad_names"] += 1
+        else:
+            cells["source"], cells["version"] = lock.entry(use.day, use.plugin, use.skill)
+            if any(rule_messages(SKILL_RULES, cells)):
+                totals["bad_names"] += 1
+                continue
+            rows.append(cells)
+            totals["not_in_lock"] += not cells["version"]
+            totals["no_origin"] += use.no_origin
+    rows.sort(key=lambda c: (c["week"], c["tool"], c["skill"], c["source"], c["use"]))
+    totals["booked"] = len(rows)
+    by_week: dict[str, int] = {}
+    for cells in rows:
+        by_week[cells["week"]] = by_week.get(cells["week"], 0) + 1
+    data = _appended(books.tables[SKILLS].data, "".join(_csv_line(cells[k] for k in SKILLS_SCHEMA) for cells in rows))
+    if rows:
+        files = {rel: books.tables[rel].data if books.tables[rel].present else None for rel in TABLE_SCHEMAS}
+        after = run_checks(books_from_bytes(args.books_dir, {**files, SKILLS: data}))
+        if after:
+            _print_problems(after)
+            print(f"{len(after)} problems; nothing written")
+            return 1
+    wrote = bool(rows) and not args.dry_run
+    if wrote:
+        try:
+            commit_files(args.books_dir, {SKILLS: data})
+        except OSError as e:
+            print(f"quality.py: cannot write the books, they are unchanged: {e}", file=sys.stderr)
+            return 1
+    if args.json:
+        print(json.dumps({"dry_run": args.dry_run, "totals": totals, "weeks": by_week, "wrote": wrote}, sort_keys=True, indent=2))
+    else:
+        print(("would book " if args.dry_run else "booked ") + f"{len(rows)} skill uses"
+              + (" for " + ", ".join(f"{week} ({n})" for week, n in sorted(by_week.items())) if rows else "")
+              + f"; {totals['already_booked']} already booked, {totals['open_week']} in the open week, "
+              f"{totals['before_since']} before --since, {totals['bad_names']} with a name the books refuse, "
+              f"{unreadable} unreadable files")
+        print(f"of the {len(rows)}: {totals['not_in_lock']} not in the lock, {totals['no_origin']} slash commands with no origin")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="quality.py", description="The Quality Director's recorder and books checker.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -3847,6 +4374,16 @@ def main(argv: list[str] | None = None) -> int:
     summary.add_argument("--week", metavar="YYYY-Www", help="an ISO week; the latest week in runs.csv by default")
     summary.add_argument("--json", action="store_true")
     summary.set_defaults(func=cmd_summary)
+    skills = sub.add_parser("book-skills", help="book skill use from this machine's agent transcripts into books/skill-uses.csv")
+    skills.add_argument("books_dir", metavar="BOOKS_DIR")
+    skills.add_argument("--claude-logs", metavar="DIR", help="Claude Code's transcripts (default ~/.claude/projects)")
+    skills.add_argument("--cursor-logs", metavar="DIR", help="Cursor's transcripts (default ~/.cursor/projects)")
+    skills.add_argument("--lock", metavar="FILE", help="agentfiles.lock, for each skill's source and version")
+    skills.add_argument("--since", metavar="YYYY-MM-DD", help="leave out uses before this day")
+    skills.add_argument("--today", metavar="YYYY-MM-DD", help="the date whose ISO week is still open (for tests)")
+    skills.add_argument("--dry-run", action="store_true", help="say what would be booked; write nothing")
+    skills.add_argument("--json", action="store_true")
+    skills.set_defaults(func=cmd_book_skills)
     audit = sub.add_parser("audit-ci", help="what a repo's workflow files say about CI speed (read-only, no books)")
     audit.add_argument("repo_dir", metavar="REPO_DIR")
     audit.add_argument("--json", action="store_true")

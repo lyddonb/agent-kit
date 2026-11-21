@@ -8,16 +8,27 @@
 # branch. The cloud run already adds its commit to an open brief PR, so each week still ends in one
 # PR. It never pushes to main, merges or force-pushes.
 #
+# With a quality books repo (--quality-repo), a second pass books one row per skill invocation in
+# this Mac's Claude Code and Cursor transcripts (quality.py book-skills) onto a quality/brief-* branch
+# of that repo, the same way. It runs after the cfo rows are pushed; a failure in it never holds back
+# the cfo rows and fails the job at the end.
+#
 # Usage:
 #   weekly-claude-code.sh --install | --uninstall | --status | --run-now   # manage the launchd agent
-#   weekly-claude-code.sh [--repo OWNER/NAME] [--dry-run]                  # what the agent runs
-#   weekly-claude-code.sh [--repo OWNER/NAME] --print-plist
+#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--dry-run]   # what the agent runs
+#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] --print-plist
 # --repo defaults to the GitHub remote of the books checkout in $CFO_BOOKS.
+# --quality-repo defaults to the GitHub remote of the checkout in $QUALITY_BOOKS; with neither, the
+# skill-use pass is skipped. The quality books need books/skill-uses.csv (header only is fine).
 #
 # Needs git, gh (logged in) and uv; Vercel billing also needs the vercel CLI, logged in (without it,
 # that part is skipped). Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
 # CFO_LOGS (Claude Code logs dir), CFO_CLAUDE_SETTINGS (settings file --install edits), CFO_JOB_PATH (the agent's PATH), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver),
-# CFO_UTC_TODAY (the UTC date that picks the Vercel week).
+# CFO_UTC_TODAY (the UTC date that picks the Vercel week and closes the skill-use weeks). Skill-use
+# pass: QUALITY_BOOKS (checkout whose remote --quality-repo defaults to), QUALITY_CLONE_URL (clone
+# the quality books from here), QUALITY_PY (quality.py; default: bstack's, next to this plugin),
+# CFO_CURSOR_LOGS (Cursor logs dir), AGENTFILES_LOCK (agentfiles.lock for skill versions; else
+# $AGENTFILES_HOME/agentfiles.lock when that exists).
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -26,6 +37,7 @@ BOOKS_PY="$HERE/books.py"
 LABEL=dev.agent-kit.cfo-claude-code
 TZNAME=${CFO_TZ:-America/Denver}
 REPO=""
+QUALITY_REPO=""
 DRY_RUN=0
 PRINT_PLIST=0
 
@@ -35,10 +47,11 @@ JOB_PATH=${CFO_JOB_PATH:-/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/usr/
 DOMAIN="gui/$(id -u)"
 ACTION=run
 
-usage() { sed -n '/^# Usage:/,/^# --repo/p' "$SELF" | sed 's/^# \{0,3\}//' >&2; exit 2; }
+usage() { sed -n '/^# Usage:/,/^# The quality books need/p' "$SELF" | sed 's/^# \{0,3\}//' >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) REPO=${2:-}; shift 2 ;;
+    --quality-repo) QUALITY_REPO=${2:-}; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --print-plist) PRINT_PLIST=1; shift ;;
     --install) ACTION=install; shift ;;
@@ -55,9 +68,17 @@ if [ -z "$REPO" ] && [ "$ACTION" != uninstall ] && [ "$ACTION" != status ] && [ 
     || { echo "No --repo given and no git remote in $BOOKS_DIR. Pass --repo OWNER/NAME." >&2; exit 2; }
   REPO=$(printf '%s' "$url" | sed -E 's#^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)##; s#\.git$##')
 fi
+if [ -z "$QUALITY_REPO" ] && [ -n "${QUALITY_BOOKS:-}" ] && [ "$ACTION" != uninstall ] && [ "$ACTION" != status ] && [ "$ACTION" != run-now ]; then
+  url=$(git -C "$QUALITY_BOOKS" remote get-url origin 2>/dev/null) \
+    || { echo "QUALITY_BOOKS is set but $QUALITY_BOOKS has no git remote. Pass --quality-repo OWNER/NAME." >&2; exit 2; }
+  QUALITY_REPO=$(printf '%s' "$url" | sed -E 's#^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)##; s#\.git$##')
+fi
 case "$ACTION" in uninstall|status|run-now) ;; *)
-  [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "Not a GitHub OWNER/NAME: $REPO" >&2; usage; } ;;
+  [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "Not a GitHub OWNER/NAME: $REPO" >&2; usage; }
+  [ -z "$QUALITY_REPO" ] || [[ "$QUALITY_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+    || { echo "Not a GitHub OWNER/NAME: $QUALITY_REPO" >&2; usage; } ;;
 esac
+QUALITY_ARGS=(); [ -z "$QUALITY_REPO" ] || QUALITY_ARGS=(--quality-repo "$QUALITY_REPO")
 
 case "$ACTION" in
   install)
@@ -66,7 +87,7 @@ case "$ACTION" in
     done
     gh auth status >/dev/null 2>&1 || { echo "gh is not logged in. Run: gh auth login" >&2; exit 1; }
     mkdir -p "$(dirname "$PLIST")" "$(dirname "$LOGFILE")"
-    bash "$SELF" --repo "$REPO" --print-plist > "$PLIST.tmp"
+    bash "$SELF" --repo "$REPO" ${QUALITY_ARGS[@]+"${QUALITY_ARGS[@]}"} --print-plist > "$PLIST.tmp"
     plutil -lint -s "$PLIST.tmp" && mv "$PLIST.tmp" "$PLIST"
     launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$PLIST"
@@ -91,6 +112,7 @@ else:
           else "Claude Code now keeps logs 120 days.")
 PYEOF
     echo "Installed: Claude Code usage goes to $REPO's brief PR every Sunday at 06:00."
+    [ -z "$QUALITY_REPO" ] || echo "Skill uses go to $QUALITY_REPO's brief PR."
     echo "Log: $LOGFILE   Check it: --status   Run it now: --run-now   Remove it: --uninstall"
     exit 0 ;;
   uninstall)
@@ -121,7 +143,7 @@ if [ "$PRINT_PLIST" = 1 ]; then
 <dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>$SELF</string><string>--repo</string><string>$REPO</string></array>
+  <array><string>/bin/bash</string><string>$SELF</string><string>--repo</string><string>$REPO</string>$([ -z "$QUALITY_REPO" ] || printf '<string>--quality-repo</string><string>%s</string>' "$QUALITY_REPO")</array>
   <!-- Sundays 06:00 local time, before the cloud brief. A Mac asleep at 06:00 runs it on wake. -->
   <key>StartCalendarInterval</key>
   <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
@@ -263,19 +285,23 @@ fetch_vercel
 if [ -n "${CFO_CLONE_URL:-}" ]; then git clone -q "$CFO_CLONE_URL" "$B"; else gh repo clone "$REPO" "$B" -- -q; fi
 cd "$B"
 
-# Pick the branch. Rule shared with the cloud run (finances AGENTS.md step 8): the oldest open brief
-# PR takes every unmerged week, so the ledger appends never conflict. Sets BRANCH and NEED_PR.
+# Pick the branch in the current checkout of REPO, whose brief branches start with PREFIX (and,
+# for an open PR only, any extra prefix after it). Rule shared with the cloud run (finances
+# AGENTS.md step 8): the oldest open brief PR takes every unmerged week, so the appends never
+# conflict. Sets BRANCH and NEED_PR.
 pick_branch() {
+  local repo=$1 prefix=$2
+  shift 2
   git fetch -q origin
   local pulls open sunday n
-  pulls=$(gh api "repos/$REPO/pulls?state=open&per_page=100")
+  pulls=$(gh api "repos/$repo/pulls?state=open&per_page=100")
   open=$(printf '%s' "$pulls" | py '
 import json, sys
 pulls = [p for p in json.load(sys.stdin)
-         if p["head"]["ref"].startswith(("cfo/brief-", "claude/cfo-brief-"))
+         if p["head"]["ref"].startswith(tuple(sys.argv[2:]))
          and (p["head"].get("repo") or {}).get("full_name") == sys.argv[1]]
 pulls.sort(key=lambda p: p["created_at"])
-print(pulls[0]["head"]["ref"] if pulls else "")' "$REPO")
+print(pulls[0]["head"]["ref"] if pulls else "")' "$repo" "$prefix" "$@")
   if [ -n "$open" ]; then
     BRANCH=$open; NEED_PR=0
     git checkout -q -B "$BRANCH" "origin/$BRANCH"
@@ -293,14 +319,14 @@ print(today + datetime.timedelta(days=(6 - today.weekday()) % 7))')
   fi
   # A branch of that name not yet merged is this week's (the cloud run before it opens its PR, or
   # an earlier run of this job whose PR call failed): build on it. A merged one gets a suffix.
-  BRANCH="cfo/brief-$sunday"; n=1
+  BRANCH="$prefix$sunday"; n=1
   while git rev-parse -q --verify "origin/$BRANCH" >/dev/null; do
     if ! git merge-base --is-ancestor "origin/$BRANCH" origin/main; then
       git checkout -q -B "$BRANCH" "origin/$BRANCH"
       echo "cfo-claude-code: no open brief PR; building on unmerged $BRANCH"
       return
     fi
-    n=$((n + 1)); BRANCH="cfo/brief-$sunday-$n"
+    n=$((n + 1)); BRANCH="$prefix$sunday-$n"
   done
   git checkout -q -B "$BRANCH" origin/main
   echo "cfo-claude-code: no open brief PR; new branch $BRANCH"
@@ -329,7 +355,103 @@ print(", ".join(sorted({r["evidence"].split(":")[1] for r in json.load(sys.stdin
   git commit -q -m "$WEEKS" -m "Added by the Mac job (agent-kit plugins/cfo weekly-claude-code.sh)."
 }
 
-pick_branch
+# Book one row per skill invocation into the quality books (quality.py book-skills), on a
+# quality/brief-* branch picked with the same rule as the cfo one. Takes --dry-run. Runs in a
+# background subshell: errexit and the ERR trap stay live there (a `|| ...` context would switch them
+# off), and a failure ends only the pass. Any non-zero exit sets SKILLS_PROBLEM, reported at the end.
+# Logs hold counts and week names only, never a skill name, a project name or transcript text.
+SKILLS_PROBLEM=""
+skills_pass() {
+  local qpy=${QUALITY_PY:-$HERE/../../../../bstack/skills/qualitydirector/scripts/quality.py}
+  if [ ! -f "$qpy" ]; then
+    echo "cfo-claude-code: quality.py not found (cfo can be installed without bstack); skipping skill uses"; return 0
+  fi
+  local Q="$W/quality" dry=0 attempt
+  [ "${1:-}" != --dry-run ] || dry=1
+  if [ -n "${QUALITY_CLONE_URL:-}" ]; then git clone -q "$QUALITY_CLONE_URL" "$Q"; else gh repo clone "$QUALITY_REPO" "$Q" -- -q; fi
+  cd "$Q"
+  pick_branch "$QUALITY_REPO" quality/brief-
+  if [ ! -f books/skill-uses.csv ]; then
+    echo "cfo-claude-code: skill-uses.csv is not in the quality books yet; skipping"; return 0
+  fi
+  local args=(. --since "$SINCE" --json)
+  [ -z "${CFO_LOGS:-}" ] || args+=(--claude-logs "$CFO_LOGS")
+  [ -z "${CFO_CURSOR_LOGS:-}" ] || args+=(--cursor-logs "$CFO_CURSOR_LOGS")
+  [ -z "${CFO_UTC_TODAY:-}" ] || args+=(--today "$CFO_UTC_TODAY")
+  if [ -n "${AGENTFILES_LOCK:-}" ]; then
+    args+=(--lock "$AGENTFILES_LOCK")
+  elif [ -n "${AGENTFILES_HOME:-}" ] && [ -f "$AGENTFILES_HOME/agentfiles.lock" ]; then
+    args+=(--lock "$AGENTFILES_HOME/agentfiles.lock")
+  else
+    echo "cfo-claude-code: no agentfiles.lock given; skill versions will be empty"
+  fi
+  [ "$dry" = 0 ] || args+=(--dry-run)
+  local out="$W/skills.out" err="$W/skills.err" code summary booked weeks
+  for attempt in 1 2; do
+    code=0
+    "${PY[@]}" "$qpy" book-skills "${args[@]}" >"$out" 2>"$err" || code=$?
+    if [ "$code" != 0 ]; then
+      tail -n 1 "$out" >&2; tail -n 3 "$err" >&2
+      fail "quality.py book-skills exited $code on $BRANCH; nothing pushed"
+    fi
+    summary=$(py '
+import json, sys
+s = json.load(open(sys.argv[1]))
+t = s["totals"]
+weeks = ", ".join(sorted(s["weeks"]))
+print("%s|%s|%s %d skill uses%s; %d already booked, %d in the open week, %d not in the lock file" % (
+    t["booked"], weeks, "would book" if s["dry_run"] else "booked", t["booked"], " for " + weeks if weeks else "",
+    t["already_booked"], t["open_week"], t["not_in_lock"]))' "$out")
+    booked=${summary%%|*}; weeks=${summary#*|}; weeks=${weeks%%|*}
+    echo "cfo-claude-code: ${summary##*|}"
+    if [ "$booked" = 0 ]; then echo "cfo-claude-code: no new skill uses"; return 0; fi
+    if [ "$dry" = 1 ]; then
+      echo "cfo-claude-code: dry run; would push skill uses to $BRANCH$([ "$NEED_PR" = 1 ] && echo ' and open a PR')"; return 0
+    fi
+    local changed
+    changed=$(git status --porcelain | awk '{print $2}')
+    [ "$changed" = "books/skill-uses.csv" ] || fail "expected only books/skill-uses.csv to change, got: $changed"
+    "${PY[@]}" "$qpy" check . --base origin/main >/dev/null || fail "quality books check failed; nothing pushed"
+    git add books/skill-uses.csv
+    git commit -q -m "Skill uses for $weeks" -m "Added by the Mac job (agent-kit plugins/cfo weekly-claude-code.sh)."
+    if git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -q origin "HEAD:refs/heads/$BRANCH"; then
+      echo "cfo-claude-code: pushed $(git rev-parse --short HEAD) to $BRANCH (skill uses for $weeks)"
+      break
+    fi
+    [ "$attempt" = 1 ] || fail "push to $BRANCH was rejected twice"
+    echo "cfo-claude-code: push rejected; refetching and retrying once"
+    pick_branch "$QUALITY_REPO" quality/brief-
+  done
+  if [ "$NEED_PR" = 1 ]; then
+    git fetch -q origin
+    if git rev-parse -q --verify "origin/$BRANCH" >/dev/null && [ "$(git rev-list --count "origin/main..origin/$BRANCH")" -gt 0 ]; then
+      local url
+      url=$(gh api "repos/$QUALITY_REPO/pulls" -f title="Quality brief ${BRANCH#quality/brief-}: skill uses (brief pending)" \
+        -f head="$BRANCH" -f base=main \
+        -f body="Skill-use rows from the Mac job. The weekly quality brief run adds its commit here and retitles this PR. Merge only after the brief lands, or merge now to record the skill uses alone." \
+        --jq .html_url)
+      echo "cfo-claude-code: opened $url"
+    fi
+  fi
+}
+run_skills_pass() {
+  if [ -z "$QUALITY_REPO" ]; then
+    echo "cfo-claude-code: no --quality-repo or QUALITY_BOOKS; skipping skill uses"; return 0
+  fi
+  local code=0
+  skills_pass "$@" &
+  wait $! || code=$?
+  [ "$code" = 0 ] || SKILLS_PROBLEM="skill uses: the pass exited $code (output above); the cfo rows are unaffected"
+  return 0
+}
+# Reported last, so a Vercel or skill-use problem never holds back the Claude Code rows.
+report_problems() {
+  if [ -n "$VERCEL_PROBLEM$SKILLS_PROBLEM" ]; then
+    fail "${VERCEL_PROBLEM:+Vercel: $VERCEL_PROBLEM}${VERCEL_PROBLEM:+${SKILLS_PROBLEM:+; }}$SKILLS_PROBLEM"
+  fi
+}
+
+pick_branch "$REPO" cfo/brief- claude/cfo-brief-
 if [ "$DRY_RUN" = 1 ]; then
   import_vercel --dry-run
   [ -z "$VERCEL_FILE" ] || [ -n "$VERCEL_PROBLEM" ] || py '
@@ -341,7 +463,8 @@ for r in s["rows"]:
   "${PY[@]}" "$BOOKS_PY" claude-code . --since "$SINCE" "${LOG_ARGS[@]+"${LOG_ARGS[@]}"}" --dry-run \
     || fail "books.py claude-code failed"
   echo "cfo-claude-code: dry run; would push to $BRANCH$([ "$NEED_PR" = 1 ] && echo ' and open a PR')"
-  [ -z "$VERCEL_PROBLEM" ] || fail "Vercel: $VERCEL_PROBLEM"
+  run_skills_pass --dry-run
+  report_problems
   exit 0
 fi
 
@@ -359,7 +482,7 @@ for attempt in 1 2; do
   fi
   [ "$attempt" = 1 ] || fail "push to $BRANCH was rejected twice"
   echo "cfo-claude-code: push rejected; refetching and retrying once"
-  pick_branch
+  pick_branch "$REPO" cfo/brief- claude/cfo-brief-
 done
 
 # Open the PR when this job's branch has commits but no PR, including a branch left by an earlier
@@ -375,5 +498,5 @@ if [ "$NEED_PR" = 1 ] && [ "$DRY_RUN" = 0 ]; then
   fi
 fi
 
-# Reported last, so a Vercel problem never holds back the Claude Code rows.
-[ -z "$VERCEL_PROBLEM" ] || fail "Vercel: $VERCEL_PROBLEM"
+run_skills_pass
+report_problems
