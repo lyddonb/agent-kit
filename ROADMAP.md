@@ -548,7 +548,7 @@ The work spans four repos. Each item has one full entry, in the repo where its c
 
 | Item | Entry | Other repos |
 |---|---|---|
-| Book skill use from transcripts | R38 | The book and the brief row: quality phase 1c |
+| Book skill use from transcripts | R38. Done 2026-11-21: rows are booked weekly | The book and the brief section: quality phase 1c, also done |
 | Lint: a skill never names a command that doesn't exist | Done: `check_commands` in `tools/validate.py` | None |
 | Behavioral evals, deterministic half | agent-ledger M3 unit 1 | The criteria live here. R3 and R13 point at it |
 | Every skill loads in every target tool | agentfiles R16 | `verify-kit` (R27) calls it |
@@ -568,8 +568,8 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 - `quality.py` stays standard library only, and `summary --json` stays byte-stable.
 - No health score and no dashboard. Skills get one section in the weekly brief.
 
-Order: R38's prototype is done and its build can start (H15 and the books repo's H6 are both
-yes). agentfiles R17 can start, since the lint it runs has shipped.
+Order: R38 is done and booking rows since 2026-11-21. agentfiles R17 can start, since the lint
+it runs has shipped.
 agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
@@ -613,8 +613,9 @@ What the prototype settled (unit 1, run on four weeks of real transcripts, 2026-
   text. A correction can come back later from a ledger `rejection` entry (R23), and never
   from a guess at the next user turn.
 
-**Units:** (1) Prototype: done, findings above. (2) The pass and the `quality.py` changes.
-(3) In the books repo: the new book, the pin move and the brief section (quality phase 1c).
+**Units:** all three done. (1) Prototype: findings above. (2) The pass and the `quality.py`
+changes: pull requests 70 and 71. (3) In the books repo: the new book, the pin move and the
+brief section (quality phase 1c, its pull request 25).
 **Where:** `plugins/cfo/skills/cfo-books/scripts/weekly-claude-code.sh`,
 `plugins/bstack/skills/qualitydirector/**`, `plugins/bstack/skills/reflect/scripts/find-transcripts.py`,
 tests, `kit.yaml`, `changes.yaml`, generated files.
@@ -625,15 +626,18 @@ skills are counted. For governed runs the pass can read the redacted archives
 **Playbook:** Feature, from the findings above.
 **Done when:** a run over the last four weeks of real transcripts books rows, `check` passes,
 a second run changes nothing, and ten rows picked at random match the transcripts by hand.
-**Why not done:** Unit 2 is built: `quality.py book-skills`, the book in `check` and `summary`, and the pass in
-`weekly-claude-code.sh --quality-repo`. A run over four weeks of real transcripts booked rows into a scratch copy of
-the books, passed `check`, changed nothing on a second run, and ten rows matched the transcripts by hand. Nothing is
-booked for real until unit 3 creates `books/skill-uses.csv` in the books repo and the Mac job is installed again with
-`--quality-repo`. Unit 3 is next. What unit 2 added to the findings above: each row carries `use`, a hash of the
-tool-call id, so a rerun adds nothing and `check` refuses a duplicate; only closed weeks are booked; a `Read` counts
-once per session and skill; and a skill outside the lock (cfo's, until agentfiles H13 is answered) is booked with its
-plugin name and an empty version.
-**Prioritize when:** now. It feeds agent-ledger's M3 unit 1, R41 and R3.
+**Done 2026-11-21.** `quality.py book-skills` books the rows, `check` and `summary` read the book, and the Mac
+job runs the pass with `--quality-repo` and `--agentfiles-lock`. Before anything was booked, a run over four weeks of
+real transcripts into a scratch copy of the books passed `check`, changed nothing on a second run, and ten rows
+matched the transcripts by hand. The installed job's first run booked the closed weeks still inside log retention
+into the quality books (its pull request 26). Three things the build added to the findings above: each row carries
+`use`, a hash of the tool-call id, so a rerun adds nothing and `check` refuses a duplicate; only closed weeks are
+booked; and a `Read` counts once per session and skill. Two things to know when reading the rows: the week a
+Sunday brief is for never has skill rows yet, so the brief's Skills section reads the latest booked week from a
+second `summary --week` run; and a skill outside the lock (cfo's, until agentfiles H13 is answered) is booked with
+its plugin name and an empty version.
+**Still open:** no rule fills `verdict`. Pick a threshold from a few weeks of rows first.
+**Feeds:** agent-ledger's M3 unit 1 (after four weeks of rows), R41 (after 60 days) and R3.
 
 ## P1
 
