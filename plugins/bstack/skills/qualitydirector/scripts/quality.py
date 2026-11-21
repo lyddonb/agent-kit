@@ -8,7 +8,7 @@ Usage:
     uv run --python 3.12 quality.py fetch BOOKS_DIR OUT_DIR [--since YYYY-MM-DD] [--repo SLUG]
     uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs|visibility]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
-    uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json]
+    uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json] [--public-only]
     uv run --python 3.12 quality.py audit-ci REPO_DIR [--json]
     uv run --python 3.12 quality.py leak-check BOOKS_DIR FILE [FILE ...] [--json]
     uv run --python 3.12 quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE]
@@ -2666,28 +2666,49 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
     }
     if jobs is not None:  # adopted job books only: without them the output is what it always was
         out["lifecycle"] = _lifecycle(repo, week, runs, jobs, steps or [])
+        out["recorded"] = True
     return out
+
+
+def _unrecorded_summary(lifecycle: dict) -> dict:
+    """A repo with CI runs in the week and no test records: only what the job books measured. Its suite time is not
+    measured, so no test-side key exists here (an empty value is never a 0)."""
+    return {"lifecycle": lifecycle, "recorded": False}
 
 
 def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow], week: str,
               kinds: Iterable[KindRow] = (), jobs: list[JobRow] | None = None,
-              steps: list[StepRow] | None = None, skill_uses: list[SkillUseRow] | None = None) -> dict:
+              steps: list[StepRow] | None = None, skill_uses: list[SkillUseRow] | None = None,
+              private: set[str] | None = None, public_only: bool = False) -> dict:
     """The week's numbers as plain data: integers, strings, lists and dicts, nothing else. `jobs` and `steps` are
-    given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle`. `skill_uses` is given
-    (possibly empty) only when books/skill-uses.csv exists; the result then has `skills`."""
-    repos = sorted({r.repo for r in runs if week_of(r.started) == week})
+    given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle` and `recorded`, and a
+    repo with runs in the job books and no `runs.csv` row that week is listed too, as an unrecorded one. `skill_uses` is
+    given (possibly empty) only when books/skill-uses.csv exists; the result then has `skills`. `private` is given
+    only when books/repos.csv exists; each listed repo then has a `visibility`. `public_only` marks a summary whose rows
+    the caller already limited to public repos."""
+    recorded = sorted({r.repo for r in runs if week_of(r.started) == week})
     kinds = list(kinds)
-    rules = {repo: {k.prefix: k.kind for k in kinds if k.repo == repo} for repo in repos}
+    rules = {repo: {k.prefix: k.kind for k in kinds if k.repo == repo} for repo in recorded}
+    repos = {repo: _repo_summary(repo, week, runs, failures, weekly, rules[repo], jobs, steps) for repo in recorded}
+    if jobs is not None:
+        for repo in sorted({j.repo for j in jobs} - set(recorded)):
+            lifecycle = _lifecycle(repo, week, runs, jobs, steps or [])
+            if lifecycle is not None:
+                repos[repo] = _unrecorded_summary(lifecycle)
+    if private is not None:
+        for repo, entry in repos.items():
+            entry["visibility"] = "private" if repo in private else "public"
     result = {
         "generated_from": {"failures": len(failures), "runs": len(runs), "weekly_rows": len(weekly)},
-        "repos": {repo: _repo_summary(repo, week, runs, failures, weekly, rules[repo], jobs, steps)
-                  for repo in repos},
-        "slowest_tests": _slowest([w for w in weekly if w.week == week and w.repo in repos]),
+        "repos": dict(sorted(repos.items())),
+        "slowest_tests": _slowest([w for w in weekly if w.week == week and w.repo in recorded]),
         "thresholds": {"suite_median_ms": SUITE_MEDIAN_THRESHOLD_MS},
         "week": week,
     }
     if skill_uses is not None:
         result["skills"] = _skills_summary([u for u in skill_uses if u.week == week])
+    if public_only:
+        result["public_only"] = True
     return result
 
 
@@ -2724,9 +2745,15 @@ def _render_lifecycle(lc: dict) -> list[str]:
 
 
 def render_summary(s: dict) -> str:
-    lines = [f"quality summary for {s['week']} (from {s['generated_from']['runs']} runs, "
-             f"{s['generated_from']['failures']} failures, {s['generated_from']['weekly_rows']} weekly rows)"]
-    for repo, r in s["repos"].items():
+    lines = ["public repos only"] if s.get("public_only") else []
+    lines.append(f"quality summary for {s['week']} (from {s['generated_from']['runs']} runs, "
+                 f"{s['generated_from']['failures']} failures, {s['generated_from']['weekly_rows']} weekly rows)")
+    for name, r in s["repos"].items():
+        repo = f"{name} (private)" if r.get("visibility") == "private" else name
+        if r.get("recorded") is False:
+            lines.append(f"{repo}: no test records this week")
+            lines.extend(_render_lifecycle(r["lifecycle"]))
+            continue
         change = r["suite_ms_change"]
         lines.append(f"{repo}: {r['runs']} runs ({r['red_runs']} red), {r['tests']} tests, suite median "
                      f"{r['suite_ms']['median']} ms (max {r['suite_ms']['max']}), "
@@ -2760,6 +2787,10 @@ def cmd_summary(args: argparse.Namespace) -> int:
         _print_problems(problems)
         print(f"{len(problems)} problems; no summary from unchecked books")
         return 1
+    if args.public_only and not books.tables[REPOS].present:
+        print(f"quality.py: summary --public-only needs {REPOS}: visibility is not booked, so no repo can be called public (run fetch and ingest with it)",
+              file=sys.stderr)
+        return 2
     runs = _typed_rows(books, RUNS, RunRow)
     week = args.week or max((week_of(r.started) for r in runs), default=None)
     if week is None:
@@ -2767,9 +2798,15 @@ def cmd_summary(args: argparse.Namespace) -> int:
         return 1
     job_rows = _typed_rows(books, JOBS, JobRow) if adopted(books) else None
     step_rows = _typed_rows(books, STEPS, StepRow) if adopted(books) else None
-    result = summarize(runs, _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), week,
-                       _typed_rows(books, KINDS, KindRow), job_rows, step_rows,
-                       _typed_rows(books, SKILLS, SkillUseRow) if books.tables[SKILLS].present else None)
+    failures, weekly, kinds = _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), _typed_rows(books, KINDS, KindRow)
+    skills = _typed_rows(books, SKILLS, SkillUseRow) if books.tables[SKILLS].present else None
+    private = private_repos(books) if books.tables[REPOS].present else None
+    if args.public_only:  # drop the private repos' rows before any number is made, so none can leak; skill use is not per repo
+        public = lambda rows: [r for r in rows if r.repo not in private]
+        runs, failures, weekly, kinds = public(runs), public(failures), public(weekly), public(kinds)
+        job_rows, step_rows = (public(job_rows), public(step_rows)) if job_rows is not None else (None, None)
+        skills = None
+    result = summarize(runs, failures, weekly, week, kinds, job_rows, step_rows, skills, private, args.public_only)
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_summary(result))
     return 0
 
@@ -4845,6 +4882,7 @@ def main(argv: list[str] | None = None) -> int:
     summary.add_argument("books_dir", metavar="BOOKS_DIR")
     summary.add_argument("--week", metavar="YYYY-Www", help="an ISO week; the latest week in runs.csv by default")
     summary.add_argument("--json", action="store_true")
+    summary.add_argument("--public-only", action="store_true", help="leave private repos out; needs books/repos.csv")
     summary.set_defaults(func=cmd_summary)
     skills = sub.add_parser("book-skills", help="book skill use from this machine's agent transcripts into books/skill-uses.csv")
     skills.add_argument("books_dir", metavar="BOOKS_DIR")
