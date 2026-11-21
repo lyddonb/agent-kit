@@ -10,8 +10,8 @@
     {
       "claim": "Each cell not marked inferred or untested matches the workflow files on each repo's main and GitHub's ruleset or branch protection settings as of 2026-11-21.",
       "verdict": "VERIFIED",
-      "check": "Read every file under .github/workflows/ on origin/main in the five repos, and each repo's rulesets and branch protection with gh api. One reader, no second pass.",
-      "commit": "c11f43a",
+      "check": "Read every file under .github/workflows/ on origin/main in the five repos, and each repo's rulesets and branch protection with gh api. The ledger Action was read at the commit the books repos pin. One reader, no second pass.",
+      "commit": "6bb869a",
       "record": ".changes/2026-11-21-gate-audit/sources.txt",
       "remaining": "The kept output covers the three public repos only. The check-product.py and receipts rows are inferred from the playbook text, since no workflow runs them."
     },
@@ -27,7 +27,7 @@
       "claim": "make check and make validate pass with the new section.",
       "verdict": "VERIFIED",
       "check": "make check && make validate on macOS under Python 3.12",
-      "commit": "c11f43a",
+      "commit": "6bb869a",
       "record": ".changes/2026-11-21-gate-audit/sources.txt",
       "remaining": "Linux, which this pull request's CI run covers."
     }

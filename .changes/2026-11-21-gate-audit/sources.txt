@@ -24,6 +24,9 @@ test (3.10) | success
 test (3.12) | success
 test (3.13) | success
 
-$ make check && make validate   (at c11f43a)
+$ make check && make validate   (at 6bb869a)
 kitgen: 26 generated files and 24 files with GENERATED blocks up to date
 validate: 39 skills in 7 plugins, 62 script commands, 0 errors, 0 warnings
+
+$ git -C agent-ledger show aceb335:action.yml | grep 'python -I'   (the commit the books repos pin, v1.0.0)
+        ledger() { python -I "$RUNNER_SCRIPT" "$@"; }
