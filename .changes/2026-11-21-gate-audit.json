@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "goal": "For every verification gate in the runtime, say whether a pull request can change the check that judges it, so the exposed ones can be protected (H13) before any gate moves to enforce.",
+  "changed": [
+    "docs/ARCHITECTURE.md has an audit table with one row per gate across the five repos: where its code and config come from at PR time, whether main requires it, who can change it, and a fix or owner.",
+    "Ten of the twelve rows answer \"the PR\". The two ledger-verify rows don't, with one untested gap.",
+    "No workflow, ruleset or pin changed."
+  ],
+  "claims": [
+    {
+      "claim": "Each cell not marked inferred or untested matches the workflow files on each repo's main and GitHub's ruleset or branch protection settings as of 2026-11-21.",
+      "verdict": "VERIFIED",
+      "check": "Read every file under .github/workflows/ on origin/main in the five repos, and each repo's rulesets and branch protection with gh api. One reader, no second pass.",
+      "commit": "c11f43a",
+      "record": ".changes/2026-11-21-gate-audit/sources.txt",
+      "remaining": "The kept output covers the three public repos only. The check-product.py and receipts rows are inferred from the playbook text, since no workflow runs them."
+    },
+    {
+      "claim": "A pull request cannot get past a pull_request_target check by adding a second job with the same name.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "Nobody has tried a pull request where the base-branch run fails and a same-named run passes. agent-ledger pull requests already carry two ledger-verify check runs, one skipped."
+    },
+    {
+      "claim": "make check and make validate pass with the new section.",
+      "verdict": "VERIFIED",
+      "check": "make check && make validate on macOS under Python 3.12",
+      "commit": "c11f43a",
+      "record": ".changes/2026-11-21-gate-audit/sources.txt",
+      "remaining": "Linux, which this pull request's CI run covers."
+    }
+  ],
+  "next": [
+    {
+      "item": "H13: protect workflow files and checker pins, starting with the books and change-record checks",
+      "source": "HUMAN_TASKS.md H13",
+      "why_now": "It was waiting on this table. The table also shows a code-owner review can't do it alone, because agents open pull requests as the owner's account.",
+      "impact": "Until then a pull request to either books repo can swap the checker pin or drop a flag in the same diff the check judges, and still merge green."
+    },
+    {
+      "item": "Test the name gap once on a scratch pull request",
+      "source": "inferred",
+      "why_now": "Every \"not the PR\" row rests on it, and it takes one throwaway pull request.",
+      "impact": "If a same-named passing job satisfies a required check, ledger-verify is not out of reach either, and H13 needs a different fix."
+    },
+    {
+      "item": "Keep change-record in observe in all four repos",
+      "source": ".changes/2026-11-21-debrief-pr-check.json, its first next item",
+      "why_now": "The check is a day old, and in every repo the pull request can edit the flag, the pin or the checker itself.",
+      "impact": "Enforcing now would block honest docs pull requests while stopping nobody who edits the workflow."
+    },
+    {
+      "item": "R29 units 2 and 3: the probe-edit check and the test guard",
+      "source": "ROADMAP.md R29",
+      "why_now": "They are the named fix for five rows: the receipts and check-product rows, and the tests behind validate and both test checks.",
+      "impact": "A diff that edits a probe and ticks its box, or deletes a test, gets reported instead of passing unseen."
+    }
+  ],
+  "release": {
+    "none": "Docs only: an audit table. Nothing a user of the kit runs has changed."
+  }
+}
