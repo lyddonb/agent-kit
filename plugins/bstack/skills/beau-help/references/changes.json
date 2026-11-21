@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "id": "bstack@0.29.0",
+      "date": "2026-11-21",
+      "plugin": "bstack",
+      "version": "0.29.0",
+      "changes": [
+        "`quality.py summary` now lists a watched repo whose CI has no test recorder. With the job books adopted, a repo with CI runs in the week and no test records appears as `{lifecycle, recorded: false}`: its job and step numbers, and nothing it did not measure. Every listed repo also says `recorded`, so a weekly brief can say which repos have no test records instead of leaving them out.",
+        "`summary` now says whether each listed repo is private (`visibility`), and `summary --public-only` leaves private repos out entirely: their entries, rows, test ids and step names, and the skill-use counts. It is the form to share outside the books, and it exits 2 when `books/repos.csv` does not exist. Books without the job books and without `repos.csv` print exactly what they did. qualitydirector 0.11.0."
+      ],
+      "try": "Run the quality summary with --public-only for the latest week and tell me which repos have no test records."
+    },
+    {
       "id": "bstack@0.28.0",
       "date": "2026-11-21",
       "plugin": "bstack",

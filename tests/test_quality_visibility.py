@@ -310,15 +310,18 @@ class UnadoptedBooksTest(TempCase):
         git("commit", "-q", "-m", "books")
         self.assertEqual(tf.cli("check", self.books, "--base", "HEAD"), (0, "ok, 1 rows, 0 problems\n"))
 
-    def test_summary_does_not_read_the_file_at_all(self):
+    def test_summary_without_the_file_has_no_visibility_and_with_it_only_adds_that_key(self):
         b = Builder(SECRET).run("secret-app", "acme/secret-app", 1, SHA_SECRET, failing=["tests.test_vault.VaultTest.test_rotates_keys"])
         b.write(self.books, repos=False)
         plain = [tf.cli("summary", self.books), tf.cli("summary", self.books, "--json")]
-        b.visibility(STAMP, "secret-app", "acme/secret-app", "private").write(self.books)
-        self.assertEqual([tf.cli("summary", self.books), tf.cli("summary", self.books, "--json")], plain)
         self.assertEqual(plain[0][0], 0)
         self.assertNotIn("visibility", plain[1][1])
         self.assertNotIn("repos.csv", plain[0][1] + plain[1][1])
+        b.visibility(STAMP, "secret-app", "acme/secret-app", "private").write(self.books)
+        text, booked = tf.cli("summary", self.books), json.loads(tf.cli("summary", self.books, "--json")[1])
+        self.assertEqual(booked["repos"]["secret-app"].pop("visibility"), "private")
+        self.assertEqual(booked, json.loads(plain[1][1]))
+        self.assertEqual(text[1].replace("secret-app (private):", "secret-app:"), plain[0][1])
 
     def test_ingest_ignores_repo_json_files_and_prints_and_writes_what_it_did(self):
         books, art = ti.header_only_books(self.tmp / "ib"), self.tmp / "art"

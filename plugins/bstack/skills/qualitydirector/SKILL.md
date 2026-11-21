@@ -4,7 +4,7 @@ description: The Quality Director measures what a repo's tests cost and what the
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 # Quality Director
@@ -114,7 +114,7 @@ Once adopted, `ingest` also books each run folder's `jobs.json` (which `fetch` w
 
 ### The visibility book
 
-`books/repos.csv` is **optional until created with its header** (`seen,repo,github,visibility`). Without it, `check`, `fetch`, `ingest` and `summary` print, return and write what they always did, and a `repo.json` in the fetch folder is ignored. It exists so that the books know which watched repo is private, and so `leak-check` can keep what they learned from a private repo out of public text.
+`books/repos.csv` is **optional until created with its header** (`seen,repo,github,visibility`). Without it, `check`, `fetch`, `ingest` and `summary` print, return and write what they always did (with it, `summary` adds `visibility` and `summary --public-only` works), and a `repo.json` in the fetch folder is ignored. It exists so that the books know which watched repo is private, and so `leak-check` can keep what they learned from a private repo out of public text.
 
 - **`fetch`**, once the file exists, makes the repo call (`gh api repos/OWNER/NAME`, the one it already makes for `default_branch`, still once) for every watched repo it processes, even one with no runs in the window or a failed listing, and writes `OUT_DIR/<repo>/repo.json`: `v`, `repo`, `github`, `visibility`, `seen`. It prints `  visibility: private` under the repo's line. The visibility is the API's `visibility` when it is `public`, `private` or `internal`; without that key the older `private` flag decides (true is `private`, false is `public`); a visibility it does not know, or no answer at all, is `unknown`. `private: true` beside `visibility: public` is `private`. **Only the exact value `public` counts as public.** A failed call still writes the file, with `unknown`, and is counted once: as the default branch failure when the repo has runs, as `FAILED visibility` when it has none, and not at all when the listing already failed.
 - **`ingest`**, once the file exists, reads each `OUT_DIR/<repo>/repo.json` as strictly as a manifest (exact keys and types, `v` 1, the repo on the watch list with the same `github`, a known `visibility`, a real `seen`), and appends a row only when the visibility differs from that repo's latest row or it has none. It prints `booked visibility REPO: private` (`would book` with `--dry-run`), `visibility REPO: unchanged (public)`, or the `rejected:` line (exit 1), and after a booked change `visibility REPO changed: public -> private`: that line is for the weekly brief. An answer with a `seen` not after the repo's latest row is old news and books nothing, unless it says `private` or `internal`: that one is rejected (exit 1, "fetch again"), because dropping it would lose that the repo was private. One that cannot be appended after the file's last row is rejected: fetch again. A second ingest of the same folder adds nothing. `--only visibility` books this file only (it reads no artifact and books no job) and exits 2 without the file. The `--json` report gains a `visibility` list and `visibility_booked`, `visibility_unchanged` and `visibility_rejected` in `totals`, only when the file exists.
@@ -126,7 +126,7 @@ New rows go in the order `started`, `evidence`, `python`, `test_id`. That order 
 ## Summarize a week
 
 ```sh
-uv run --python 3.12 <skill dir>/scripts/quality.py summary BOOKS_DIR --week 2026-W46 --json
+uv run --python 3.12 <skill dir>/scripts/quality.py summary BOOKS_DIR [--week 2026-W46] [--json] [--public-only]
 ```
 
 `--week` defaults to the latest week in `runs.csv`, which is safe because `started` comes from GitHub. Books that fail `check` are refused. Without `--json` it prints a short readable version. With `--json` it is one object, keys sorted, every number an integer (milliseconds and counts, no floats), the same bytes on every run:
@@ -134,7 +134,15 @@ uv run --python 3.12 <skill dir>/scripts/quality.py summary BOOKS_DIR --week 202
 - `week`, `generated_from` (`runs`, `failures`, `weekly_rows`: rows in each file), `thresholds` (`suite_median_ms`: 300000).
 - `repos.<repo>`: `runs`, `red_runs` (`exit_code` not 0), `tests` (the latest run's count), `suite_ms` (`median`, `max`, `by_python`), `suite_ms_prior4` (`median` and `weeks`) and `suite_ms_change`, `ci_wall_ms`, `slowest_tests` (top 10 by `mean_ms`, which is `total_ms // runs`), `failed_on_main`, `caught_on_pr`, `by_kind`, `flaky`, `tests_added`, `tests_removed`, `over_threshold`.
 - `slowest_tests` across all repos, each with `repo`.
-- `repos.<repo>.lifecycle`, only when the job books are adopted (both `jobs.csv` and `steps.csv` exist): where the week's CI time went outside the test suite. Without the two files the key is absent and the output is what it always was. It is `null` for a listed repo when no run of it belongs to the week. The repos listed are still those with `runs.csv` rows that week, so a repo with job rows and no run rows is not listed.
+- `repos.<repo>.lifecycle`, only when the job books are adopted (both `jobs.csv` and `steps.csv` exist): where the week's CI time went outside the test suite. Without the two files the key is absent and the output is what it always was. It is `null` for a recorded repo when no run of it belongs to the week.
+- `repos.<repo>.recorded`, only when the job books are adopted: `true` or `false`, which of the two shapes below the repo is.
+- `repos.<repo>.visibility`, only when `books/repos.csv` exists: `public` or `private` for every listed repo, by the one rule that decides who is private (so a repo with no row is `private`). Without the file the key is absent.
+
+**A repo in `repos` has one of two shapes.** A *recorded* repo has at least one `runs.csv` row in the week. It is the object described above, plus `recorded: true` when the job books are adopted. An *unrecorded* repo is listed only when the job books are adopted, it has no `runs.csv` row in the week and at least one of its runs (by the week rule below) belongs to the week. No test record of it started in the week, usually because its CI has no test recorder. Its `lifecycle.with_suite` is then all zeros. The one exception is a run that straddles the week boundary: its jobs began in this week and its test record started in the next, so the repo is unrecorded here and that run's suite time still counts in `with_suite`. It is exactly `{"lifecycle": {...}, "recorded": false}` (plus `visibility` when known) and has none of `runs`, `suite_ms`, `tests`, `flaky` and the other test keys: an empty value is never booked as a 0. Its `lifecycle` is never `null`. The weekly brief says of such a repo that its tests are not recorded, and quotes only the `lifecycle` numbers. Without the job books only recorded repos exist and the output has no `recorded` key. The top-level `slowest_tests` and `thresholds` are about recorded repos only.
+
+**`--public-only`** is the form to use for anything shared outside the books: a brief for a public repo, a pull request body, a post. It needs `books/repos.csv` and exits 2 without it, because without visibility no repo can be called public. It leaves every private repo out completely: its entry in `repos`, its rows in `generated_from` and `slowest_tests`, and every name, number and string from its rows. It also leaves out `skills`, because skill use is not per repo and is not public. The object gains `public_only: true`, and the text output starts with the line `public repos only`. `--week` still defaults to the latest week in all of `runs.csv`, so a week does not change because a private repo was dropped. Run `leak-check` on the text anyway: a pass of either is not proof.
+
+Text output is unchanged for recorded repos, except that a private repo's first line reads `NAME (private): ...` when visibility is known. An unrecorded repo prints `NAME: no test record started this week` (`NAME (private): ...` when private), then its lifecycle lines.
 
 Lifecycle numbers have one second resolution (`resolution_ms` is 1000). A run is one `evidence` link, so each attempt of a re-run is its own run. A run belongs to one week, whole: the week of its earliest job `created`; all its jobs and steps count in that week and in no other, so a run that straddles Sunday and Monday is counted once. Skipped jobs and empty (not measured) times are left out of every median, p95, max and sum; an empty time is never counted as 0. A "timed" job is one that is not skipped and has a `total_ms`. A p95 is the value at rank `ceil(0.95 * n)` of the sorted values, so it is always a value one run had. Each key is one plain thing:
 
