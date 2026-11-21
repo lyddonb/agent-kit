@@ -1,0 +1,17 @@
+verify-kit, the repo's verification skill, driven against this checkout at 4eadb0b plus the
+change record (the real `claude` CLI in a throwaway profile, no login, no model call).
+
+$ control-kit launch && control-kit doctor && control-kit drive all && control-kit cleanup
+doctor: ready to drive
+PASS install         3 steps, 1.44s
+PASS skills-load     1 steps, 2.03s
+PASS slash-trigger   1 steps, 1.93s
+PASS whats-new-hook  3 steps, 3.52s
+PASSED: 4/4 features
+[exit 0]
+
+The what's-new hook's output in that run holds the bstack 0.30.0 entry ("A repo can keep a
+reliability checklist, `.agents/checklist.json` ...").
+
+$ make claude-validate      # claude plugin validate --strict on every plugin and the marketplace
+Validation passed (7 plugins and the marketplace)

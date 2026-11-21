@@ -1,0 +1,30 @@
+$ /usr/bin/python3 -m unittest -v tests.test_checklist    # Python 3.9.6, macOS, at 4eadb0b
+test_globs (tests.test_checklist.GlobTest) ... ok
+test_a_command_at_the_start_of_a_line_fires_and_a_mention_in_prose_does_not (tests.test_checklist.MatchingTest) ... ok
+test_a_docs_only_change_prints_nothing (tests.test_checklist.MatchingTest) ... ok
+test_a_paths_item_fires_on_any_file_under_the_glob_and_counts_the_rest (tests.test_checklist.MatchingTest) ... ok
+test_a_pattern_is_not_matched_outside_the_items_paths (tests.test_checklist.MatchingTest) ... ok
+test_a_pattern_item_fires_on_a_changed_line_and_says_where (tests.test_checklist.MatchingTest) ... ok
+test_a_pattern_item_stays_quiet_when_its_file_changes_elsewhere (tests.test_checklist.MatchingTest) ... ok
+test_a_removed_line_fires_a_pattern (tests.test_checklist.MatchingTest) ... ok
+test_a_removed_line_that_looks_like_a_file_header_is_read_as_a_line (tests.test_checklist.MatchingTest) ... ok
+test_commits_that_landed_on_the_base_since_the_branch_do_not_count (tests.test_checklist.MatchingTest) ... ok
+test_head_reads_that_commit_and_not_the_working_tree (tests.test_checklist.MatchingTest) ... ok
+test_the_working_tree_counts_uncommitted_and_untracked_files (tests.test_checklist.MatchingTest) ... ok
+test_a_matched_line_cannot_write_control_characters_to_the_terminal (tests.test_checklist.OutputTest) ... ok
+test_an_item_past_its_review_date_says_so (tests.test_checklist.OutputTest) ... ok
+test_text_output_carries_the_check_the_source_and_the_dates (tests.test_checklist.OutputTest) ... ok
+test_a_file_that_is_not_json_names_the_line (tests.test_checklist.RefusalTest) ... ok
+test_a_folder_inside_the_repo_is_refused_and_not_read_as_a_repo_with_no_checklist (tests.test_checklist.RefusalTest) ... ok
+test_a_folder_outside_any_repo_is_refused (tests.test_checklist.RefusalTest) ... ok
+test_a_named_file_that_is_missing_is_refused (tests.test_checklist.RefusalTest) ... ok
+test_a_ref_that_is_an_option_is_refused (tests.test_checklist.RefusalTest) ... ok
+test_a_repo_with_no_checklist_is_not_an_error (tests.test_checklist.RefusalTest) ... ok
+test_an_unknown_ref_is_refused_with_gits_words (tests.test_checklist.RefusalTest) ... ok
+test_format_problems_name_the_item_and_the_key (tests.test_checklist.RefusalTest) ... ok
+test_it_parses_and_no_trigger_is_dead (tests.test_checklist.SeededChecklistTest) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 2.491s
+
+OK
