@@ -3119,6 +3119,7 @@ def store_visibility(out_dir: str, repo: str, github: str, info: object) -> None
 
 
 GH_LIST_CAP = 1000  # GitHub's runs listing returns at most this many results when it is filtered by `created` or `status`
+MAX_LIST_CALLS = 200  # listing calls per repo: enough to split years of runs to single days, a bound if GitHub's counts are wrong
 
 
 class Window(NamedTuple):
@@ -3141,6 +3142,8 @@ class RunListing:
     over: int | None = None  # the first listing's total_count when it was over the cap
     twice: set[int] = field(default_factory=set)
     problems: list[str] = field(default_factory=list)
+    calls: int = 0
+    stopped: bool = False  # MAX_LIST_CALLS was reached; windows not yet listed were left out
 
     def add(self, runs: dict[int, dict]) -> None:
         self.twice |= {run_id for run_id, run in runs.items() if _keep(self.runs, run)}
@@ -3174,19 +3177,39 @@ def _read_window(gh: Gh, github: str, window: Window) -> tuple[dict[int, dict], 
     return runs, unusable, total if type(total) is int else None, twice
 
 
+def _read_counted(gh: Gh, github: str, window: Window, found: RunListing):
+    """_read_window, counted against MAX_LIST_CALLS. None once the bound is reached (said once in the problems)."""
+    if found.calls >= MAX_LIST_CALLS:
+        if not found.stopped:
+            found.stopped = True
+            found.problems.append(f"{github}: stopped after {MAX_LIST_CALLS} listing calls; runs created {window.label()} and later windows were not listed")
+        return None
+    found.calls += 1
+    return _read_window(gh, github, window)
+
+
 def _list_window(gh: Gh, github: str, window: Window, today: date, found: RunListing, read=None) -> None:
     try:
-        runs, unusable, total, twice = read or _read_window(gh, github, window)
-        if total is not None and total <= GH_LIST_CAP and len(runs) + unusable < total:
-            again_runs, again_unusable, _, again_twice = _read_window(gh, github, window)  # a run listed meanwhile moved the pages
+        read = read or _read_counted(gh, github, window, found)
+    except GhError as e:
+        found.problems.append(f"{github}: listing {window.label()}: {e}")
+        return
+    if read is None:
+        return
+    runs, unusable, total, twice = read
+    if total is not None and total <= GH_LIST_CAP and len(runs) + unusable < total:
+        try:  # a run listed meanwhile moved the pages
+            again = _read_counted(gh, github, window, found)
+        except GhError as e:
+            again = None
+            found.problems.append(f"{github}: listing {window.label()} again: {e}")
+        if again is not None:  # what the first read found is kept whatever the second one does
+            again_runs, again_unusable, _, again_twice = again
             for run in again_runs.values():
                 _keep(runs, run)
             unusable, twice = max(unusable, again_unusable), twice | again_twice
-            if len(runs) + unusable < total:
-                found.problems.append(f"{github}: {len(runs)} of {total} runs listed {window.label()}")
-    except GhError as e:
-        found.problems.append(str(e))
-        return
+        if len(runs) + unusable < total:
+            found.problems.append(f"{github}: {len(runs)} of {total} runs listed {window.label()}")
     over = total is not None and total > GH_LIST_CAP
     end = max(today, window.first) if window.last is None else window.last
     if over and end > window.first:  # what this window listed is a part of what its halves list
@@ -3206,7 +3229,7 @@ def list_runs(gh: Gh, github: str, since: str, today: date) -> RunListing:
     Raises GhError when the first call fails."""
     window = Window(date.fromisoformat(since), None)
     first = _read_window(gh, github, window)
-    found = RunListing(over=first[2] if first[2] is not None and first[2] > GH_LIST_CAP else None)
+    found = RunListing(over=first[2] if first[2] is not None and first[2] > GH_LIST_CAP else None, calls=1)
     _list_window(gh, github, window, today, found, read=first)
     return found
 

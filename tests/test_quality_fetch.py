@@ -47,6 +47,9 @@ path, _, query = endpoint.partition("?")
 base = os.path.join(data, "api", path.replace("/", "__"))
 keyed = base + "__q__" + re.sub(r"[^A-Za-z0-9._-]", "_", query)
 for stem in ([keyed, base] if query else [base]):
+    if os.path.exists(stem + ".error." + str(earlier)):
+        sys.stderr.write(open(stem + ".error." + str(earlier)).read())
+        sys.exit(1)
     if os.path.exists(stem + ".error"):
         sys.stderr.write(open(stem + ".error").read())
         sys.exit(1)
@@ -1056,6 +1059,53 @@ class ListingWindowsTest(FetchCase):
         self.assertEqual(self.listings(), [self.OPEN, self.OPEN])
         self.assertNotIn("FAILED", out)
         self.assertEqual(self.fetched(), [1, 2, 3])
+
+    def query_key(self, created: str) -> str:
+        return "repos/lyddonb/agentfiles/actions/runs__q__" + re.sub(r"[^A-Za-z0-9._-]", "_", f"status=completed&per_page=100&created={created}")
+
+    def test_a_run_seen_only_on_the_first_read_is_kept_when_the_second_read_misses_it(self):
+        r = self.run_ids(1, 2, 3)
+        self.runs_in(self.OPEN, [r[0], r[1]], total=3, call=0)
+        self.runs_in(self.OPEN, [r[1], r[2]], total=3, call=1)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN, self.OPEN])
+        self.assertEqual(self.fetched(), [1, 2, 3])
+
+    def test_a_failed_second_read_keeps_what_the_first_read_listed(self):
+        self.runs_in(self.OPEN, self.run_ids(1, 2), total=3, call=0)
+        self.put(self.query_key(self.OPEN), "gh: Server Error (HTTP 502)\n", "error.1")
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAILED listing: lyddonb/agentfiles: listing since 2026-11-01 again: ", out)
+        self.assertIn("FAILED listing: lyddonb/agentfiles: 2 of 3 runs listed since 2026-11-01\n", out)
+        self.assertEqual(self.fetched(), [1, 2])
+
+    def test_a_failed_window_is_named_and_the_other_windows_are_still_listed_and_fetched(self):
+        r = self.run_ids(1, 2, 3, 4, 5)
+        self.runs_in(self.OPEN, r[:3], total=5)
+        self.put(self.query_key(self.LEFT), "gh: Server Error (HTTP 502)\n", "error")
+        self.runs_in(self.RIGHT, r[2:])
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAILED listing: lyddonb/agentfiles: listing 2026-11-01 to 2026-11-08: ", out)
+        self.assertEqual(self.fetched(), [3, 4, 5])
+
+    def test_entries_without_a_usable_id_count_toward_the_total_so_a_complete_listing_is_one_call(self):
+        self.runs_in(self.OPEN, self.run_ids(1, 2) + [{"id": "not-an-int"}], total=3)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN])
+        self.assertNotIn("FAILED", out)
+
+    def test_listing_calls_are_bounded_when_every_window_says_it_is_over_the_cap(self):
+        with unittest.mock.patch.object(quality, "MAX_LIST_CALLS", 5):
+            for created in (self.OPEN, self.LEFT, self.RIGHT, "2026-11-01..2026-11-04", "2026-11-05..2026-11-08", "2026-11-09..2026-11-12", "%3E%3D2026-11-13"):
+                self.runs_in(created, self.run_ids(1), total=99)
+            code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(len(self.listings()), 5)
+        self.assertEqual(out.count("stopped after 5 listing calls"), 1, out)
 
     def test_without_a_total_count_the_listing_is_not_split(self):
         self.runs_in(self.OPEN, self.run_ids(1, 2, 3, 4, 5), omit_total=True)
