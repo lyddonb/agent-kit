@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.24.0 (2026-11-21)
+
+- The Quality Director now has a speed ladder (`references/speed-ladder.md`): the order in which it may propose making a repo's CI faster. Seven rungs (delete, budget, stage, cache, parallelize, select, shard), each opened by values `summary --json` and `audit-ci` print, each with the proof a proposal must show and the question to ask. It proposes from the first open rung only and still changes no workflow.
+- Try: `Which speed proposals are open for agent-ledger this week?`
+
 ## bstack 0.23.0 (2026-11-19)
 
 - You can now run `quality.py audit-ci REPO_DIR [--json]` (qualitydirector 0.7.0) to see, per workflow and job, the CI-speed facts a proposal needs: cancel-in-progress concurrency for pull requests, `timeout-minutes`, dependency caching, a matrix that runs in full on pull requests, and path filters. It only reads the workflow files, writes nothing, and its output is input for a proposal, never an action.
