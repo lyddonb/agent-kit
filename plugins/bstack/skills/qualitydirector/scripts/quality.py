@@ -1604,8 +1604,25 @@ def private_repos(books: Books) -> set[str]:
     the latest answer are private, and a repo that was ever private stays private because what was booked then is still
     sensitive. An `unknown` row stops counting once a later lookup answers `public`, so one failed call is not for good."""
     history = visibility_history(books)
+    slugs = repo_slugs(books)
     return {repo for repo in repo_names(books) if not history.get(repo) or history[repo][-1].visibility != "public"
-            or any(r.visibility in ("private", "internal") for r in history[repo])}
+            or any(r.visibility in ("private", "internal") for r in history[repo]) or len(slugs.get(repo, ())) > 1}
+
+
+def repo_slugs(books: Books) -> dict[str, set[str]]:
+    """Every OWNER/NAME (lower case) the books tie to each repo name: the watch list, the visibility rows and the run links.
+    A name tied to two slugs is private: its `public` row may be about the other repository."""
+    slugs: dict[str, set[str]] = {}
+    for rel, table in books.tables.items():
+        if "repo" not in TABLE_SCHEMAS[rel]:
+            continue
+        for row in table.rows:
+            c = row.cells
+            found = _LINK_SLUG.match(c["evidence"]) if "evidence" in c else None
+            for slug in (c.get("github"), found[1] if found else None):
+                if slug:
+                    slugs.setdefault(c["repo"], set()).add(slug.lower())
+    return slugs
 
 
 def visibility_of(info: object) -> str:
@@ -1618,10 +1635,10 @@ def visibility_of(info: object) -> str:
         return "unknown"
     value, flag = info.get("visibility"), info.get("private")
     if value is None:
-        return {True: "private", False: "public"}.get(flag, "unknown")
+        return "private" if flag is True else "public" if flag is False else "unknown"
     if type(value) is not str or value not in VISIBILITIES[:3]:
         return "unknown"
-    return "private" if value == "public" and flag is True else value
+    return "private" if value == "public" and flag is not False and flag is not None else value
 
 
 def _typed_rows(books: Books, rel: str, cls) -> list:
@@ -3483,6 +3500,9 @@ def scan_repo_files(root: str, watched: dict[str, tuple[str, str]], books: Books
         previous = rows[-1].visibility if rows else None
         if previous == row.visibility:
             scans.append(RepoScan(rel, "unchanged", row, previous))
+        elif rows and row.seen <= rows[-1].seen and row.visibility in ("private", "internal"):
+            # it cannot be appended in order, and dropping it would lose that the repo was private
+            scans.append(RepoScan(rel, "rejected", reason=f"GitHub answered {row.visibility} at {row.seen}, before the latest row ({previous}, {rows[-1].seen}); fetch again"))
         elif rows and row.seen <= rows[-1].seen:  # an older answer than one already booked: nothing new
             scans.append(RepoScan(rel, "unchanged", rows[-1], previous))
         elif last is not None and (row.seen, row.repo) <= last:
@@ -4195,7 +4215,8 @@ MAX_GRAM = 20
 _LINK_SLUG = re.compile(r"https://[^/\s]+/([^/\s]+/[^/\s]+)/actions/runs/")
 _OWNER, _NAME = r"([A-Za-z0-9][A-Za-z0-9-]{0,38})", r"([A-Za-z0-9_][A-Za-z0-9._-]{0,99})"
 _BARE_SLUG = re.compile(rf"(?<![A-Za-z0-9_./-]){_OWNER}/{_NAME}")
-_URL_SLUG = re.compile(rf"github\.com[/:]{_OWNER}/{_NAME}", re.I)
+_URL_SLUG = re.compile(rf"(?:api\.github\.com/repos/|raw\.githubusercontent\.com/|github\.com[/:]){_OWNER}/{_NAME}", re.I)
+_PAGES_SLUG = re.compile(rf"(?<![A-Za-z0-9-]){_OWNER}\.github\.io/{_NAME}", re.I)
 _COMMIT_TOKEN = re.compile(r"(?<![0-9A-Za-z])[0-9A-Fa-f]{8,40}(?![0-9A-Za-z])")
 
 
@@ -4291,6 +4312,8 @@ def _slug_hits(text: str, pattern: re.Pattern, slugs: frozenset[str], cut_at_dot
     for m in pattern.finditer(text):
         owner, name = m[1], m[2]
         ends = {len(name.rstrip("."))}  # a sentence's full stop is not part of the name
+        if name.lower().endswith(".git"):
+            ends.add(len(name) - 4)
         if cut_at_dots:
             ends |= {len(name)} | {i for i, ch in enumerate(name) if ch == "." and i > 0}  # .git
         for end in sorted(ends, reverse=True):
@@ -4302,7 +4325,7 @@ def _slug_hits(text: str, pattern: re.Pattern, slugs: frozenset[str], cut_at_dot
 def leak_matches(text: str, leaks: LeakStrings) -> list[tuple[int, str, str]]:
     """(offset, kind, matched text) for every sensitive string in the text. A link inside a longer link is not reported again."""
     found: list[tuple[int, str, str]] = []
-    spans = set(_slug_hits(text, _URL_SLUG, leaks.slugs, True)) | set(_slug_hits(text, _BARE_SLUG, leaks.slugs, False))
+    spans = set(_slug_hits(text, _URL_SLUG, leaks.slugs, True)) | set(_slug_hits(text, _BARE_SLUG, leaks.slugs, False)) | set(_slug_hits(text, _PAGES_SLUG, leaks.slugs, True))
     for start, end, kind in leaks.needles.find(text):
         if kind == "link":
             spans.add((start, end))

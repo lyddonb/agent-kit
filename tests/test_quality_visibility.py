@@ -11,6 +11,7 @@ import csv
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -98,6 +99,14 @@ class TempCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # check
 # ---------------------------------------------------------------------------
+
+class VisibilityAnswerTest(unittest.TestCase):
+    def test_only_the_booleans_true_and_false_are_read_as_the_private_flag(self):
+        for answer, expected in (({"private": 0}, "unknown"), ({"private": 0.0}, "unknown"), ({"private": 1}, "unknown"), ({"private": "false"}, "unknown"),
+                                 ({"visibility": "public", "private": 1}, "private"), ({"visibility": "public", "private": "no"}, "private"),
+                                 ({"visibility": "public", "private": False}, "public"), ({"visibility": "public"}, "public"), ({"private": False}, "public")):
+            self.assertEqual(quality.visibility_of(answer), expected, answer)
+
 
 class CheckReposTest(TempCase):
     def books_with(self, *rows) -> None:
@@ -504,9 +513,25 @@ class IngestVisibilityTest(TempCase):
         self.assertNotIn("\x1b", out)
         self.assertEqual(self.rows(), [])
 
+    def test_an_older_answer_that_says_private_is_refused_and_never_called_unchanged(self):
+        self.builder.visibility("2026-11-21T10:00:00Z", "secret-app", "acme/secret-app", "public").write(self.books)
+        for value in ("private", "internal"):
+            self.put("secret-app", repo_file("secret-app", value, seen="2026-11-21T09:59:00Z"))
+            code, out = self.ingest("--only", "visibility")
+            self.assertEqual(code, 1, out)
+            self.assertIn(f"rejected: secret-app/repo.json: GitHub answered {value} at 2026-11-21T09:59:00Z, before the latest row (public, 2026-11-21T10:00:00Z); fetch again\n", out)
+            self.assertNotIn("unchanged", out)
+            self.assertEqual(len(self.rows()), 1)
+
+    def test_a_later_answer_with_the_same_value_books_nothing(self):
+        self.builder.visibility("2026-11-20T10:00:00Z", "secret-app", "acme/secret-app", "private").write(self.books)
+        self.put("secret-app", repo_file("secret-app", "private", seen="2026-11-21T10:00:00Z"))
+        self.assertEqual(self.ingest("--only", "visibility"), (0, "visibility secret-app: unchanged (private)\n"))
+        self.assertEqual(len(self.rows()), 1)
+
     def test_an_answer_older_than_the_repos_latest_row_is_old_news_and_one_that_cannot_be_appended_in_order_is_refused(self):
         self.builder.visibility("2026-11-21T10:00:00Z", "secret-app", "acme/secret-app", "public").write(self.books)
-        self.put("secret-app", repo_file("secret-app", "private", seen="2026-11-20T10:00:00Z"))
+        self.put("secret-app", repo_file("secret-app", "unknown", seen="2026-11-20T10:00:00Z"))
         code, out = self.ingest("--only", "visibility")
         self.assertEqual((code, out), (0, "visibility secret-app: unchanged (public)\n"))
         self.put("open-lib", repo_file("open-lib", "private", seen="2026-11-20T10:00:00Z"))
@@ -666,6 +691,36 @@ class LeakRuleTest(TempCase):
         hit = {line.split(": commit: ")[1] for line in out.splitlines() if ": commit: " in line}
         self.assertEqual(hit, {shas[r] for r in ("prv-b", "int-c", "unk-d", "flip-e", "norow-f", "weird-h", "was-int-j")})  # back-i: a failed lookup, then public
         self.assertIn("checked against 7 private repos (14 links, 7 commits, 0 tests, 0 job names, 0 step names, 7 repo names)", out)
+
+    def test_a_name_whose_rows_point_at_two_slugs_is_private_whatever_its_rows_say(self):
+        """The visibility row was booked while the name watched a public repo; the watch list now points it at another."""
+        for row_slug, watched_slug in (("acme/public-tool", "acme/secret-tool"), ("acme/open-lib", "acme/secret-tool")):
+            with self.subTest(row_slug):
+                shutil.rmtree(self.books, ignore_errors=True)
+                Builder(("tool", watched_slug)).run("tool", watched_slug, 42, SHA_SECRET).visibility(STAMP, "tool", row_slug, "public").write(self.books)
+                self.assertEqual(tf.cli("check", self.books)[0], 0)
+                path = self.tmp / "f.txt"
+                path.write_text(f"see {watched_slug} at {SHA_SECRET[:10]}\n")
+                code, out = tf.cli("leak-check", self.books, path)
+                self.assertEqual(code, 1, out)
+                self.assertIn(f": link: {watched_slug}\n", out)
+                self.assertIn(f": commit: {SHA_SECRET[:10]}\n", out)
+                self.assertIn("checked against 1 private repos", out)
+
+    def test_a_slug_that_differs_only_in_case_is_one_slug(self):
+        Builder(("tool", "Acme/Tool")).run("tool", "acme/tool", 42, SHA_OPEN).visibility(STAMP, "tool", "ACME/TOOL", "public").write(self.books)
+        path = self.tmp / "f.txt"
+        path.write_text("acme/tool\n")
+        self.assertEqual(tf.cli("leak-check", self.books, path)[0], 0)
+
+    def test_the_other_github_hosts_and_a_dot_git_slug_are_links(self):
+        leak_books().write(self.books)
+        path = self.tmp / "f.txt"
+        path.write_text("https://api.github.com/repos/acme/secret-app\nhttps://raw.githubusercontent.com/acme/secret-app/main/x\nhttps://acme.github.io/secret-app/\n"
+                        "clone acme/secret-app.git now\nhttps://api.github.com/repos/acme/open-lib https://acme.github.io/open-lib/ acme/open-lib.git\n")
+        code, out = tf.cli("leak-check", self.books, path)
+        self.assertEqual([line.split(": ", 1)[0].rsplit(":", 1)[1] + " " + line.split(": ", 2)[1] for line in out.splitlines()[:-1]],
+                         ["1 link", "2 link", "3 link", "4 link"], out)
 
     def test_a_repo_whose_tests_are_not_recorded_has_no_test_id_to_find(self):
         Builder(SECRET).run("secret-app", "acme/secret-app", 1, SHA_SECRET).visibility(STAMP, "secret-app", "acme/secret-app", "private").write(self.books)
