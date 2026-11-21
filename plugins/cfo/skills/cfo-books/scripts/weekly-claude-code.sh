@@ -15,11 +15,15 @@
 #
 # Usage:
 #   weekly-claude-code.sh --install | --uninstall | --status | --run-now   # manage the launchd agent
-#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--dry-run]   # what the agent runs
-#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] --print-plist
+#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--agentfiles-lock FILE] [--dry-run]   # what the agent runs
+#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--agentfiles-lock FILE] --print-plist
 # --repo defaults to the GitHub remote of the books checkout in $CFO_BOOKS.
 # --quality-repo defaults to the GitHub remote of the checkout in $QUALITY_BOOKS; with neither, the
-# skill-use pass is skipped. The quality books need books/skill-uses.csv (header only is fine).
+# skill-use pass is skipped. --agentfiles-lock is the agentfiles.lock skill versions come from; it
+# defaults to $AGENTFILES_LOCK, else $AGENTFILES_HOME/agentfiles.lock when that exists, and --install
+# writes the path into the agent, whose environment has neither variable. Without a lock, versions
+# are empty.
+# The quality books need books/skill-uses.csv (header only is fine).
 #
 # Needs git, gh (logged in) and uv; Vercel billing also needs the vercel CLI, logged in (without it,
 # that part is skipped). Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
@@ -27,8 +31,7 @@
 # CFO_UTC_TODAY (the UTC date that picks the Vercel week and closes the skill-use weeks). Skill-use
 # pass: QUALITY_BOOKS (checkout whose remote --quality-repo defaults to), QUALITY_CLONE_URL (clone
 # the quality books from here), QUALITY_PY (quality.py; default: bstack's, next to this plugin),
-# CFO_CURSOR_LOGS (Cursor logs dir), AGENTFILES_LOCK (agentfiles.lock for skill versions; else
-# $AGENTFILES_HOME/agentfiles.lock when that exists).
+# CFO_CURSOR_LOGS (Cursor logs dir).
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -38,6 +41,7 @@ LABEL=dev.agent-kit.cfo-claude-code
 TZNAME=${CFO_TZ:-America/Denver}
 REPO=""
 QUALITY_REPO=""
+LOCK=""
 DRY_RUN=0
 PRINT_PLIST=0
 
@@ -52,6 +56,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --repo) REPO=${2:-}; shift 2 ;;
     --quality-repo) QUALITY_REPO=${2:-}; shift 2 ;;
+    --agentfiles-lock) LOCK=${2:-}; [ -n "$LOCK" ] || usage; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --print-plist) PRINT_PLIST=1; shift ;;
     --install) ACTION=install; shift ;;
@@ -78,7 +83,21 @@ case "$ACTION" in uninstall|status|run-now) ;; *)
   [ -z "$QUALITY_REPO" ] || [[ "$QUALITY_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
     || { echo "Not a GitHub OWNER/NAME: $QUALITY_REPO" >&2; usage; } ;;
 esac
-QUALITY_ARGS=(); [ -z "$QUALITY_REPO" ] || QUALITY_ARGS=(--quality-repo "$QUALITY_REPO")
+# The lock for skill versions: the flag, else the environment. An installed agent has only the flag.
+if [ -z "$LOCK" ]; then
+  if [ -n "${AGENTFILES_LOCK:-}" ]; then LOCK=$AGENTFILES_LOCK
+  elif [ -n "${AGENTFILES_HOME:-}" ] && [ -f "$AGENTFILES_HOME/agentfiles.lock" ]; then LOCK=$AGENTFILES_HOME/agentfiles.lock
+  fi
+fi
+QUALITY_ARGS=()
+if [ -n "$QUALITY_REPO" ]; then
+  QUALITY_ARGS=(--quality-repo "$QUALITY_REPO")
+  if [ -n "$LOCK" ]; then
+    [ -f "$LOCK" ] || { echo "Not a file: $LOCK (--agentfiles-lock, AGENTFILES_LOCK or AGENTFILES_HOME)" >&2; exit 2; }
+    LOCK=$(cd "$(dirname "$LOCK")" && pwd)/$(basename "$LOCK")
+    QUALITY_ARGS+=(--agentfiles-lock "$LOCK")
+  fi
+fi
 
 case "$ACTION" in
   install)
@@ -112,7 +131,7 @@ else:
           else "Claude Code now keeps logs 120 days.")
 PYEOF
     echo "Installed: Claude Code usage goes to $REPO's brief PR every Sunday at 06:00."
-    [ -z "$QUALITY_REPO" ] || echo "Skill uses go to $QUALITY_REPO's brief PR."
+    [ -z "$QUALITY_REPO" ] || echo "Skill uses go to $QUALITY_REPO's brief PR; skill versions come from ${LOCK:-nowhere: no agentfiles.lock was given, so they stay empty}."
     echo "Log: $LOGFILE   Check it: --status   Run it now: --run-now   Remove it: --uninstall"
     exit 0 ;;
   uninstall)
@@ -143,7 +162,7 @@ if [ "$PRINT_PLIST" = 1 ]; then
 <dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>$SELF</string><string>--repo</string><string>$REPO</string>$([ -z "$QUALITY_REPO" ] || printf '<string>--quality-repo</string><string>%s</string>' "$QUALITY_REPO")</array>
+  <array><string>/bin/bash</string><string>$SELF</string><string>--repo</string><string>$REPO</string>$([ ${#QUALITY_ARGS[@]} = 0 ] || printf '<string>%s</string>' "${QUALITY_ARGS[@]}")</array>
   <!-- Sundays 06:00 local time, before the cloud brief. A Mac asleep at 06:00 runs it on wake. -->
   <key>StartCalendarInterval</key>
   <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
@@ -378,10 +397,8 @@ skills_pass() {
   [ -z "${CFO_LOGS:-}" ] || args+=(--claude-logs "$CFO_LOGS")
   [ -z "${CFO_CURSOR_LOGS:-}" ] || args+=(--cursor-logs "$CFO_CURSOR_LOGS")
   [ -z "${CFO_UTC_TODAY:-}" ] || args+=(--today "$CFO_UTC_TODAY")
-  if [ -n "${AGENTFILES_LOCK:-}" ]; then
-    args+=(--lock "$AGENTFILES_LOCK")
-  elif [ -n "${AGENTFILES_HOME:-}" ] && [ -f "$AGENTFILES_HOME/agentfiles.lock" ]; then
-    args+=(--lock "$AGENTFILES_HOME/agentfiles.lock")
+  if [ -n "$LOCK" ]; then
+    args+=(--lock "$LOCK")
   else
     echo "cfo-claude-code: no agentfiles.lock given; skill versions will be empty"
   fi

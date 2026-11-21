@@ -54,7 +54,7 @@ If `summary` exits 1, do not write a brief. Tell Beau the exact message and stop
 
 ## 4. Write the brief
 
-Write `BOOKS/briefs/YYYY-MM-DD.md` (the same date as the branch) from `BOOKS/briefs/TEMPLATE.md`, keeping all six sections in order.
+Write `BOOKS/briefs/YYYY-MM-DD.md` (the same date as the branch) from `BOOKS/briefs/TEMPLATE.md`, keeping every section the template has, in its order.
 
 - **Headline:** one sentence naming the week and the one thing that most needs attention, or saying nothing does. If anything could not be fetched or booked, the same sentence says so.
 - **Time:** one table row per repo from `repos.<repo>`, then the top-level `slowest_tests`.

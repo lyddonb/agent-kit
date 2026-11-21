@@ -4,7 +4,7 @@ description: The Quality Director measures what a repo's tests cost and what the
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.9.0"
+  version: "0.9.1"
 ---
 
 # Quality Director

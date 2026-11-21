@@ -30,7 +30,7 @@ Twenty-four named engineering principles (prove it works, fix root causes, subtr
 
 - `principles`: Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof.
 
-## bstack 0.25.0
+## bstack 0.25.1
 
 Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), debugging (root-cause finds a bug's cause from facts, not from reading the code), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), improvement (reflect, correct, unslop), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
 
@@ -76,7 +76,7 @@ Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the
 - `why`: Find out why code is the way it is (design rationale, past decisions, regressions, where a threshold came from) by searching git, PRs and every connected ticket, doc, chat and observability tool in parallel, and return a cited, confidence-tiered answer. Use for "why does X work this way" or "why did we pick Y". Use how for what code does.
 - subagent `beau-agent` (Claude Code)
 
-## cfo 0.4.0
+## cfo 0.4.1
 
 A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself.
 
