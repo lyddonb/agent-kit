@@ -13,7 +13,8 @@ What a reviewer of agent-kit should look at. Reviewers never read this file from
 
 - A fix comes with a test that fails without it.
 - A new check fails on a real past commit, and the PR names the commit.
-- A new gate ships in observe mode.
+- A new gate on what an agent did in a session (a hook, a receipts or drift gate) ships in observe mode.
+- A new static check in `make validate` may ship as an error when a replay over the repo's history shows no false failure. The PR gives the number of commits replayed and the errors found.
 
 ## Skip
 
