@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -592,10 +593,48 @@ class WeeklyJob(unittest.TestCase):
         self.assertNotIn("quality", without)
         self.assertEqual(plistlib.loads(without.encode())["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
 
+    def make_lock(self) -> Path:
+        lock = self.tmp / "profiles" / "agentfiles.lock"
+        lock.parent.mkdir(exist_ok=True)
+        lock.write_text(json.dumps({"version": 1, "sources": {}, "items": {
+            "plugin:mine:@demo": {"commit": "c" * 40, "hash": "sha256:0"}}}))
+        return lock
+
+    def test_the_installed_job_carries_the_lock_because_its_environment_has_none(self):
+        import plistlib
+        lock = self.make_lock().resolve()
+        want = ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO, "--agentfiles-lock", str(lock)]
+        cases = {"the flag": (["--agentfiles-lock", str(lock)], {}),
+                 "AGENTFILES_LOCK": ([], {"AGENTFILES_LOCK": str(lock)}),
+                 "AGENTFILES_HOME": ([], {"AGENTFILES_HOME": str(lock.parent)})}
+        for case, (flags, env) in cases.items():
+            with self.subTest(case=case), unittest.mock.patch.dict(self.env, env):
+                plist = plistlib.loads(self.quality_run(*flags, "--print-plist").stdout.encode())
+                self.assertEqual(plist["ProgramArguments"], want)
+        with unittest.mock.patch.dict(self.env, {"AGENTFILES_LOCK": str(lock)}):
+            no_pass = plistlib.loads(self.run_job("--print-plist").stdout.encode())
+        self.assertEqual(no_pass["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO], "no pass, no lock")
+
+    def test_a_lock_that_is_not_a_file_is_refused(self):
+        r = self.quality_run("--agentfiles-lock", str(self.tmp / "nope.lock"), "--print-plist")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("Not a file", r.stderr)
+
+    def test_rows_take_their_version_from_the_lock_the_job_was_given(self):
+        self.make_quality()
+        self.write_skill_transcript()
+        r = self.quality_run("--agentfiles-lock", str(self.make_lock()))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        [row] = self.quality_rows(f"quality/brief-{this_sunday().isoformat()}")
+        self.assertEqual(row.split(",")[1:4], ["alpha", "mine:@demo", "c" * 40])
+        self.assertNotIn("skill versions will be empty", r.stdout)
+
     def test_a_malformed_quality_repo_is_refused(self):
         r = self.run_job("--quality-repo", "not a repo")
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertIn("Not a GitHub OWNER/NAME", r.stderr)
+        self.assertIn("--agentfiles-lock FILE", r.stderr)
+        self.assertNotIn("set -Eeuo", r.stderr, "usage prints the usage lines, not the script")
 
     def test_books_without_skill_uses_csv_skip_the_pass(self):
         self.make_quality(skills_csv=False)

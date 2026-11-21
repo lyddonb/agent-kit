@@ -8,6 +8,18 @@
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
 - date: 2026-11-21
+  plugin: cfo
+  version: 0.4.1
+  changes:
+    - "The weekly Mac job now books skill versions once installed. `weekly-claude-code.sh` takes `--agentfiles-lock FILE` (default: `AGENTFILES_LOCK`, else `$AGENTFILES_HOME/agentfiles.lock`), and `--install` writes the path into the launch agent. Before this the installed job's environment had neither variable, so every row would have been booked with an empty version. Install the job again to pick it up."
+
+- date: 2026-11-21
+  plugin: bstack
+  version: 0.25.1
+  changes:
+    - "The weekly quality brief steps (qualitydirector 0.9.1) no longer say the brief has six sections: they say to keep every section the books' template has, which now includes Skills."
+
+- date: 2026-11-21
   plugin: bstack
   version: 0.25.0
   changes:

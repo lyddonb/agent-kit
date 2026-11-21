@@ -3,6 +3,14 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## cfo 0.4.1 (2026-11-21)
+
+- The weekly Mac job now books skill versions once installed. `weekly-claude-code.sh` takes `--agentfiles-lock FILE` (default: `AGENTFILES_LOCK`, else `$AGENTFILES_HOME/agentfiles.lock`), and `--install` writes the path into the launch agent. Before this the installed job's environment had neither variable, so every row would have been booked with an empty version. Install the job again to pick it up.
+
+## bstack 0.25.1 (2026-11-21)
+
+- The weekly quality brief steps (qualitydirector 0.9.1) no longer say the brief has six sections: they say to keep every section the books' template has, which now includes Skills.
+
 ## bstack 0.25.0 (2026-11-21)
 
 - You can now book skill use: `quality.py book-skills BOOKS_DIR` (qualitydirector 0.9.0) reads this machine's Claude Code and Cursor transcripts and appends one row per skill invocation to `books/skill-uses.csv`: week, skill, the agentfiles lock item that installs it and its commit, tool, how it was invoked (typed, named, auto or subagent), and counts of tool calls, tool searches and tool errors over the first 20 tool results after the load. No transcript text is booked or printed, only closed weeks are booked, and a second run adds nothing. Every verdict is `unjudged` for now.
