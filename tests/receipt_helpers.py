@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RECEIPT_PY = ROOT / "plugins/bstack/skills/verify-work/scripts/receipt.py"
 CHECK_PRODUCT_PY = ROOT / "plugins/bstack/skills/scaffold-product/scripts/check-product.py"
+DEBRIEF_PY = ROOT / "plugins/bstack/skills/debrief/scripts/debrief.py"
 
 # The real-ledger tests need agent-ledger 1.1.0 or newer (it has `receipts`). Point AGENT_LEDGER_SRC at
 # its `src` folder; without it those tests skip, and the stub-ledger tests still run.

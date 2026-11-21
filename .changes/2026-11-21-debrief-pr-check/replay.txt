@@ -1,0 +1,13 @@
+debrief.py check --base <merge>^1, with the checkout at <merge>^2, for the last 30 merged
+pull requests on agent-kit main (script at a08f795, /usr/bin/python3 3.9.6). PR:exit code.
+
+#73:0 #72:0 #71:1 #70:1 #69:1 #68:1 #67:0 #65:1 #66:0 #64:1 #63:1 #62:1 #61:1 #59:1 #60:0
+#58:1 #57:1 #56:1 #54:1 #53:1 #51:0 #52:1 #49:1 #48:1 #46:1 #47:1 #45:1 #44:0 #43:0 #42:1
+
+pass=8 fail=22 usage-error=0
+
+#70 (head 55baad5): exit 1
+  this pull request changes .claude-plugin/marketplace.json, changes.yaml, docs/CATALOG.md and
+  15 more and adds no change record
+#73 (head 7951786, the first pull request with a record): exit 0
+  1 record(s) checked, 0 with problems
