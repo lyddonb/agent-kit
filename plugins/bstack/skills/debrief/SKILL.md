@@ -4,7 +4,7 @@ description: Close out a piece of work for the human. Says what was done, what i
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Debrief
@@ -26,7 +26,7 @@ Write the record once the commits are final (a rebase changes the hashes it name
 python3 <this skill's folder>/scripts/debrief.py new <slug>
 ```
 
-Fill in `.changes/<date>-<slug>.json`, one record per PR. Then:
+Fill in `.changes/<date>-<slug>.json`, one record per PR. A PR that changes only bookkeeping files (`ROADMAP.md`, `HUMAN_TASKS.md`, `IDEAS.md`, `docs/phases/`, `docs/plans/`, `docs/DECISIONS.md`, `.audit/`) needs none. Then:
 
 ```bash
 python3 <this skill's folder>/scripts/debrief.py check
@@ -39,6 +39,16 @@ python3 <this skill's folder>/scripts/debrief.py show
 - A repo that already keeps release notes somewhere it enforces (agent-kit's `changes.yaml`) uses `{"see": "<that entry>"}` and writes the line there.
 - Commit the record with the PR: `docs(changes): record <slug>`, with `--trailer 'Verified: none record only'`.
 - Paste what `show` prints as the brief in your reply.
+
+## The pull request check
+
+A repo holds its pull requests to this with one CI step, on a checkout with `fetch-depth: 0`:
+
+```bash
+python3 <this skill's folder>/scripts/debrief.py check --base origin/main
+```
+
+It fails when the pull request changes a file outside the bookkeeping files and adds no record, and when a record it added or edited has a problem. Before you open a PR in a repo that runs it, run the same command once the record is committed: it reads commits, so a record that is only staged does not count. Add `--observe` to print what would have failed and still pass: a repo starts there, and drops the flag once a week of pull requests shows no false failure. When it fails, write the record. Never add an empty one to get past it.
 
 ## When nothing shipped
 

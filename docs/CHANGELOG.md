@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.27.0 (2026-11-21)
+
+- A repo can now hold its pull requests to a change record: `debrief.py check --base origin/main` (debrief 0.2.0) fails when a pull request changes a file outside the bookkeeping files and adds no `.changes/` record, and when a record it added or edited has a problem. A pull request that touches only `ROADMAP.md`, `HUMAN_TASKS.md`, `IDEAS.md`, phase specs, plans, the decision log or `.audit/` needs none.
+- `--observe` prints what the check would have failed and exits 0, so a repo can watch it for a week before enforcing. agent-kit's own CI now runs it this way on every pull request.
+- Try: `Run the debrief pull request check against origin/main in observe mode and tell me what it would fail.`
+
 ## bstack 0.26.0 (2026-11-21)
 
 - New `debrief` skill closes out work for you: what was done, each claim with the check that ran, the commit, where its output is kept and what stays unchecked, the next items with where each comes from, why now and its impact, and the release note. Work that ships a change keeps this as `.changes/<date>-<slug>.json`, one record per PR.

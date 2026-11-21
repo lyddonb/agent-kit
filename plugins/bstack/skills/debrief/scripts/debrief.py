@@ -3,6 +3,7 @@
 
     debrief.py new SLUG [--date YYYY-MM-DD] [--root DIR]   write an empty record and print its path
     debrief.py check [FILE ...] [--root DIR]               validate records (default: every record)
+    debrief.py check --base REF [--observe] [--root DIR]   the pull request check: see below
     debrief.py show [FILE] [--root DIR]                    the brief for one record (default: the newest)
     debrief.py notes [--since YYYY-MM-DD] [--root DIR]     release notes from every record, newest first
 
@@ -29,7 +30,17 @@ Rules `check` holds:
     release    exactly one of {"note": ...}, {"see": ...} (the repo keeps its notes elsewhere:
                name the entry) or {"none": ...} (the reason there is nothing to tell a user)
 
-Exit code: 0, or 1 when `check` finds a problem or a record can't be read, 2 on bad usage.
+`check --base REF` is what CI runs on a pull request (`--base origin/main`; the checkout needs
+the base branch and full history, `fetch-depth: 0`). It compares HEAD with where it left REF and
+
+    fails   when a file outside the bookkeeping files changed and no record was added
+    checks  every record the pull request added or edited
+
+A pull request that touches only bookkeeping files (see BOOKKEEPING) needs no record. With
+`--observe` it prints what it would have failed and exits 0, for a repo trying the check out.
+
+Exit code: 0, or 1 when `check` finds a problem or a record can't be read, 2 on bad usage or a
+REF git doesn't know.
 Standard library only, Python 3.9+.
 """
 from __future__ import annotations
@@ -52,6 +63,10 @@ VERIFIED = "VERIFIED"
 VERDICTS = (VERIFIED, "NOT VERIFIED", "INCONCLUSIVE", "UNCHECKED")
 RELEASE_KINDS = ("note", "see", "none")
 INFERRED = "inferred"
+# Records, not source: a pull request that changes only these needs no change record.
+# verify-work's receipt.py and scaffold-product's check-product.py have the same list.
+BOOKKEEPING = (".audit", ".changes", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
+               "HUMAN_TASKS.md", "IDEAS.md")
 
 TEMPLATE = {
     "version": 1,
@@ -273,8 +288,45 @@ def cmd_new(args: argparse.Namespace, root: Path) -> int:
     return 0
 
 
+def _changed(root: Path, base: str, diff_filter: str, *pathspec: str) -> Optional[List[str]]:
+    """Paths HEAD changed since it left `base`, or None when git can't compare them."""
+    done = git(root, "diff", "--name-only", "--no-renames", f"--diff-filter={diff_filter}", f"{base}...HEAD", "--", *pathspec)
+    return done.stdout.splitlines() if done.returncode == 0 else None
+
+
+def base_paths(root: Path, base: str) -> Tuple[Optional[List[Path]], int]:
+    """The records a pull request added or edited, and the exit code so far (1: it owes a record)."""
+    source = _changed(root, base, "ACDMRT", ".", *(f":(exclude){p}" for p in BOOKKEEPING))
+    added = _changed(root, base, "A", DIR)
+    touched = _changed(root, base, "AM", DIR)
+    if source is None or added is None or touched is None:
+        print(f"cannot compare HEAD with {base!r}: fetch the base branch with full history (fetch-depth: 0)",
+              file=sys.stderr)
+        return None, 2
+    is_record = lambda p: Path(p).parent.name == DIR and NAME.match(Path(p).name)
+    rc = 0
+    if source and not any(is_record(p) for p in added):
+        more = f" and {len(source) - 3} more" if len(source) > 3 else ""
+        print(f"this pull request changes {', '.join(source[:3])}{more} and adds no change record: "
+              f"write one with the debrief skill (`debrief.py new <slug>`) and commit it", file=sys.stderr)
+        rc = 1
+    return [root / p for p in touched if is_record(p)], rc
+
+
 def cmd_check(args: argparse.Namespace, root: Path) -> int:
-    paths = [Path(f) for f in args.files] or record_paths(root)
+    owed = 0
+    if args.base:
+        if args.files:
+            print("pass --base or files, not both", file=sys.stderr)
+            return 2
+        paths, owed = base_paths(root, args.base)
+        if paths is None:
+            return owed
+    elif args.observe:
+        print("--observe needs --base", file=sys.stderr)
+        return 2
+    else:
+        paths = [Path(f) for f in args.files] or record_paths(root)
     bad = 0
     for path in paths:
         _, errors = parse(root, path)
@@ -282,7 +334,10 @@ def cmd_check(args: argparse.Namespace, root: Path) -> int:
             bad += 1
             _fail(path, errors)
     print(f"{len(paths)} record(s) checked, {bad} with problems")
-    return 1 if bad else 0
+    if args.observe and (bad or owed):
+        print("observe: this pull request would have failed the change record check")
+        return 0
+    return 1 if bad or owed else 0
 
 
 def cmd_show(args: argparse.Namespace, root: Path) -> int:
@@ -322,6 +377,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     new.add_argument("--root", default=".")
     check = sub.add_parser("check", help="validate records")
     check.add_argument("files", nargs="*")
+    check.add_argument("--base")
+    check.add_argument("--observe", action="store_true")
     check.add_argument("--root", default=".")
     show = sub.add_parser("show", help="print the brief for one record")
     show.add_argument("file", nargs="?")
