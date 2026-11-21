@@ -11,6 +11,7 @@ import io
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -32,7 +33,7 @@ spec.loader.exec_module(quality)
 WATCHED = "books/watched.csv"
 TODAY = "2026-11-15"
 FAKE_GH = f'''#!{sys.executable}
-import json, os, sys
+import json, os, re, sys
 data = os.environ["FAKE_GH_DATA"]
 args = sys.argv[1:]
 with open(os.path.join(data, "calls.log"), "a") as log:
@@ -41,14 +42,18 @@ if args[:1] != ["api"]:
     sys.stderr.write("fake gh only does `api`\\n")
     sys.exit(2)
 endpoint = [a for a in args[1:] if not a.startswith("-")][0]
-base = os.path.join(data, "api", endpoint.split("?")[0].replace("/", "__"))
-if os.path.exists(base + ".error"):
-    sys.stderr.write(open(base + ".error").read())
-    sys.exit(1)
-for suffix in ("zip", "json"):
-    if os.path.exists(base + "." + suffix):
-        sys.stdout.buffer.write(open(base + "." + suffix, "rb").read())
-        sys.exit(0)
+earlier = open(os.path.join(data, "calls.log")).read().splitlines().count(json.dumps(args)) - 1
+path, _, query = endpoint.partition("?")
+base = os.path.join(data, "api", path.replace("/", "__"))
+keyed = base + "__q__" + re.sub(r"[^A-Za-z0-9._-]", "_", query)
+for stem in ([keyed, base] if query else [base]):
+    if os.path.exists(stem + ".error"):
+        sys.stderr.write(open(stem + ".error").read())
+        sys.exit(1)
+    for suffix in ("json." + str(earlier), "zip", "json"):
+        if os.path.exists(stem + "." + suffix):
+            sys.stdout.buffer.write(open(stem + "." + suffix, "rb").read())
+            sys.exit(0)
 sys.stderr.write("gh: Not Found (HTTP 404)\\n")
 sys.exit(1)
 '''
@@ -153,6 +158,16 @@ class FetchCase(unittest.TestCase):
     def runs(self, *pages: list, repo: str = "lyddonb/agentfiles") -> None:
         """Serve the run listing as pages, the way `gh api --paginate` prints them: one object after another."""
         self.put(f"repos/{repo}/actions/runs", "".join(dumps({"total_count": sum(map(len, pages)), "workflow_runs": p}) for p in pages))
+
+    def runs_in(self, created: str, *pages: list, total: int | None = None, omit_total: bool = False,
+                call: int | None = None, repo: str = "lyddonb/agentfiles") -> None:
+        """Serve the listing for one `created` window (its value as the URL has it, as in `%3E%3D2026-11-01`), the pages as `runs` does.
+        `total` is the total_count every page reports (default: the runs served), `omit_total` leaves the key out, and `call` makes this
+        the answer to that call only (0 is the first time the fake is asked for this URL, 1 the second)."""
+        count = sum(map(len, pages)) if total is None else total
+        query = re.sub(r"[^A-Za-z0-9._-]", "_", f"status=completed&per_page=100&created={created}")
+        body = "".join(dumps({"workflow_runs": p} if omit_total else {"total_count": count, "workflow_runs": p}) for p in pages)
+        self.put(f"repos/{repo}/actions/runs__q__{query}", body, "json" if call is None else f"json.{call}")
 
     def artifacts(self, run_id: int, *artifacts: dict, repo: str = "lyddonb/agentfiles") -> None:
         self.put(f"repos/{repo}/actions/runs/{run_id}/artifacts", dumps({"total_count": len(artifacts), "artifacts": list(artifacts)}))
@@ -913,6 +928,142 @@ class JobsTest(FetchCase):
         self.assertEqual(len(self.calls()), before + 2)
         self.assertEqual(sorted(self.jobs_calls()), [self.JOBS_ENDPOINT.format(run=601), self.JOBS_ENDPOINT.format(run=602)])
         self.assertTrue(all(c[1] == "--paginate" for c in self.calls() if any("/jobs" in a for a in c)))
+
+
+class ListingWindowsTest(FetchCase):
+    """GitHub lists at most GH_LIST_CAP runs for a filtered listing, so a listing over it is split by created date. The cap is 3 here."""
+    SINCE = "2026-11-01"  # TODAY is 2026-11-15
+    BASE = "repos/lyddonb/agentfiles/actions/runs?status=completed&per_page=100&created="
+    OPEN = "%3E%3D2026-11-01"
+    LEFT, RIGHT = "2026-11-01..2026-11-08", "%3E%3D2026-11-09"
+
+    def setUp(self):
+        super().setUp()
+        patcher = unittest.mock.patch.object(quality, "GH_LIST_CAP", 3)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_ids(self, *ids: int, **over) -> list[dict]:
+        return [self.run_with_artifact(i, **over) for i in ids]
+
+    def listings(self) -> list[str]:
+        return [e.removeprefix(self.BASE) for e in self.endpoints() if e.startswith(self.BASE)]
+
+    def fetched(self) -> list[int]:
+        return sorted(int(p.name) for p in (self.out / "agentfiles").iterdir() if p.name.isdigit())
+
+    def artifact_calls(self, run_id: int) -> int:
+        return sum(1 for e in self.endpoints() if f"actions/runs/{run_id}/artifacts" in e)
+
+    def test_at_or_under_the_cap_it_is_one_call_and_nothing_new_is_printed(self):
+        r = self.run_ids(1, 2, 3)
+        self.runs_in(self.OPEN, r)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN])
+        self.assertEqual(self.endpoints()[:2], [self.BASE + self.OPEN, "repos/lyddonb/agentfiles"])
+        self.assertNotIn("listing:", out)
+        self.assertEqual(self.fetched(), [1, 2, 3])
+
+    def test_over_the_cap_the_window_is_split_at_its_middle_day_and_every_run_is_fetched_once(self):
+        r = self.run_ids(1, 2, 3, 4, 5)
+        self.runs_in(self.OPEN, r[:3], total=5)
+        self.runs_in(self.LEFT, r[:2])
+        self.runs_in(self.RIGHT, r[2:])
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN, self.LEFT, self.RIGHT])
+        self.assertIn("  listing: 5 runs since 2026-11-01 are over GitHub's 3; listed in 2 windows\n", out)
+        self.assertEqual(self.fetched(), [1, 2, 3, 4, 5])
+        self.assertTrue(all(self.artifact_calls(i) == 1 for i in range(1, 6)))
+        self.assertIn("fetched 5 runs (5 artifacts); listed 5;", out)
+        self.assertNotIn("twice", out)
+
+    def test_a_half_that_is_still_over_the_cap_is_split_again(self):
+        r = self.run_ids(1, 2, 3, 4, 5, 6, 7)
+        self.runs_in(self.OPEN, r[:3], total=7)
+        self.runs_in(self.LEFT, r[:2])
+        self.runs_in(self.RIGHT, r[2:5], total=5)
+        self.runs_in("2026-11-09..2026-11-12", r[2:4])
+        self.runs_in("%3E%3D2026-11-13", r[4:])
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN, self.LEFT, self.RIGHT, "2026-11-09..2026-11-12", "%3E%3D2026-11-13"])
+        self.assertIn("listing: 7 runs since 2026-11-01 are over GitHub's 3; listed in 3 windows", out)
+        self.assertEqual(self.fetched(), [1, 2, 3, 4, 5, 6, 7])
+
+    def test_a_single_day_over_the_cap_is_reported_and_what_was_listed_is_fetched(self):
+        r = self.run_ids(1, 2, 3, 4, 5, 6)
+        self.runs_in("%3E%3D2026-11-13", r[:3], total=6)
+        self.runs_in("2026-11-13..2026-11-14", r[:3], total=4)
+        self.runs_in("2026-11-13..2026-11-13", r[:3], total=4)
+        self.runs_in("2026-11-14..2026-11-14", r[3:4])
+        self.runs_in("%3E%3D2026-11-15", r[4:])
+        code, out = self.fetch("--since", "2026-11-13")
+        self.assertEqual(code, 1, out)
+        self.assertIn("  FAILED listing: lyddonb/agentfiles: 4 runs on 2026-11-13; GitHub lists at most 3\n", out)
+        self.assertEqual(self.listings(), ["%3E%3D2026-11-13", "2026-11-13..2026-11-14", "2026-11-13..2026-11-13",
+                                           "2026-11-14..2026-11-14", "%3E%3D2026-11-15"])
+        self.assertEqual(self.fetched(), [1, 2, 3, 4, 5, 6])
+        self.assertIn("listed 6;", out)
+        self.assertIn("1 failed", out)
+
+    def test_a_run_listed_twice_in_one_window_is_kept_once_with_the_larger_attempt(self):
+        first, second, other = run_obj(1, run_attempt=1), run_obj(1, run_attempt=2), run_obj(2)
+        for run_id in (1, 2):
+            artifact = artifact_obj(run_id * 10, "test-results-agentfiles")
+            self.artifacts(run_id, artifact)
+            self.archive(artifact, {"test-results.jsonl": recorder_text(run_id).encode()})
+        self.runs_in(self.OPEN, [first, other], [second], total=2)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN])
+        self.assertIn("  listing: run 1 was listed twice; kept once\n", out)
+        self.assertNotIn("run 2 was", out)
+        self.assertIn("fetched 2 runs (2 artifacts); listed 2;", out)
+        self.assertEqual(self.artifact_calls(1), 1)
+        self.assertEqual(self.manifest(1)["run_attempt"], 2)
+
+    def test_a_run_listed_in_two_windows_is_kept_once_with_the_larger_attempt(self):
+        r = self.run_ids(1, 2, 3, 4, 5)
+        later = run_obj(3, run_attempt=2)
+        self.runs_in(self.OPEN, r[:3], total=5)
+        self.runs_in(self.LEFT, r[:3])
+        self.runs_in(self.RIGHT, [later, r[3], r[4]])
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertIn("  listing: run 3 was listed twice; kept once\n", out)
+        self.assertEqual(out.count("was listed twice"), 1)
+        self.assertEqual(self.fetched(), [1, 2, 3, 4, 5])
+        self.assertEqual(self.artifact_calls(3), 1)
+        self.assertEqual(self.manifest(3)["run_attempt"], 2)
+        self.assertIn("listed 5;", out)
+
+    def test_a_window_short_of_its_total_is_listed_once_more_and_reported_when_still_short(self):
+        self.runs_in(self.OPEN, self.run_ids(1, 2), total=3)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self.listings(), [self.OPEN, self.OPEN])
+        self.assertIn("  FAILED listing: lyddonb/agentfiles: 2 of 3 runs listed since 2026-11-01\n", out)
+        self.assertEqual(self.fetched(), [1, 2])
+
+    def test_a_window_that_is_complete_the_second_time_is_not_reported(self):
+        r = self.run_ids(1, 2, 3)
+        self.runs_in(self.OPEN, r[:2], total=3, call=0)
+        self.runs_in(self.OPEN, r, call=1)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN, self.OPEN])
+        self.assertNotIn("FAILED", out)
+        self.assertEqual(self.fetched(), [1, 2, 3])
+
+    def test_without_a_total_count_the_listing_is_not_split(self):
+        self.runs_in(self.OPEN, self.run_ids(1, 2, 3, 4, 5), omit_total=True)
+        code, out = self.fetch("--since", self.SINCE)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.listings(), [self.OPEN])
+        self.assertNotIn("listing:", out)
+        self.assertEqual(self.fetched(), [1, 2, 3, 4, 5])
 
 
 if __name__ == "__main__":

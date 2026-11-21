@@ -9,6 +9,14 @@
 
 - date: 2026-11-21
   plugin: bstack
+  version: 0.30.0
+  changes:
+    - "`quality.py fetch` no longer silently misses runs in a busy repo. GitHub returns at most 1,000 runs for a listing filtered by date, counting every workflow in the repo. When a watched repo has more than that since `--since`, fetch splits the listing by created date and lists each part, and prints `listing: N runs since DAY are over GitHub's 1000; listed in W windows`. A single day with more than 1,000 runs cannot be split: fetch reports it as `FAILED listing` with the day and both numbers, exits 1, and still fetches what it did list."
+    - "A run that GitHub lists twice, because a new run shifted the pages while they were read, is now fetched and counted once (the larger `run_attempt` is kept), and fetch says `listing: run ID was listed twice; kept once`. A listing that comes back short of GitHub's own count is listed once more and reported as `FAILED listing` if it is still short. A repo under the cap makes the same calls and prints the same lines as before. qualitydirector 0.12.0."
+  try: "Run quality.py fetch for the books with --since 30 days ago and tell me whether any listing was split or reported short."
+
+- date: 2026-11-21
+  plugin: bstack
   version: 0.29.0
   changes:
     - "`quality.py summary` now lists a watched repo whose CI has no test recorder. With the job books adopted, a repo with CI runs in the week and no test records appears as `{lifecycle, recorded: false}`: its job and step numbers, and nothing it did not measure. Every listed repo also says `recorded`, so a weekly brief can say which repos have no test records instead of leaving them out."
