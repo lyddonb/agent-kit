@@ -3,6 +3,16 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.25.0 (2026-11-21)
+
+- You can now book skill use: `quality.py book-skills BOOKS_DIR` (qualitydirector 0.9.0) reads this machine's Claude Code and Cursor transcripts and appends one row per skill invocation to `books/skill-uses.csv`: week, skill, the agentfiles lock item that installs it and its commit, tool, how it was invoked (typed, named, auto or subagent), and counts of tool calls, tool searches and tool errors over the first 20 tool results after the load. No transcript text is booked or printed, only closed weeks are booked, and a second run adds nothing. Every verdict is `unjudged` for now.
+- `quality.py check` validates the new book and holds it append-only, and `summary --json` gains `skills` (uses per skill for the week). Both only once `books/skill-uses.csv` exists; without it every command prints what it printed before.
+- Try: `Run book-skills with --dry-run against the quality books and tell me how many skill uses it would book.`
+
+## cfo 0.4.0 (2026-11-21)
+
+- The weekly Mac job can also book skill use into the quality books. Install it with `weekly-claude-code.sh --install --quality-repo OWNER/NAME` and, after the cost rows are pushed, it runs `quality.py book-skills` on the same logs and pushes the rows to the quality brief branch (opening the pull request when none is open). Without the flag the job does what it did before, and a failure in the new pass never holds back the cost rows.
+
 ## bstack 0.24.0 (2026-11-21)
 
 - The Quality Director now has a speed ladder (`references/speed-ladder.md`): the order in which it may propose making a repo's CI faster. Seven rungs (delete, budget, stage, cache, parallelize, select, shard), each opened by values `summary --json` and `audit-ci` print, each with the proof a proposal must show and the question to ask. It proposes from the first open rung only and still changes no workflow.

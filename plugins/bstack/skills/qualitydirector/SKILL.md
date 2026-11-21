@@ -1,10 +1,10 @@
 ---
 name: qualitydirector
-description: The Quality Director measures what a repo's tests cost and what they catch, from per-test time and outcome, and proposes changes for you to approve. It records a unittest run to JSON Lines, fetches the runs of watched repos from GitHub, books them into the quality books (runs.csv, failures.csv, tests-weekly.csv), checks them, summarizes a week as JSON, and audits a repo's workflow files for CI speed facts (`audit-ci`). Use for "run the weekly quality brief", "record the tests", "how long do our tests take", "fetch and book the test runs", "book the test runs", "quality summary for the week", "check the quality books", "audit the CI of a repo", "which CI speed proposals are open", "which tests are slow or flaky", or when a quality books CI check fails.
+description: The Quality Director measures what a repo's tests cost and what they catch, from per-test time and outcome, and proposes changes for you to approve. It records a unittest run to JSON Lines, fetches the runs of watched repos from GitHub, books them into the quality books (runs.csv, failures.csv, tests-weekly.csv), checks them, summarizes a week as JSON, audits a repo's workflow files for CI speed facts (`audit-ci`), and books skill use from this machine's agent transcripts (`book-skills`). Use for "run the weekly quality brief", "record the tests", "how long do our tests take", "fetch and book the test runs", "book the test runs", "quality summary for the week", "check the quality books", "audit the CI of a repo", "which CI speed proposals are open", "which tests are slow or flaky", "book skill use", "which skills get used", or when a quality books CI check fails.
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.8.0"
+  version: "0.9.0"
 ---
 
 # Quality Director
@@ -63,6 +63,7 @@ Four CSV files in the books repo (and an optional fifth, `kinds.csv`), all UTF-8
 | `books/tests-weekly.csv` | ISO week, repo and test | rows are updated in place and kept sorted by `(week, repo, test_id)`. Columns `week,repo,test_id,runs,failed,total_ms,max_ms`; `runs` counts runs with a pass, fail or error row (not skip) |
 | `books/jobs.csv` | CI job of a run | optional until adopted, then append-only. Columns `created,repo,sha,event,workflow,job,job_id,conclusion,queue_ms,total_ms,failed_step_number,evidence`; `created` is when the job was queued; `failed_step_number` is the `number` of its lowest-numbered failed step, or empty; unique on `(evidence, job_id)` |
 | `books/steps.csv` | step of a job | optional until adopted, then append-only. Columns `started,repo,job_id,number,step,conclusion,ms,evidence`; `started` is when the step ran, empty if it never did; unique on `(evidence, job_id, number)`; each step belongs to a `jobs.csv` row with the same `(evidence, job_id)` and `repo`. Read a step through a join on (`evidence`, `job_id`) to `jobs.csv` for its sha, event, workflow and job name |
+| `books/skill-uses.csv` | skill invocation | optional until created with its header, then append-only. Columns `week,skill,source,version,tool,how,calls,searches,errors,verdict,use`; unique on `use`. Written only by `book-skills`: see "Book skill use" |
 
 `evidence` is the link to the CI run, always `https://github.com/OWNER/NAME/actions/runs/RUN/attempts/N` when ingest wrote it. A run is keyed by `(evidence, python)`. A test that has both an `error` and a `fail` line in one run is booked as `error`: the worst outcome wins, whatever order the lines come in.
 
@@ -140,6 +141,31 @@ A suite's time is a run's `wall_ms`. A median of an even count is the lower of t
 **Flaky** means a test with a failure row this week, for a `(repo, sha, python, event)` that has another run in the books (any week) of the same event with no failure row for that test. Each entry has an `event`: a pull request branch can point at a commit that is already on main, and its failure is not paired with main's pass. The entry lists the failing and the passing evidence links. A sha whose every run failed the test is not flaky. The Python version is part of the key, because a test that fails only on 3.10 is a compatibility bug. The books keep failures only, so a run in which the test was skipped or did not exist, or that is red for another test, counts as passing it: treat `flaky` as a lead to check in the run logs, never as proof.
 
 **A brief's numbers come only from `summary --json`.** Copy them; never add, average or estimate them in prose. When a number is not in the output, say it is not measured.
+
+## Book skill use
+
+```sh
+uv run --python 3.12 <skill dir>/scripts/quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE] [--since YYYY-MM-DD] [--dry-run] [--json]
+```
+
+`book-skills` gives skills what `ingest` gives tests: one row per skill invocation in `books/skill-uses.csv`, read from the agent transcripts on this machine. It runs where the transcripts are, never in CI or a cloud run. On Beau's Mac the cfo plugin's weekly job (`weekly-claude-code.sh --quality-repo OWNER/NAME`) runs it and pushes the rows to the quality brief branch. The book is **optional until created with its header**: without the file every other command behaves as before and `book-skills` exits 2.
+
+| Column | What it holds |
+|---|---|
+| `week` | ISO week (UTC) of the use. Only closed weeks are booked, because a running session's window is still growing. |
+| `skill` | The skill's own name, without the plugin (`beau-mode`). |
+| `source`, `version` | The item in agentfiles' lock (`--lock`) that installs it, such as `mine:@bstack`, and that item's commit on the day of the use. A skill no item installs keeps its plugin name as `source` (empty for a project's own skill or one bundled with the tool) and has an empty `version`. |
+| `tool` | `claude-code` or `cursor`. |
+| `how` | `typed` (a slash command), `named` (the turn before names the skill), `auto`, or `subagent`. Empty for Cursor. |
+| `calls`, `searches`, `errors` | Tool results after the skill loads, up to the next turn a human typed or 20 results: how many, how many were `ToolSearch` calls, how many were errors. Empty for Cursor, which records no tool results. |
+| `verdict` | `unjudged` on every row. No rule fills it yet: pick a threshold from a few weeks of rows first. |
+| `use` | 16 hex characters that name the invocation (a hash of its tool-call id). A second run skips a `use` already booked, and `check` refuses the same one twice. |
+
+A use is a `Skill` tool call, a slash command that loads a skill, or the first read of an installed `SKILL.md` for a skill the session has not loaded another way. A `SKILL.md` read from a checkout is someone editing the skill and is not a use. A use that sits in two transcript files (a resumed or forked session) is booked once. Cursor rows are one per transcript and skill.
+
+**No transcript text is booked or printed.** A row holds names and counts, and the output is counts and weeks: `booked N skill uses for WEEK (n), ...; A already booked, B in the open week, C before --since, D with a name the books refuse, E unreadable files`, then how many of the booked rows are not in the lock and how many were slash commands in a record with no `origin` (booked as `typed`). With `--json`: `dry_run`, `wrote`, `weeks` and `totals`. Exit 0 when it ran, 1 when the books fail `check`, 2 on bad usage or books without the file. A second run changes nothing.
+
+`summary --json` then has `skills` for the week: `uses`, `window` (20) and `by_skill`, most used first, each with `skill`, `source`, `uses`, `by_how`, `by_tool`, the sums `calls`, `searches` and `errors` over its Claude Code rows, and `unjudged`. Without the file the key is absent and the output is byte for byte what it was. Counts are evidence for a proposal: nothing here retires or edits a skill.
 
 ## Audit a repo's CI
 
