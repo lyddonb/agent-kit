@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "goal": "Every agent-kit work session should end with a brief of what was done, what comes next and why it matters, with evidence kept the same way each time and a release note a person can read, in the kit and in other projects.",
+  "changed": [
+    "New debrief skill: a four-part brief, kept as .changes/<date>-<slug>.json when a change ships.",
+    "debrief.py writes an empty record, checks records, prints the brief and prints release notes.",
+    "beau-mode replies give each next step its source, reason and impact; Opening a PR writes the record.",
+    ".changes/ is bookkeeping for receipt.py and check-product.py.",
+    "Nothing enforces the record yet: an agent that skips the step is not stopped."
+  ],
+  "claims": [
+    {
+      "claim": "debrief.py refuses a VERIFIED claim with no kept output, an untracked or ignored evidence path, and a next item without source, reason or impact, and accepts a complete record.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_debrief.py (20 tests, each runs the script in a throwaway git repo) under /usr/bin/python3 3.9.6 on macOS; the full suite (986 tests) passed under Python 3.12 before the last wording edits to SKILL.md",
+      "commit": "cac3679",
+      "record": ".changes/2026-11-21-debrief-skill/unit-python39.txt",
+      "remaining": "Linux, and a shallow CI clone where a claim's commit may be missing."
+    },
+    {
+      "claim": "Claude Code installs bstack from this checkout and a session lists bstack:debrief.",
+      "verdict": "VERIFIED",
+      "check": "verify-kit: control-kit drive all against this checkout, real claude CLI, throwaway profile, no login",
+      "commit": "cac3679",
+      "record": ".changes/2026-11-21-debrief-skill/verify-kit-drive.txt",
+      "remaining": "Codex, Cursor and pi, and an install from GitHub."
+    },
+    {
+      "claim": "An agent given only the skill writes a record that passes check and reports honestly.",
+      "verdict": "VERIFIED",
+      "check": "One sonnet subagent, given only SKILL.md and a scratch repo whose brief called the change ready to ship. Its record passed check, marked the goal as not met, and reported a crash it found; I reran the crash myself.",
+      "commit": "cac3679",
+      "record": ".changes/2026-11-21-debrief-skill/trial-brief.md",
+      "remaining": "One run on one model, before six wording fixes its feedback led to (one of them: it wrote the Verified stamp as plain text, not a trailer). The fixed text has not been trialled. No comparison against a session without the skill."
+    },
+    {
+      "claim": "Agents in real sessions write the record and the brief without being asked.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "Needs a week of real sessions after release. The instructions it replaces were followed unevenly, so expect misses until a check enforces it."
+    }
+  ],
+  "next": [
+    {
+      "item": "A CI check that fails a pull request with no change record",
+      "source": "inferred",
+      "why_now": "This PR only asks. The baseline shows asking is not enough: 5 of agent-ledger's last 12 merged PRs had a Verification section.",
+      "impact": "Without it you keep finding PRs with no record and no release note. With it every merged PR in an adopting repo has both."
+    },
+    {
+      "item": "Adopt the record in quality, agent-ledger and finances",
+      "source": "inferred",
+      "why_now": "Those repos have no release notes at all, and other projects were the point of the request.",
+      "impact": "You get release notes for those repos from one command. Each needs agentfiles to sync bstack 0.26.0 first."
+    },
+    {
+      "item": "A Stop hook that turns a session back when a change shipped with no record",
+      "source": "ROADMAP.md R32",
+      "why_now": "Not yet: it waits on R6 and on your answer to H14 in HUMAN_TASKS.md.",
+      "impact": "The brief would run by default in Claude Code. Other tools get nothing from it."
+    }
+  ],
+  "release": {"see": "changes.yaml bstack@0.26.0"}
+}
