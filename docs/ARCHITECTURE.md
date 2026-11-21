@@ -104,7 +104,8 @@ Each cell was read from the workflow files on each repo's `main` and from
 `gh api repos/lyddonb/REPO/rulesets/ID` (for agent-ledger, `branches/main/protection`), unless
 it is marked inferred or untested.
 
-Three rules decide every row:
+Three rules decide every row. They are GitHub's documented behaviour, not something this
+audit measured:
 
 - A workflow triggered by `pull_request` is read from the pull request's merge commit. The
   pull request can edit the workflow file, and with it any pin, flag or argument written there.
@@ -117,7 +118,7 @@ Three rules decide every row:
 |---|---|---|---|---|---|---|
 | `books` | finances | Yes (ruleset) | `books.py check` from agent-kit, at a commit SHA written in `books.yml` | `books.yml`: the SHA and the `--base origin/main` argument. Trigger is `pull_request` | **The PR** | H13, or fix A below |
 | `books` | quality | Yes (ruleset) | `quality.py check` from agent-kit, at a commit SHA written in `books.yml` | `books.yml`, same as above. Trigger is `pull_request` | **The PR** | H13, or fix A |
-| `ledger-verify` | finances, quality | Yes (ruleset) | The `lyddonb/agent-ledger` Action at a commit SHA. It runs its own copy of the CLI under `python -I` and checks out the pull request's merge commit as data | `ledger.yml` on the base branch. Trigger is `pull_request_target`. The CLI reads no settings file from the tree it checks (read: `scan.py` and `repo_verify.py` have no allow or ignore list) | Not the PR. One gap: a pull request could add a second job with the same name (untested, see below) | H13 decides the name gap |
+| `ledger-verify` | finances, quality | Yes (ruleset) | The `lyddonb/agent-ledger` Action at a commit SHA. It runs its own copy of the CLI under `python -I` and checks out the pull request's merge commit as data (read at the pinned commit, v1.0.0, which is older than receipts) | `ledger.yml` on the base branch. Trigger is `pull_request_target`. The CLI reads no settings file from the tree it checks (read: `scan.py` and `repo_verify.py` have no allow or ignore list) | Not the PR. One gap: a pull request could add a second job with the same name (untested, see below) | H13 decides the name gap |
 | `ledger-verify` | agent-ledger | Yes (branch protection) | The Action as the base commit has it (`ref: base.sha`, checked out to `trusted/`), with the pull request's merge commit as data | `ledger.yml` on the base branch for the `pull_request_target` run | Not the PR for that run. The same file also triggers on `pull_request`, where the pull request's copy defines a job with the same name. Today it is skipped by an `if:`, and each pull request already shows two `ledger-verify` check runs (measured on PRs 29 to 31) | H13 decides the name gap |
 | `ledger-verify-self` | agent-ledger | No | The pull request's own Action | The pull request's `ledger.yml` | **The PR**, by design: it exercises Action changes before they merge | Owner: Beau. Never add it to the required list |
 | `test (3.10)`, `test (3.12)`, `test (3.13)` | agent-ledger | Yes (branch protection) | The pull request's tests and source. The recorder is `quality.py record` from agent-kit, at a SHA written in `test.yml` | `test.yml`. Trigger is `pull_request` | **The PR** | H13 for `test.yml`. R29 unit 3 for a diff that weakens tests |
@@ -132,8 +133,12 @@ Three rules decide every row:
 `pull_request_target`, keep the checker's SHA in the base branch's workflow, check out the
 pull request's merge commit as data, and run the checker in a way that can't import from that
 checkout. It fits `books` and `change-record`, which only read files. It doesn't fit `test` or
-`validate`, which run the pull request's own code by design. It needs no admin rights, only a
-pull request in each repo, and that pull request is the last one able to change its own check.
+`validate`, which run the pull request's own code by design. It needs no admin rights, but it
+takes two pull requests per repo (inferred from the trigger rules, not tried): the first adds
+the `pull_request_target` trigger beside the old one, and the second removes `pull_request`.
+One pull request that swaps the trigger would get no run of the required check at all, because
+the base's file lacks the new trigger and its own file lacks the old one. Fix A is also only as
+good as the name gap below.
 
 **The name gap is untested.** The agent-ledger rows show two check runs named `ledger-verify`
 on every pull request, one a success and one skipped, and the merges went through. Nobody has
@@ -142,9 +147,9 @@ H13 should try that once on a scratch pull request before treating any `pull_req
 check as out of reach.
 
 **What H13 has to work with.** No repo has a `CODEOWNERS` file. Every ruleset and
-agent-ledger's branch protection ask for a pull request with zero approvals. The last 30
-merged pull requests in each repo were all opened by the owner's account, agents included, and
-GitHub doesn't let an author approve their own pull request. So "a change under
+agent-ledger's branch protection ask for a pull request with zero approvals. Every one of the
+most recent merged pull requests in each repo (up to 30 per repo) was opened by the owner's
+account, agents included, and GitHub doesn't let an author approve their own pull request. So "a change under
 `.github/workflows/**` needs your review" can't be met by a review rule alone while agents
 open pull requests as that account. The options are fix A where it fits, a second account for agents so that a
 code-owner review means something, or a ruleset that restricts who may change those paths
