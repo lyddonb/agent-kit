@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.28.0 (2026-11-21)
+
+- You can now watch private repos beside public ones without the books leaking them. Create `books/repos.csv` (header `seen,repo,github,visibility`) and `quality.py fetch` records what GitHub says about each watched repo (`repo.json`), and `ingest` books each change of visibility (`ingest --only visibility` books only that, and the output says `visibility REPO changed: public -> private` when one changes). A repo counts as public only when its latest row says `public` and it was never private or internal; a failed lookup keeps it private until a later one answers. `check` validates the file and holds it append-only with `--base`.
+- `quality.py leak-check BOOKS_DIR FILE...` (qualitydirector 0.10.0) reads text files (or `-` for stdin) and exits 1 when they hold a private repo's name as a whole word, or run links, repo slugs, commit shas, test ids, or job and step names that the books hold about one. Run it on a pull request body, commit messages and the diff before pushing work that used the books to a public repo. A pass is not proof: numbers and anything the books do not hold are not matched. Books without `books/repos.csv` behave exactly as before, except that `leak-check` exits 2 for them.
+- Try: `Run leak-check on this pull request description against the quality books.`
+
 ## bstack 0.27.0 (2026-11-21)
 
 - A repo can now hold its pull requests to a change record: `debrief.py check --base origin/main` (debrief 0.2.0) fails when a pull request changes a file outside the bookkeeping files and adds no `.changes/` record, and when a record it added or edited has a problem. A pull request that touches only `ROADMAP.md`, `HUMAN_TASKS.md`, `IDEAS.md`, phase specs, plans, the decision log or `.audit/` needs none.

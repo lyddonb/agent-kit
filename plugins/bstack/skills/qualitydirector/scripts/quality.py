@@ -6,10 +6,11 @@ workflow files, not the books.
 Usage:
     uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
     uv run --python 3.12 quality.py fetch BOOKS_DIR OUT_DIR [--since YYYY-MM-DD] [--repo SLUG]
-    uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs]
+    uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs|visibility]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
     uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json]
     uv run --python 3.12 quality.py audit-ci REPO_DIR [--json]
+    uv run --python 3.12 quality.py leak-check BOOKS_DIR FILE [FILE ...] [--json]
     uv run --python 3.12 quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE]
                                                 [--since YYYY-MM-DD] [--dry-run] [--json]
 
@@ -227,6 +228,7 @@ if sys.version_info < (3, 10):
     raise SystemExit(2)
 
 import argparse
+import bisect
 import contextlib
 import csv
 import errno
@@ -264,6 +266,7 @@ WATCHED = "books/watched.csv"
 JOBS = "books/jobs.csv"  # optional until adopted together with STEPS: see check_adoption
 STEPS = "books/steps.csv"
 KINDS = "books/kinds.csv"  # optional: a book without it is valid and every test is a unit test
+REPOS = "books/repos.csv"  # optional until created with its header: what GitHub said about each watched repo's visibility, append only
 SKILLS = "books/skill-uses.csv"  # optional until created with its header: one row per skill invocation, append only
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
@@ -277,8 +280,10 @@ STEPS_SCHEMA = ("started", "repo", "job_id", "number", "step", "conclusion", "ms
 SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, WATCHED: WATCHED_SCHEMA}  # the files every book has
 # The files a book may leave out. ingest never writes kinds.csv. The job books come as a pair: neither file means
 # they are not adopted and every command behaves as it did before they existed; exactly one is a check problem.
+REPOS_SCHEMA = ("seen", "repo", "github", "visibility")
+VISIBILITIES = ("public", "private", "internal", "unknown")
 SKILLS_SCHEMA = ("week", "skill", "source", "version", "tool", "how", "calls", "searches", "errors", "verdict", "use")
-OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA}
+OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA, REPOS: REPOS_SCHEMA}
 SKILL_TOOLS = ("claude-code", "cursor")
 SKILL_HOWS = ("typed", "named", "auto", "subagent")
 SKILL_VERDICTS = ("unjudged",)  # no rule fills a verdict yet
@@ -1127,6 +1132,20 @@ STEP_RULES: dict[str, Rule] = {
 }
 
 
+def _seen_rule(cells: dict) -> Iterator[str]:
+    if not _is_stamp(cells["seen"]):
+        yield (f"seen must look like 2026-11-15T09:30:00Z (UTC) with a year from {YEAR_MIN} to {YEAR_MAX}, "
+               f"got {_show(cells['seen'])}")
+
+
+def _visibility_rule(cells: dict) -> Iterator[str]:
+    if cells["visibility"] not in VISIBILITIES:
+        yield f"visibility must be one of {', '.join(VISIBILITIES)}, got {_show(cells['visibility'])}"
+
+
+REPOS_RULES: dict[str, Rule] = {"seen": _seen_rule, "repo": _repo_rule, "github": _github_rule, "visibility": _visibility_rule}
+
+
 _SKILL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _SKILL_SOURCE = re.compile(r"([A-Za-z0-9][A-Za-z0-9._:@/-]{0,199})?")
 _SKILL_VERSION = re.compile(r"([0-9a-f]{40})?")
@@ -1349,6 +1368,24 @@ def check_skill_uses(books: Books) -> Iterator[Problem]:
     yield from _unique_rows(books, SKILLS, lambda c: (c["use"],), "use")
 
 
+def check_repos(books: Books) -> Iterator[Problem]:
+    """The form of books/repos.csv: sorted by (seen, repo), one row per repo and stamp. Whether each row is a change
+    from the repo's row before it is ingest's rule, not a check: a hand-added row that repeats a value is harmless."""
+    yield from _check_rows(books, REPOS, REPOS_RULES)
+    seen: dict[tuple[str, str], int] = {}
+    previous: tuple[str, str] | None = None
+    for row in books.tables[REPOS].rows:
+        c, n = row.cells, row.line
+        key = (c["seen"], c["repo"])
+        if key in seen:
+            yield Problem(REPOS, n, f"duplicate of line {seen[key]} (same seen and repo)")
+        else:
+            seen[key] = n
+        if previous is not None and key < previous:
+            yield Problem(REPOS, n, "not sorted by seen, repo")
+        previous = key
+
+
 def _base_problem(books: Books) -> Problem | None:
     ref = books.base
     try:
@@ -1386,7 +1423,7 @@ def check_append_only(books: Books) -> Iterator[Problem]:
         yield Problem(RUNS, 1, f"cannot check against {ref}: the books folder must be the top level of its git "
                                f"work tree, but {where}")
         return
-    for rel in APPEND_ONLY + JOB_BOOKS + (SKILLS,):
+    for rel in APPEND_ONLY + JOB_BOOKS + (SKILLS, REPOS):
         yield from _append_only(books, rel)
 
 
@@ -1429,6 +1466,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("steps", check_steps),
     ("steps-match-jobs", check_steps_match_jobs),
     ("skill-uses", check_skill_uses),
+    ("repos", check_repos),
     ("append-only", check_append_only),
 )
 
@@ -1538,6 +1576,69 @@ class SkillUseRow(NamedTuple):
     errors: int | None
     verdict: str
     use: str
+
+
+class RepoRow(NamedTuple):
+    seen: str
+    repo: str
+    github: str
+    visibility: str
+
+
+def visibility_history(books: Books) -> dict[str, list[RepoRow]]:
+    """Each repo's rows in repos.csv, oldest first (the file is sorted)."""
+    history: dict[str, list[RepoRow]] = {}
+    for r in books.tables[REPOS].rows:
+        history.setdefault(r.cells["repo"], []).append(RepoRow(*(r.cells[k] for k in REPOS_SCHEMA)))
+    return history
+
+
+def repo_names(books: Books) -> set[str]:
+    """Every repo name any row of any book mentions, the watch list or not."""
+    return {r.cells["repo"] for rel, table in books.tables.items() if "repo" in TABLE_SCHEMAS[rel] for r in table.rows}
+
+
+def private_repos(books: Books) -> set[str]:
+    """The repos whose books must not reach a public place. A repo is public only when repos.csv has a row for it and
+    its latest row says `public` and no row ever said `private` or `internal`: no row and a failed lookup (`unknown`) as
+    the latest answer are private, and a repo that was ever private stays private because what was booked then is still
+    sensitive. An `unknown` row stops counting once a later lookup answers `public`, so one failed call is not for good."""
+    history = visibility_history(books)
+    slugs = repo_slugs(books)
+    return {repo for repo in repo_names(books) if not history.get(repo) or history[repo][-1].visibility != "public"
+            or any(r.visibility in ("private", "internal") for r in history[repo]) or len(slugs.get(repo, ())) > 1}
+
+
+def repo_slugs(books: Books) -> dict[str, set[str]]:
+    """Every OWNER/NAME (lower case) the books tie to each repo name: the watch list, the visibility rows and the run links.
+    A name tied to two slugs is private: its `public` row may be about the other repository."""
+    slugs: dict[str, set[str]] = {}
+    for rel, table in books.tables.items():
+        if "repo" not in TABLE_SCHEMAS[rel]:
+            continue
+        for row in table.rows:
+            c = row.cells
+            found = _LINK_SLUG.match(c["evidence"]) if "evidence" in c else None
+            for slug in (c.get("github"), found[1] if found else None):
+                if slug:
+                    slugs.setdefault(c["repo"], set()).add(slug.lower())
+    return slugs
+
+
+def visibility_of(info: object) -> str:
+    """What the repository API's answer says, as one of VISIBILITIES. Only the exact value `public` counts as public:
+    a visibility GitHub did not name, or one this script does not know, is `unknown`. Without a `visibility` key the
+    older boolean `private` decides (true: private, false: public), and without that too the answer is `unknown`.
+    GitHub answers `private: true` for an internal repo, so `visibility` wins; only `public` against `private: true` is a
+    contradiction, and it is private."""
+    if not isinstance(info, dict):
+        return "unknown"
+    value, flag = info.get("visibility"), info.get("private")
+    if value is None:
+        return "private" if flag is True else "public" if flag is False else "unknown"
+    if type(value) is not str or value not in VISIBILITIES[:3]:
+        return "unknown"
+    return "private" if value == "public" and flag is not False and flag is not None else value
 
 
 def _typed_rows(books: Books, rel: str, cls) -> list:
@@ -2202,19 +2303,27 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print(f"{len(problems)} problems; refusing to ingest into books that fail check")
         return 1
     only_jobs = args.only == "jobs"
+    only_visibility = args.only == "visibility"
     if only_jobs and not adopted(books):
         print(f"quality.py: --only jobs needs the job books: create {JOBS} and {STEPS} (each with its header) in the books "
               "folder first", file=sys.stderr)
         return 2
+    if only_visibility and not books.tables[REPOS].present:
+        print(f"quality.py: --only visibility needs {REPOS}: create it (with its header) in the books folder first", file=sys.stderr)
+        return 2
     booked = {(r.evidence, r.python) for r in _typed_rows(books, RUNS, RunRow)}
-    found = scan_fetched(args.fetch_dir, watch_list(books), booked, jobs_booked_evidence(books), read_artifacts=not only_jobs)
+    found = scan_fetched(args.fetch_dir, watch_list(books), booked, None if only_visibility else jobs_booked_evidence(books),
+                         read_artifacts=not (only_jobs or only_visibility))
     scans = found.scans
     settle_duplicates(scans)
     new = choose_new_runs(scans, booked)
     plan = plan_ingest(books, new)
     job_files = plan_jobs(books, found.jobs)
     plan.files.update(job_files)
-    if new or job_files:
+    visibility = scan_repo_files(args.fetch_dir, watch_list(books), books) if books.tables[REPOS].present and not only_jobs else None
+    repo_files = plan_repos(books, visibility) if visibility is not None else {}
+    plan.files.update(repo_files)
+    if new or job_files or repo_files:
         unchanged = {rel: books.tables[rel].data if books.tables[rel].present else None for rel in OPTIONAL_SCHEMAS}
         after = run_checks(books_from_bytes(args.books_dir, {**unchanged, **{rel: data if data is not None else books.tables[rel].data
                                                                               for rel, data in plan.files.items()}}))
@@ -2222,7 +2331,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             _print_problems(after)
             print(f"{len(after)} problems; nothing written")
             return 1
-    wrote = bool(new or job_files) and not args.dry_run
+    wrote = bool(new or job_files or repo_files) and not args.dry_run
     if wrote:
         try:
             commit_files(args.books_dir, plan.files)
@@ -2235,7 +2344,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
               "no_artifacts": count("no artifacts"), "rejected": count("rejected"), "unread": unread,
               "failures": plan.failures, "weekly_rows": plan.weekly_rows}
     jobs_rejected = 0
-    if adopted(books):
+    if visibility is not None:
+        totals.update(visibility_booked=sum(s.status == "booked" for s in visibility), visibility_unchanged=sum(s.status == "unchanged" for s in visibility),
+                      visibility_rejected=sum(s.status == "rejected" for s in visibility))
+    if adopted(books) and not only_visibility:
         jobs_rejected = sum(s.status == "rejected" for s in found.jobs)
         booked_jobs = [s for s in found.jobs if s.status == "booked"]
         totals.update(jobs_booked=len(booked_jobs), jobs_already_booked=sum(s.status == "already" for s in found.jobs),
@@ -2244,12 +2356,14 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                       step_rows=sum(s.jobs.step_count for s in booked_jobs))
     if args.json:
         out = {"dry_run": args.dry_run, "files": [_scan_json(s) for s in scans], "totals": totals, "wrote": wrote}
-        if adopted(books):
+        if adopted(books) and not only_visibility:
             out["jobs"] = [_job_scan_json(s) for s in found.jobs]
+        if visibility is not None:
+            out["visibility"] = [_repo_scan_json(s) for s in visibility]
         print(json.dumps(out, sort_keys=True, indent=2))
     else:
-        _print_ingest(scans, totals, found, args.dry_run, only_jobs)
-    return 1 if totals["rejected"] or unread or jobs_rejected else 0
+        _print_ingest(scans, totals, found, args.dry_run, only_jobs, visibility, only_visibility)
+    return 1 if totals["rejected"] or unread or jobs_rejected or totals.get("visibility_rejected") else 0
 
 
 def _job_scan_json(scan: "JobScan") -> dict:
@@ -2271,7 +2385,8 @@ def _scan_json(scan: Scan) -> dict:
     return out
 
 
-def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool, only_jobs: bool = False) -> None:
+def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool, only_jobs: bool = False,
+                  visibility: "list[RepoScan] | None" = None, only_visibility: bool = False) -> None:
     for s in scans:
         name = _show(s.path, 200) if not s.path.isprintable() else s.path
         if s.status == "booked":
@@ -2298,6 +2413,10 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
             print(f"skipped jobs {folder}: no jobs")
         else:
             print(f"rejected: {name}: {s.reason}")
+    if visibility is not None:
+        _print_visibility(visibility, dry_run)
+        if only_visibility and not visibility:
+            print("no repo.json files")
     for folder, cap in found.unread:
         print(f"left unread, the {cap}: {printable(folder)}")
     if found.unread:
@@ -2311,11 +2430,13 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
                      f"rejected {totals['jobs_rejected']}")
     if only_jobs:
         print(jobs_part[2:])
+    elif only_visibility:
+        pass
     else:
         print(f"{verb} {totals['booked']} runs, {totals['failures']} failures, "
               f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
               f"{totals['duplicates']} duplicates; rejected {totals['rejected']} of {totals['files']} files{jobs_part}")
-    if totals["rejected"] or totals["unread"] or totals.get("jobs_rejected"):
+    if totals["rejected"] or totals["unread"] or totals.get("jobs_rejected") or totals.get("visibility_rejected"):
         print("some files were rejected or not read: the others were booked and ingest exits 1 so it is not missed"
               if not dry_run else "some files were rejected or not read; ingest exits 1")
 
@@ -2663,10 +2784,13 @@ def cmd_summary(args: argparse.Namespace) -> int:
 #   OUT_DIR/<repo>/<run_id>/artifacts/<name>/*.jsonl  the run's test-results-* artifacts, unzipped
 #   OUT_DIR/<repo>/<run_id>/jobs.json                 the API's jobs and steps of the run (see JobsFile), only
 #                                                     once BOOKS_DIR/books/jobs.csv exists
+#   OUT_DIR/<repo>/repo.json                          the repo's visibility as GitHub said it, only once
+#                                                     BOOKS_DIR/books/repos.csv exists
 # The artifacts are downloaded as they are and believed only by `ingest`, and only for what they measured.
 
 ARTIFACT_PREFIX = "test-results-"
 JOBS_FILE = "jobs.json"
+REPO_FILE = "repo.json"  # OUT_DIR/<repo>/repo.json, only once BOOKS_DIR/books/repos.csv exists
 MAX_JOBS_PER_RUN = 64
 MAX_STEPS_PER_JOB = 100
 _ARTIFACT_NAME = re.compile(r"test-results-[A-Za-z0-9._-]{1,100}")
@@ -2926,24 +3050,55 @@ def _manifest_of(run: dict, repo: str, github: str, workflow: str, default_branc
                     field("run_started_at", str), field("updated_at", str), str(run.get("conclusion") or ""), fork)
 
 
+def _repo_info(gh: Gh, github: str) -> tuple[object, str]:
+    """The repository API's answer and "", or None and why there is none."""
+    try:
+        return json.loads(gh.api(f"repos/{github}")), ""
+    except GhError as e:
+        return None, str(e)
+    except ValueError:
+        return None, f"gh api repos/{github} did not answer with JSON"
+
+
+def utc_stamp() -> str:
+    """Now, as the books write a time. One function so a test can set the clock."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def store_visibility(out_dir: str, repo: str, github: str, info: object) -> None:
+    """Write OUT_DIR/<repo>/repo.json from the repository API's answer (None: the call failed, so `unknown`) and say what it holds."""
+    visibility = visibility_of(info)
+    seen = utc_stamp()
+    _write_json(os.path.join(out_dir, repo, REPO_FILE), {"v": RECORD_VERSION, "repo": repo, "github": github, "visibility": visibility, "seen": seen})
+    print(f"  visibility: {visibility}")
+
+
 def fetch_repo(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, since: str,
-               tally: FetchTally, booked: dict[str, int], booked_jobs: set[str] | None) -> None:
+               tally: FetchTally, booked: dict[str, int], booked_jobs: set[str] | None, visibility: bool = False) -> None:
+    """`visibility` (the books have repos.csv): the repo's own call is made even when the listing fails or has no runs, and repo.json is written."""
     print(f"{repo} ({github}, {workflow}): runs created since {since}")
     try:
         listing = gh.pages(f"repos/{github}/actions/runs?status=completed&per_page=100&created=%3E%3D{since}")
     except GhError as e:
         tally.fail("listing", str(e))
+        if visibility:
+            store_visibility(out_dir, repo, github, _repo_info(gh, github)[0])
         return
     runs = sorted((r for page in listing for r in page.get("workflow_runs", []) if isinstance(r, dict)
                    and r.get("name") == workflow and type(r.get("id")) is int), key=lambda r: r["id"])
     tally.listed += len(runs)
-    if not runs:
+    if not runs and not visibility:
         return
-    try:
-        info = json.loads(gh.api(f"repos/{github}"))
-        default_branch = info.get("default_branch") if isinstance(info, dict) else None
-    except (GhError, ValueError) as e:
-        tally.fail("default branch", str(e) if isinstance(e, GhError) else f"gh api repos/{github} did not answer with JSON")
+    info, why = _repo_info(gh, github)
+    if visibility:
+        store_visibility(out_dir, repo, github, info)
+    if not runs:
+        if why:
+            tally.fail("visibility", why)
+        return
+    default_branch = info.get("default_branch") if isinstance(info, dict) else None
+    if why:
+        tally.fail("default branch", why)
         return
     if not isinstance(default_branch, str) or not default_branch:
         tally.fail("default branch", f"gh api repos/{github} did not name one")
@@ -3094,7 +3249,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     gh, tally, booked = Gh(exe), FetchTally(jobs_adopted=booked_jobs is not None), _booked_per_run(books)
     for repo, github, workflow in watched:
         since = args.since or _latest_started(books, repo) or (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
-        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs)
+        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs, books.tables[REPOS].present)
     t = tally
     print(f"fetched {t.runs} runs ({t.artifacts} artifacts); listed {t.listed}; skipped {t.forks} forks, "
           f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts"
@@ -3283,6 +3438,109 @@ def plan_jobs(books: Books, scans: list[JobScan]) -> dict[str, bytes | None]:
 def jobs_booked_evidence(books: Books) -> set[str] | None:
     """The evidence links in jobs.csv, or None when the job books are not adopted."""
     return {r.cells["evidence"] for r in books.tables[JOBS].rows} if adopted(books) else None
+
+
+# ---------------------------------------------------------------------------
+# ingest, visibility: repo.json into books/repos.csv
+# ---------------------------------------------------------------------------
+#
+# Only when books/repos.csv exists. repo.json is what `fetch` wrote after asking GitHub about the repo; it is read as strictly
+# as a manifest. A row is added only when the visibility differs from the repo's latest row (or it has none), so every
+# row is a change, and only after the file's last row in (seen, repo) order, so the file stays sorted and append only.
+
+REPO_FILE_KINDS = {"v": int, "repo": str, "github": str, "visibility": str, "seen": str}
+
+
+@dataclass
+class RepoScan:
+    path: str  # <repo>/repo.json
+    status: str  # booked, unchanged, rejected
+    row: RepoRow | None = None
+    previous: str | None = None  # the repo's latest booked visibility, None when it has no row yet
+    reason: str = ""
+
+
+def read_repo_file(path: str, folder_repo: str, watched: dict[str, tuple[str, str]]) -> RepoRow:
+    obj = _check_fields(_load_json(_read_file(path, MAX_MANIFEST_BYTES), "repo.json"), REPO_FILE_KINDS, "repo.json")
+    if obj["v"] != RECORD_VERSION:
+        raise Rejected(f"repo.json v must be {RECORD_VERSION}, got {_show(obj['v'])}")
+    if obj["repo"] != folder_repo:
+        raise Rejected(f"repo {printable(obj['repo'])} is not in folder {printable(folder_repo)}")
+    if folder_repo not in watched:
+        raise Rejected(f"repo {printable(folder_repo)} is not on the watch list")
+    github = watched[folder_repo][0]
+    if obj["github"].lower() != github.lower():
+        raise Rejected(f"github {printable(obj['github'])} is not {printable(github)}, the watch list's")
+    cells = _cells(REPOS_SCHEMA, seen=obj["seen"], repo=folder_repo, github=github, visibility=obj["visibility"])
+    _fail_if(rule_messages(REPOS_RULES, cells))
+    return RepoRow(*(cells[k] for k in REPOS_SCHEMA))
+
+
+def scan_repo_files(root: str, watched: dict[str, tuple[str, str]], books: Books) -> list[RepoScan]:
+    """One RepoScan per <repo>/repo.json directly under root, by folder name. A linked folder is not entered."""
+    history = visibility_history(books)
+    last = max(((r.seen, r.repo) for rows in history.values() for r in rows), default=None)
+    try:
+        names = sorted(os.listdir(root))
+    except OSError as e:
+        return [RepoScan(".", "rejected", reason=f"cannot list the fetch folder ({e.strerror})")]
+    scans = []
+    for name in names:
+        folder = os.path.join(root, name)
+        path = os.path.join(folder, REPO_FILE)
+        if os.path.islink(folder) or not os.path.isdir(folder) or not os.path.lexists(path):
+            continue
+        rel = f"{name}/{REPO_FILE}"
+        try:
+            row = read_repo_file(path, name, watched)
+        except Rejected as e:
+            scans.append(RepoScan(rel, "rejected", reason=str(e)))
+            continue
+        rows = history.get(row.repo, [])
+        previous = rows[-1].visibility if rows else None
+        if previous == row.visibility:
+            scans.append(RepoScan(rel, "unchanged", row, previous))
+        elif rows and row.seen <= rows[-1].seen and row.visibility in ("private", "internal"):
+            # it cannot be appended in order, and dropping it would lose that the repo was private
+            scans.append(RepoScan(rel, "rejected", reason=f"GitHub answered {row.visibility} at {row.seen}, before the latest row ({previous}, {rows[-1].seen}); fetch again"))
+        elif rows and row.seen <= rows[-1].seen:  # an older answer than one already booked: nothing new
+            scans.append(RepoScan(rel, "unchanged", rows[-1], previous))
+        elif last is not None and (row.seen, row.repo) <= last:
+            scans.append(RepoScan(rel, "rejected", reason=f"seen {row.seen} is not after the latest row of {REPOS} ({last[0]}); fetch again"))
+        else:
+            scans.append(RepoScan(rel, "booked", row, previous))
+    return scans
+
+
+def plan_repos(books: Books, scans: list[RepoScan]) -> dict[str, bytes | None]:
+    rows = sorted((s.row for s in scans if s.status == "booked"), key=lambda r: (r.seen, r.repo))
+    if not rows:
+        return {}
+    return {REPOS: _appended(books.tables[REPOS].data, "".join(_csv_line(r) for r in rows))}
+
+
+def _print_visibility(scans: list[RepoScan], dry_run: bool) -> None:
+    for s in scans:
+        name = _show(s.path, 200) if not s.path.isprintable() else s.path
+        if s.status == "rejected":
+            print(f"rejected: {name}: {s.reason}")
+        elif s.status == "unchanged":
+            print(f"visibility {s.row.repo}: unchanged ({s.row.visibility})")
+        else:
+            print(f"{'would book' if dry_run else 'booked'} visibility {s.row.repo}: {s.row.visibility}")
+            if s.previous is not None:
+                print(f"visibility {s.row.repo} changed: {s.previous} -> {s.row.visibility}")
+
+
+def _repo_scan_json(scan: RepoScan) -> dict:
+    out = {"path": scan.path, "status": scan.status}
+    if scan.reason:
+        out["reason"] = scan.reason
+    if scan.row is not None:
+        out["visibility"] = scan.row.visibility
+        if scan.status == "booked" and scan.previous is not None:
+            out["previous"] = scan.previous
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -3938,6 +4196,219 @@ def cmd_audit_ci(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# leak-check: text that is about to go public, held against what the books know about private repos
+# ---------------------------------------------------------------------------
+#
+# `leak-check BOOKS_DIR FILE...` is read-only. A repo is private unless repos.csv says `public` in every row it has (private_repos).
+# The strings the books hold about private repos are looked for in the files: run links and the repo's slug, commit shas,
+# test ids, and job and step names that no public repo also has. Bare repo names and numbers are never looked for, and nothing
+# that the books do not hold (workflow text, audit-ci output) can be found. A pass is not proof. Files are opened as audit-ci
+# opens a workflow: no symlink is followed, nothing over MAX_WORKFLOW_BYTES (1 MB) is read.
+
+LEAK_MAX_FILES = 2000
+LEAK_VERSION = 1
+MIN_LEAK_COMMIT = 8  # a shorter prefix names too many commits
+MIN_LEAK_TEST_ID = 12
+MIN_LEAK_NAME = 16  # a job or step name: `lint` and `Run tests` are in every repo
+MIN_LEAK_REPO_NAME = 4  # a private repo's own name, matched as a whole word
+MAX_GRAM = 20
+_LINK_SLUG = re.compile(r"https://[^/\s]+/([^/\s]+/[^/\s]+)/actions/runs/")
+_OWNER, _NAME = r"([A-Za-z0-9][A-Za-z0-9-]{0,38})", r"([A-Za-z0-9_][A-Za-z0-9._-]{0,99})"
+_BARE_SLUG = re.compile(rf"(?<![A-Za-z0-9_./-]){_OWNER}/{_NAME}")
+_URL_SLUG = re.compile(rf"(?:api\.github\.com/repos/|raw\.githubusercontent\.com/|github\.com[/:]){_OWNER}/{_NAME}", re.I)
+_PAGES_SLUG = re.compile(rf"(?<![A-Za-z0-9-]){_OWNER}\.github\.io/{_NAME}", re.I)
+_COMMIT_TOKEN = re.compile(r"(?<![0-9A-Za-z])[0-9A-Fa-f]{8,40}(?![0-9A-Za-z])")
+
+
+class Needles:
+    """Exact substrings (each with the kind it makes) to find in a text without trying every needle at every position.
+    Needles are keyed by their first `k` characters (k: the shortest needle's length, at most MAX_GRAM); the text's own
+    k-grams are intersected with the keys, and only where a key occurs are the lengths of the needles under it tried.
+    Cost: one pass over the text plus the occurrences of keys, however many needles there are."""
+
+    def __init__(self, needles: Iterable[tuple[str, str]]):
+        kinds: dict[str, set[str]] = {}
+        for needle, kind in needles:
+            if needle:
+                kinds.setdefault(needle, set()).add(kind)
+        self.k = min(min(map(len, kinds), default=0), MAX_GRAM)
+        self.table: dict[str, dict[int, dict[str, set[str]]]] = {}
+        for needle, found in kinds.items():
+            self.table.setdefault(needle[:self.k], {}).setdefault(len(needle), {})[needle] = found
+
+    def find(self, text: str) -> Iterator[tuple[int, int, str]]:
+        """(start, end, kind) of every needle in the text."""
+        k = self.k
+        if not self.table or len(text) < k:
+            return
+        for gram in {text[i:i + k] for i in range(len(text) - k + 1)} & self.table.keys():
+            lengths = self.table[gram]
+            at = text.find(gram)
+            while at != -1:
+                for n, group in lengths.items():
+                    for kind in group.get(text[at:at + n], ()):
+                        yield at, at + n, kind
+                at = text.find(gram, at + 1)
+
+
+@dataclass
+class LeakStrings:
+    """What the books hold about private repos, by the kind of match it makes."""
+    private: int
+    needles: Needles  # run links (kind link), test ids (test), job names (job) and step names (step)
+    slugs: frozenset[str]  # OWNER/NAME, lower case
+    commits: list[str]  # sorted full shas
+    names: re.Pattern | None  # the private repos' own names as whole words, any case
+    counts: dict[str, int]  # the strings checked, by links, commits, tests, jobs, steps, names
+
+
+def leak_strings(books: Books) -> LeakStrings:
+    private = private_repos(books)
+    evidence: set[str] = set()
+    slugs: set[str] = set()
+    shas: set[str] = set()
+    tests: set[str] = set()
+    names: set[str] = set()
+    jobs: dict[str, set[str]] = {"private": set(), "public": set()}
+    steps: dict[str, set[str]] = {"private": set(), "public": set()}
+    for rel, table in books.tables.items():
+        if "repo" not in TABLE_SCHEMAS[rel]:
+            continue
+        for row in table.rows:
+            c = row.cells
+            side = "private" if c["repo"] in private else "public"
+            if "job" in c:
+                jobs[side].add(c["job"])
+            if "step" in c:
+                steps[side].add(c["step"])
+            if side == "public":
+                continue
+            names.add(c["repo"].lower())
+            if "evidence" in c:
+                evidence.add(c["evidence"])
+                found = _LINK_SLUG.match(c["evidence"])
+                if found and _GITHUB.fullmatch(found[1]):
+                    slugs.add(found[1].lower())
+            if "github" in c:
+                slugs.add(c["github"].lower())
+            if "sha" in c:
+                shas.add(c["sha"])
+            if "test_id" in c and len(c["test_id"]) >= MIN_LEAK_TEST_ID:
+                tests.add(c["test_id"])
+    # a name a public repo also has says nothing about a private one; the public side counts jobs and steps together
+    shared = jobs["public"] | steps["public"]
+    own = lambda names: {n for n in names if len(n) >= MIN_LEAK_NAME and n != UNPRINTABLE and n not in shared}
+    job_names, step_names = own(jobs["private"]), own(steps["private"])
+    needles = Needles([(n, "link") for n in evidence] + [(n, "test") for n in tests] + [(n, "job") for n in job_names] + [(n, "step") for n in step_names])
+    names = {n for n in names | {s.split("/", 1)[1] for s in slugs} if len(n) >= MIN_LEAK_REPO_NAME}
+    # a whole word: `verify-NAME`, `NAME-extra`, `NAME.py` and a path part are other things; a sentence's full stop is fine
+    word = re.compile(r"(?<![A-Za-z0-9_./-])(?:" + "|".join(map(re.escape, sorted(names, key=len, reverse=True))) + r")(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9])", re.I) if names else None
+    counts = {"links": len(evidence) + len(slugs), "commits": len(shas), "tests": len(tests), "jobs": len(job_names), "steps": len(step_names),
+              "names": len(names)}
+    return LeakStrings(len(private), needles, frozenset(slugs), sorted(shas), word, counts)
+
+
+def _slug_hits(text: str, pattern: re.Pattern, slugs: frozenset[str], cut_at_dots: bool) -> Iterator[tuple[int, int]]:
+    for m in pattern.finditer(text):
+        owner, name = m[1], m[2]
+        ends = {len(name.rstrip("."))}  # a sentence's full stop is not part of the name
+        if name.lower().endswith(".git"):
+            ends.add(len(name) - 4)
+        if cut_at_dots:
+            ends |= {len(name)} | {i for i, ch in enumerate(name) if ch == "." and i > 0}  # .git
+        for end in sorted(ends, reverse=True):
+            if end and f"{owner}/{name[:end]}".lower() in slugs:
+                yield (m.start() if cut_at_dots else m.start(1)), m.start(2) + end
+                break
+
+
+def leak_matches(text: str, leaks: LeakStrings) -> list[tuple[int, str, str]]:
+    """(offset, kind, matched text) for every sensitive string in the text. A link inside a longer link is not reported again."""
+    found: list[tuple[int, str, str]] = []
+    spans = set(_slug_hits(text, _URL_SLUG, leaks.slugs, True)) | set(_slug_hits(text, _BARE_SLUG, leaks.slugs, False)) | set(_slug_hits(text, _PAGES_SLUG, leaks.slugs, True))
+    for start, end, kind in leaks.needles.find(text):
+        if kind == "link":
+            spans.add((start, end))
+        else:
+            found.append((start, kind, text[start:end]))
+    links = sorted(spans, key=lambda span: (span[0], -span[1]))
+    reached = -1
+    for start, end in links:
+        if end > reached:
+            found.append((start, "link", text[start:end]))
+            reached = end
+    if leaks.names is not None:
+        found.extend((m.start(), "name", m[0]) for m in leaks.names.finditer(text))
+    if leaks.commits:
+        for m in _COMMIT_TOKEN.finditer(text):
+            token = m[0].lower()
+            at = bisect.bisect_left(leaks.commits, token)
+            if at < len(leaks.commits) and leaks.commits[at].startswith(token):
+                found.append((m.start(), "commit", m[0]))
+    return found
+
+
+def _read_leak_input(path: str) -> tuple[bytes | None, str]:
+    if path != "-":
+        return _read_regular_file(path)
+    stdin = getattr(sys.stdin, "buffer", None)
+    data = stdin.read(MAX_WORKFLOW_BYTES + 1) if stdin is not None else sys.stdin.read(MAX_WORKFLOW_BYTES + 1).encode("utf-8", "replace")
+    return (data, "") if len(data) <= MAX_WORKFLOW_BYTES else (None, f"is larger than {MAX_WORKFLOW_BYTES} bytes")
+
+
+def cmd_leak_check(args: argparse.Namespace) -> int:
+    if not os.path.isdir(args.books_dir):
+        print(f"quality.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    if len(args.files) > LEAK_MAX_FILES:
+        print(f"quality.py: {len(args.files)} files; leak-check reads at most {LEAK_MAX_FILES}", file=sys.stderr)
+        return 2
+    books = load(args.books_dir)
+    problems = run_checks(books)
+    if problems:
+        _print_problems(problems)
+        print(f"{len(problems)} problems; no leak-check against unchecked books")
+        return 2
+    if not books.tables[REPOS].present:
+        print(f"quality.py: leak-check needs {REPOS}: visibility is not booked, so no repo can be called public (run fetch and ingest with it)",
+              file=sys.stderr)
+        return 2
+    leaks = leak_strings(books)
+    paths = list(dict.fromkeys(args.files))
+    matches: set[tuple[str, int, str, str]] = set()
+    unreadable: list[tuple[str, str]] = []
+    for path in paths:
+        data, why = _read_leak_input(path)
+        if data is None:
+            unreadable.append((_audit_text(path), _audit_text(why)))
+            continue
+        text = data.decode("utf-8", "replace")
+        found = leak_matches(text, leaks)
+        if not found:
+            continue
+        newlines = [m.start() for m in re.finditer("\n", text)]
+        shown = _audit_text(path)
+        matches.update((shown, bisect.bisect_left(newlines, start) + 1, kind, _audit_text(hit)) for start, kind, hit in found)
+    ordered = sorted(matches)
+    unreadable.sort()
+    counts = leaks.counts
+    if args.json:
+        print(json.dumps({"v": LEAK_VERSION, "matches": [{"path": p, "line": n, "kind": k, "text": t} for p, n, k, t in ordered],
+                          "files": len(paths), "private_repos": leaks.private, "strings": counts}, indent=2, sort_keys=True))
+        for p, w in unreadable:  # the JSON shape has no place for them; the exit code is 1
+            print(f"{p}: unreadable: {w}", file=sys.stderr)
+    else:
+        for p, n, k, t in ordered:
+            print(f"{p}:{n}: {k}: {t}")
+        for p, w in unreadable:
+            print(f"{p}: unreadable: {w}")
+        print(f"leak-check: {len(ordered)} matches in {len(paths)} files; checked against {leaks.private} private repos "
+              f"({counts['links']} links, {counts['commits']} commits, {counts['tests']} tests, {counts['jobs']} job names, "
+              f"{counts['steps']} step names, {counts['names']} repo names)")
+    return 1 if ordered or unreadable else 0
+
+
+# ---------------------------------------------------------------------------
 # book-skills: skill use from this machine's agent transcripts into books/skill-uses.csv
 # ---------------------------------------------------------------------------
 #
@@ -4366,8 +4837,9 @@ def main(argv: list[str] | None = None) -> int:
     ingest.add_argument("fetch_dir", metavar="FETCH_DIR")
     ingest.add_argument("--dry-run", action="store_true", help="say what would be booked; write nothing")
     ingest.add_argument("--json", action="store_true")
-    ingest.add_argument("--only", choices=["jobs"], help="book only jobs.json files into books/jobs.csv and books/steps.csv: "
-                        "no artifact is read and the three test books are left alone")
+    ingest.add_argument("--only", choices=["jobs", "visibility"], help="jobs: book only jobs.json files into books/jobs.csv and "
+                        "books/steps.csv; visibility: book only repo.json files into books/repos.csv. Either way no artifact is "
+                        "read and the three test books are left alone")
     ingest.set_defaults(func=cmd_ingest)
     summary = sub.add_parser("summary", help="the numbers for one week, from books that pass check")
     summary.add_argument("books_dir", metavar="BOOKS_DIR")
@@ -4388,6 +4860,11 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("repo_dir", metavar="REPO_DIR")
     audit.add_argument("--json", action="store_true")
     audit.set_defaults(func=cmd_audit_ci)
+    leak = sub.add_parser("leak-check", help="look for what the books know about private repos in files that may go public (read-only)")
+    leak.add_argument("books_dir", metavar="BOOKS_DIR")
+    leak.add_argument("files", nargs="+", metavar="FILE", help="a text file, or - for stdin")
+    leak.add_argument("--json", action="store_true")
+    leak.set_defaults(func=cmd_leak_check)
     args = parser.parse_args(argv)
     return args.func(args)
 
