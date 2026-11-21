@@ -559,7 +559,7 @@ class LeakCase(TempCase):
         found = [line.split(": ", 2) for line in out.splitlines()[:-1]]
         return [(kind, hit) for _, kind, hit in found]
 
-    final = "leak-check: {} matches in {} files; checked against 1 private repos (2 links, 1 commits, 1 tests, 1 job names, 1 step names)"
+    final = "leak-check: {} matches in {} files; checked against 1 private repos (2 links, 1 commits, 1 tests, 1 job names, 1 step names, 1 repo names)"
 
 
 class LeakKindsTest(LeakCase):
@@ -582,7 +582,7 @@ class LeakKindsTest(LeakCase):
         self.assertEqual(found, [("link", "github.com/acme/secret-app"), ("link", "github.com/acme/secret-app"), ("link", "github.com:acme/secret-app"),
                                  ("link", "ACME/Secret-App"), ("link", "acme/secret-app"), ("link", "acme/secret-app")])
         for text in ("acme/secret-app-extra", "xacme/secret-app", "see/acme/secret-app", "acme/secret-app.txt", "acme/secret-apple", "acme/open-lib",
-                     "https://github.com/acme/secret-app-extra/pull/1", "secret-app", "github.com/acme/open-lib"):
+                     "https://github.com/acme/secret-app-extra/pull/1", "github.com/acme/open-lib"):
             self.assertEqual(self.kinds(text), [], text)
 
     def test_a_link_inside_a_longer_link_is_reported_once_and_the_longer_one_wins(self):
@@ -618,8 +618,20 @@ class LeakKindsTest(LeakCase):
         b.write(self.books)
         self.assertEqual(self.kinds("(unprintable name) Release the build-things"), [])
 
-    def test_bare_repo_names_and_numbers_are_not_looked_for(self):
-        self.assertEqual(self.kinds("secret-app is 1000 ms slower, run 101, 3.12, 2026-11-10T10:00:00Z"), [])
+    def test_numbers_are_not_looked_for(self):
+        self.assertEqual(self.kinds("it is 1000 ms slower, run 101, 3.12, 2026-11-10T10:00:00Z"), [])
+
+    def test_a_private_repos_own_name_is_found_as_a_whole_word_in_any_case(self):
+        found = self.kinds("secret-app is 1000 ms slower\nIn Secret-App, the matrix has three versions.\n| secret-app | 3 |\n(secret-app)\nsee secret-app.\n")
+        self.assertEqual(found, [("name", "secret-app"), ("name", "Secret-App"), ("name", "secret-app"), ("name", "secret-app"), ("name", "secret-app")])
+        for text in ("verify-secret-app", "secret-app-extra", "secret-app.py", "secret-apple", "my_secret-app", "src/secret-app/x", "secret-app/x", "open-lib is public"):
+            self.assertEqual(self.kinds(text), [], text)
+
+    def test_a_private_repo_name_under_four_characters_is_not_looked_for(self):
+        Builder(("api", "acme/api")).run("api", "acme/api", 1, SHA_SECRET).visibility(STAMP, "api", "acme/api", "private").write(self.books)
+        code, out = self.leak("the api is slow, see acme/api\n")
+        self.assertEqual([line.split(": ", 2)[1:] for line in out.splitlines()[:-1]], [["link", "acme/api"]])
+        self.assertIn("0 repo names)", out)
 
     def test_a_match_on_a_later_line_is_reported_at_its_line_and_one_that_spans_lines_at_its_first(self):
         b = leak_books()
@@ -641,7 +653,8 @@ class LeakRuleTest(TempCase):
         b = Builder(("pub-a", "acme/pub-a"))
         shas = {}
         for i, (repo, history) in enumerate({"pub-a": ["public"], "prv-b": ["private"], "int-c": ["internal"], "unk-d": ["unknown"],
-                                            "flip-e": ["public", "private", "public"], "norow-f": [], "left-g": ["public"], "weird-h": ["public", "unknown"]}.items()):
+                                            "flip-e": ["public", "private", "public"], "norow-f": [], "left-g": ["public"], "weird-h": ["public", "unknown"],
+                                            "back-i": ["unknown", "public"], "was-int-j": ["internal", "public"]}.items()):
             shas[repo] = f"{i + 1:x}" * 40
             b.run(repo, f"acme/{repo}", i + 1, shas[repo])
             for day, value in enumerate(history):
@@ -651,21 +664,21 @@ class LeakRuleTest(TempCase):
             code, out = tf.cli("leak-check", self.books, "-")
         self.assertEqual(code, 1, out)
         hit = {line.split(": commit: ")[1] for line in out.splitlines() if ": commit: " in line}
-        self.assertEqual(hit, {shas[r] for r in ("prv-b", "int-c", "unk-d", "flip-e", "norow-f", "weird-h")})
-        self.assertIn("checked against 6 private repos (12 links, 6 commits, 0 tests, 0 job names, 0 step names)", out)
+        self.assertEqual(hit, {shas[r] for r in ("prv-b", "int-c", "unk-d", "flip-e", "norow-f", "weird-h", "was-int-j")})  # back-i: a failed lookup, then public
+        self.assertIn("checked against 7 private repos (14 links, 7 commits, 0 tests, 0 job names, 0 step names, 7 repo names)", out)
 
     def test_a_repo_whose_tests_are_not_recorded_has_no_test_id_to_find(self):
         Builder(SECRET).run("secret-app", "acme/secret-app", 1, SHA_SECRET).visibility(STAMP, "secret-app", "acme/secret-app", "private").write(self.books)
         path = self.tmp / "f.txt"
         path.write_text("tests.test_vault.VaultTest.test_rotates_keys\n")
-        self.assertEqual(tf.cli("leak-check", self.books, path), (0, "leak-check: 0 matches in 1 files; checked against 1 private repos (2 links, 1 commits, 0 tests, 0 job names, 0 step names)\n"))
+        self.assertEqual(tf.cli("leak-check", self.books, path), (0, "leak-check: 0 matches in 1 files; checked against 1 private repos (2 links, 1 commits, 0 tests, 0 job names, 0 step names, 1 repo names)\n"))
 
     def test_with_no_private_repo_the_final_line_is_printed_and_the_exit_is_0(self):
         Builder(OPEN).run("open-lib", "acme/open-lib", 7, SHA_OPEN).visibility(STAMP, "open-lib", "acme/open-lib", "public").write(self.books)
         path = self.tmp / "f.txt"
         path.write_text(f"{SHA_OPEN} acme/open-lib\n")
         self.assertEqual(tf.cli("leak-check", self.books, path),
-                         (0, "leak-check: 0 matches in 1 files; checked against 0 private repos (0 links, 0 commits, 0 tests, 0 job names, 0 step names)\n"))
+                         (0, "leak-check: 0 matches in 1 files; checked against 0 private repos (0 links, 0 commits, 0 tests, 0 job names, 0 step names, 0 repo names)\n"))
 
 
 class LeakCommandTest(LeakCase):
@@ -714,7 +727,7 @@ class LeakCommandTest(LeakCase):
         self.assertEqual(code, 1)
         self.assertEqual(data, {"v": 1, "matches": [{"kind": "link", "line": 1, "path": p, "text": SECRET_LINK},
                                                     {"kind": "commit", "line": 2, "path": p, "text": SHA_SECRET[:8]}],
-                               "files": 1, "private_repos": 1, "strings": {"links": 2, "commits": 1, "tests": 1, "jobs": 1, "steps": 1}})
+                               "files": 1, "private_repos": 1, "strings": {"links": 2, "commits": 1, "tests": 1, "jobs": 1, "steps": 1, "names": 1}})
         self.assertEqual(out, json.dumps(data, sort_keys=True, indent=2) + "\n")
         self.assertEqual(self.leak(f"{SECRET_LINK}\n{SHA_SECRET[:8]}\n", "--json")[1], out)
         clean = json.loads(self.leak("fine", "--json")[1])
@@ -737,7 +750,7 @@ class LeakCommandTest(LeakCase):
         self.assertIn(f"{missing}: unreadable: could not be read: No such file or directory\n", out)
         self.assertIn(f"{self.files}: unreadable: is not a regular file\n", out)
         self.assertIn(f"{fifo}: unreadable: is not a regular file\n", out)
-        self.assertTrue(out.endswith("leak-check: 0 matches in 5 files; checked against 1 private repos (2 links, 1 commits, 1 tests, 1 job names, 1 step names)\n"), out)
+        self.assertTrue(out.endswith("leak-check: 0 matches in 5 files; checked against 1 private repos (2 links, 1 commits, 1 tests, 1 job names, 1 step names, 1 repo names)\n"), out)
         shown, errors = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(shown), contextlib.redirect_stderr(errors):
             code = quality.main(["leak-check", str(self.books), str(big), "--json"])

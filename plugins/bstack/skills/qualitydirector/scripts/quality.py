@@ -1600,10 +1600,12 @@ def repo_names(books: Books) -> set[str]:
 
 def private_repos(books: Books) -> set[str]:
     """The repos whose books must not reach a public place. A repo is public only when repos.csv has a row for it and
-    every row says `public`: no row, a failed lookup (`unknown`), `internal` and any other value are private, and
-    a repo that was ever private stays private because what was booked then is still sensitive."""
+    its latest row says `public` and no row ever said `private` or `internal`: no row and a failed lookup (`unknown`) as
+    the latest answer are private, and a repo that was ever private stays private because what was booked then is still
+    sensitive. An `unknown` row stops counting once a later lookup answers `public`, so one failed call is not for good."""
     history = visibility_history(books)
-    return {repo for repo in repo_names(books) if not history.get(repo) or any(r.visibility != "public" for r in history[repo])}
+    return {repo for repo in repo_names(books) if not history.get(repo) or history[repo][-1].visibility != "public"
+            or any(r.visibility in ("private", "internal") for r in history[repo])}
 
 
 def visibility_of(info: object) -> str:
@@ -4188,6 +4190,7 @@ LEAK_VERSION = 1
 MIN_LEAK_COMMIT = 8  # a shorter prefix names too many commits
 MIN_LEAK_TEST_ID = 12
 MIN_LEAK_NAME = 16  # a job or step name: `lint` and `Run tests` are in every repo
+MIN_LEAK_REPO_NAME = 4  # a private repo's own name, matched as a whole word
 MAX_GRAM = 20
 _LINK_SLUG = re.compile(r"https://[^/\s]+/([^/\s]+/[^/\s]+)/actions/runs/")
 _OWNER, _NAME = r"([A-Za-z0-9][A-Za-z0-9-]{0,38})", r"([A-Za-z0-9_][A-Za-z0-9._-]{0,99})"
@@ -4234,7 +4237,8 @@ class LeakStrings:
     needles: Needles  # run links (kind link), test ids (test), job names (job) and step names (step)
     slugs: frozenset[str]  # OWNER/NAME, lower case
     commits: list[str]  # sorted full shas
-    counts: dict[str, int]  # the strings checked, by links, commits, tests, jobs, steps
+    names: re.Pattern | None  # the private repos' own names as whole words, any case
+    counts: dict[str, int]  # the strings checked, by links, commits, tests, jobs, steps, names
 
 
 def leak_strings(books: Books) -> LeakStrings:
@@ -4243,6 +4247,7 @@ def leak_strings(books: Books) -> LeakStrings:
     slugs: set[str] = set()
     shas: set[str] = set()
     tests: set[str] = set()
+    names: set[str] = set()
     jobs: dict[str, set[str]] = {"private": set(), "public": set()}
     steps: dict[str, set[str]] = {"private": set(), "public": set()}
     for rel, table in books.tables.items():
@@ -4257,6 +4262,7 @@ def leak_strings(books: Books) -> LeakStrings:
                 steps[side].add(c["step"])
             if side == "public":
                 continue
+            names.add(c["repo"].lower())
             if "evidence" in c:
                 evidence.add(c["evidence"])
                 found = _LINK_SLUG.match(c["evidence"])
@@ -4273,8 +4279,12 @@ def leak_strings(books: Books) -> LeakStrings:
     own = lambda names: {n for n in names if len(n) >= MIN_LEAK_NAME and n != UNPRINTABLE and n not in shared}
     job_names, step_names = own(jobs["private"]), own(steps["private"])
     needles = Needles([(n, "link") for n in evidence] + [(n, "test") for n in tests] + [(n, "job") for n in job_names] + [(n, "step") for n in step_names])
-    counts = {"links": len(evidence) + len(slugs), "commits": len(shas), "tests": len(tests), "jobs": len(job_names), "steps": len(step_names)}
-    return LeakStrings(len(private), needles, frozenset(slugs), sorted(shas), counts)
+    names = {n for n in names | {s.split("/", 1)[1] for s in slugs} if len(n) >= MIN_LEAK_REPO_NAME}
+    # a whole word: `verify-NAME`, `NAME-extra`, `NAME.py` and a path part are other things; a sentence's full stop is fine
+    word = re.compile(r"(?<![A-Za-z0-9_./-])(?:" + "|".join(map(re.escape, sorted(names, key=len, reverse=True))) + r")(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9])", re.I) if names else None
+    counts = {"links": len(evidence) + len(slugs), "commits": len(shas), "tests": len(tests), "jobs": len(job_names), "steps": len(step_names),
+              "names": len(names)}
+    return LeakStrings(len(private), needles, frozenset(slugs), sorted(shas), word, counts)
 
 
 def _slug_hits(text: str, pattern: re.Pattern, slugs: frozenset[str], cut_at_dots: bool) -> Iterator[tuple[int, int]]:
@@ -4304,6 +4314,8 @@ def leak_matches(text: str, leaks: LeakStrings) -> list[tuple[int, str, str]]:
         if end > reached:
             found.append((start, "link", text[start:end]))
             reached = end
+    if leaks.names is not None:
+        found.extend((m.start(), "name", m[0]) for m in leaks.names.finditer(text))
     if leaks.commits:
         for m in _COMMIT_TOKEN.finditer(text):
             token = m[0].lower()
@@ -4369,7 +4381,7 @@ def cmd_leak_check(args: argparse.Namespace) -> int:
             print(f"{p}: unreadable: {w}")
         print(f"leak-check: {len(ordered)} matches in {len(paths)} files; checked against {leaks.private} private repos "
               f"({counts['links']} links, {counts['commits']} commits, {counts['tests']} tests, {counts['jobs']} job names, "
-              f"{counts['steps']} step names)")
+              f"{counts['steps']} step names, {counts['names']} repo names)")
     return 1 if ordered or unreadable else 0
 
 
