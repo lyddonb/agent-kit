@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "books-layout",
+      "trigger": {
+        "paths": [
+          "plugins/bstack/skills/qualitydirector/scripts/quality.py",
+          "plugins/cfo/skills/cfo-books/scripts/books.py"
+        ],
+        "pattern": "^\\s*[A-Z_]*SCHEMA[A-Z_]*\\s*=|^\\s*(\"[a-z_0-9]+\",?\\s*)+\\)?\\s*$"
+      },
+      "check": {
+        "question": "Do books written by the last release still pass `check`?",
+        "probe": "Copy the last release's fixture books out of git (`git archive origin/main tests/fixtures/quality/books tests/fixtures/books | tar -x -C \"$TMPDIR\"`) then run this branch's `quality.py check` on the copied `tests/fixtures/quality` and `books.py check` on the copied `tests/fixtures/books`. If either fails, the layout changed: the `changes.yaml` entry must say so and name the upgrade step, and the books repo's pin moves in the same PR that changes its files."
+      },
+      "source": "Pull request 39 (commit 990c84f): `tests-weekly.csv` went from `p50_ms` to `total_ms`, and books written before it stopped passing `check`.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
+    },
+    {
+      "id": "phase-spec-format",
+      "trigger": {
+        "paths": [
+          "plugins/bstack/skills/scaffold-product/scripts/check-product.py",
+          "plugins/bstack/skills/scaffold-product/references/**",
+          "plugins/bstack/skills/beau-mode/playbooks/product-phase.md"
+        ]
+      },
+      "check": {
+        "question": "Does a product repo scaffolded before this change still pass `check-product.py`, or does the release note give an upgrade path?",
+        "probe": "Run this branch's `check-product.py` on a product repo scaffolded by the last release (one with `docs/VISION.md` and `docs/phases/`). If you have none, build one in a scratch folder from the last release's templates (`git archive origin/main plugins/bstack/skills/scaffold-product/references/templates`), and say which you used. A new failure there needs either a fix or an upgrade step in the `changes.yaml` entry."
+      },
+      "source": "Commit 088cd28 (2026-11-17): phase specs changed format, `check-product.py` began to enforce it, and `scaffold-product` had to gain an upgrade mode for specs on the old `## Acceptance` format. No failure in a real product repo is on record; the item comes from roadmap R30.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
+    },
+    {
+      "id": "plugins-in-step",
+      "trigger": {
+        "paths": [
+          "plugins/**"
+        ]
+      },
+      "check": {
+        "command": "make check versions"
+      },
+      "source": "Pull request 21 (commit f3b34a8): a plugin changed without a version bump never reaches people who installed it. Commit 8da9fa5 was a bump made after the fact.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
+    },
+    {
+      "id": "gh-call",
+      "trigger": {
+        "paths": [
+          "plugins/*/skills/*/SKILL.md",
+          "plugins/*/skills/*/scripts/**",
+          "plugins/*/skills/*/references/**/*.md",
+          "plugins/*/skills/*/playbooks/**",
+          "tools/**",
+          "scripts/**",
+          ".claude/skills/**",
+          ".github/**"
+        ],
+        "pattern": "^\\s*(\\$ )?gh\\s+[a-z]|[\"']gh[\"']|\\bgh auth\\b"
+      },
+      "check": {
+        "question": "Does it work where `gh auth status` fails?",
+        "probe": "Run the script or the documented steps with a `gh` first on PATH whose `auth status` exits 1 while its other subcommands pass through to the real one. A Claude Code cloud session behaves this way, because a proxy supplies the credential. Nothing may stop on `gh auth status`: test access with the API call the work needs."
+      },
+      "source": "Pull request 45 (commit 02faa18) fixed it; pull request 40 (commit 74caa8d) introduced it: step 0 of the weekly brief ran `gh auth status` and stopped a cloud run that could reach GitHub.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
+    },
+    {
+      "id": "skill-description",
+      "trigger": {
+        "paths": [
+          "plugins/*/skills/*/SKILL.md"
+        ],
+        "pattern": "^description:"
+      },
+      "check": {
+        "question": "Does the skill still trigger on the phrases its description lists after \"Use for\" or \"Use when\"?",
+        "probe": "Drive `skills-load` with the `verify-kit` skill to prove the skill is still listed under its name. Then, in a session with the plugin installed from this checkout, type each phrase the old description listed and see that the skill loads. `verify-kit` does not map a model choosing a skill from plain words, so report any phrase you did not try as not verified."
+      },
+      "source": "Commit 1c80567 (2026-11-07): a description that said `verify-<app>` was flagged by claude.ai's marketplace sync and stored with the brackets removed. No lost trigger phrase is on record; the item comes from roadmap R30.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
+    }
+  ]
+}
