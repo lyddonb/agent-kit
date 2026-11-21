@@ -8,6 +8,16 @@
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
 - date: 2026-11-21
+  plugin: bstack
+  version: 0.26.0
+  changes:
+    - "New `debrief` skill closes out work for you: what was done, each claim with the check that ran, the commit, where its output is kept and what stays unchecked, the next items with where each comes from, why now and its impact, and the release note. Work that ships a change keeps this as `.changes/<date>-<slug>.json`, one record per PR."
+    - "`debrief.py check` refuses a record whose VERIFIED claim names no kept output, whose evidence path git ignores or doesn't track, or whose next item has no source, reason or impact. `debrief.py show` prints the brief and `debrief.py notes --since DATE` prints release notes from every record, newest first."
+    - "beau-mode replies no longer name a next step on its own: each says where it comes from, why now and its impact. Opening a PR writes the change record and its reply carries the brief."
+    - "`.changes/` counts as bookkeeping for receipts, so committing a record doesn't make a criterion's receipt stale."
+  try: "/debrief"
+
+- date: 2026-11-21
   plugin: cfo
   version: 0.4.1
   changes:

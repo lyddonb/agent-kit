@@ -14,7 +14,7 @@ With --receipts RUN_ID, every box this branch newly checked (`- [x]` in a phase 
 `verification` entry for that criterion in .audit/runs/RUN_ID/ledger.jsonl (written by
 verify-work's receipt.py) says VERIFIED, names this spec, hashes to the spec at its commit, and
 the criterion's own text is unchanged since that commit, and no source has changed since it
-(bookkeeping files don't count: .audit/, .evidence/, docs/phases/, docs/plans/, docs/DECISIONS.md,
+(bookkeeping files don't count: .audit/, .changes/, .evidence/, docs/phases/, docs/plans/, docs/DECISIONS.md,
 ROADMAP.md, HUMAN_TASKS.md, IDEAS.md).
 Needs `ledger` on PATH; exit 2 when it, the run folder or REF is missing.
 
@@ -347,7 +347,7 @@ CHECKED_ITEM = re.compile(r"^\s*- \[[xX]\] \*\*([A-Z]\d+)\.\*\*")
 ANY_ITEM = re.compile(r"^\s*- (?:\[[ xX]\] )?(?:~~)?\*\*([A-Z]\d+)\.\*\*")
 # What the Product phase playbook edits alongside a ticked box. These are records, not source, so a
 # change to one doesn't make a receipt stale. verify-work's receipt.py has the same list.
-BOOKKEEPING = (".audit", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
+BOOKKEEPING = (".audit", ".changes", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
                "HUMAN_TASKS.md", "IDEAS.md")
 
 
