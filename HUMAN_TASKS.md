@@ -16,8 +16,8 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H8 | Dogfood beau-mode on real tasks | 🚧 **BLOCKER** for ROADMAP R10, R12, R13 |
 | H9 | Share the Poteto posts | **Done** (the pstack guide parts 1 and 2) |
 | H10 | Review and merge the bstack branch | **Done** |
-| H11 | Review and merge the verification and planning branch | 🚧 **BLOCKER** for agentfiles picking it up |
-| H12 | Create a verification skill in one real app | 🚧 **BLOCKER** for ROADMAP R18, R27 |
+| H11 | Review and merge the verification and planning branch | **Done** |
+| H12 | Create a verification skill in one real app | Steps 1 and 2 **done** (R27); steps 3 and 4 to do |
 | H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
@@ -97,13 +97,10 @@ they add anything beyond the guide, paste them the same way.
 
 ### H10. Review and merge the bstack branch — Done
 
-### H11. Review and merge the verification and planning branch — 🚧 BLOCKER for agentfiles
-**Why a human:** Merging to `main` publishes it.
-**Steps:** Review `feat/bstack-verification-and-planning` (start with `docs/BSTACK.md`,
-`create-verification-skill` and the Multi-phase plan playbook), merge it, then in agentfiles run
-`agentfiles lock` (or bump `mine` in `agentfiles.lock`) and `agentfiles sync`.
+### H11. Review and merge the verification and planning branch — Done
+Merged 2026-10-11 as pull requests 4 and 5. agentfiles' lock has moved past it since.
 
-### H12. Create a verification skill in one real app — 🚧 BLOCKER for R18
+### H12. Create a verification skill in one real app — steps 1 and 2 done
 **Why a human:** It runs against your app, its dev setup and its test accounts, and you decide
 which app goes first.
 **Steps:**
@@ -114,9 +111,11 @@ which app goes first.
 4. Schedule `/maintain-verification-skill` daily for that repo with your tool's scheduler
    (for example a Claude Code scheduled task or a Cursor automation).
 
-**Shortcut (November 2026):** R27 proposes agent-ledger as the first app, then agent-kit and
-the quality books. None needs test accounts or seed data from you. Saying "go on R27" is the
-decision; reviewing and merging the three PRs is the rest.
+**Status (2026-11-21):** R27 did steps 1 and 2 on the runtime's own repos: `verify-ledger`
+(agent-ledger pull request 23), `verify-kit` (pull request 62 here) and `verify-quality` (the
+quality books' pull request 19) are merged. Step 4, the daily `/maintain-verification-skill`
+schedule for each, is yours and was not confirmed when this was written. R18 no longer waits on
+this task: its own trigger is two apps with verification skills and local lanes colliding.
 
 ### H13. Protect workflow files and checker pins
 **Why a human:** Rulesets and CODEOWNERS need repo admin, and you choose who may approve.

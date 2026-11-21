@@ -346,26 +346,18 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27 and R28 first, in parallel (different repos, no shared files). Then R29, R30, R31.
-R32 waits on R6 and on Beau (H14). R33 any time. R34 waits on R23 and R28. R35's units are
-independent.
+Order: R27, R31 and R33 are done, and so are R28's units 1 and 2 (its unit 3 waits on the
+books repo's H5). Next: R29, then R30. R32 waits on R6 and on Beau (H14). R34 waits on R23.
+R35's units are independent.
 
 ## P0
 
 ### R27. Verify skills for the runtime's own repos
-**What:** Run `create-verification-skill` in agent-ledger (`verify-ledger`: the `ledger` CLI
-from an empty `.audit/`), then in agent-kit (`verify-kit`: install a plugin into a clean Claude
-Code profile and trigger one skill), then in the quality books repo (`verify-quality`: the
-weekly brief end to end on fixture runs). After each, stress it: 20 runs in a row, with the
-time and the pass count recorded in the PR, and fix what wobbles before merge.
-**Units:** one PR per repo, in that order.
-**Depends on:** H12 (Beau's go on agent-ledger as the first app). Nothing else.
-**Playbook:** `create-verification-skill`, then Opening a PR.
-**Done when:** a fresh subagent given only the generated `SKILL.md` launches, runs doctor,
-drives one mapped feature and leaves evidence at the named path; and 20 consecutive runs pass.
-**Why not done:** H12 waited for a product app. No repo here has a `verify-<app>` skill, so
-every live lane so far ran through `verify-work` by hand.
-**Prioritize when:** now. It closes H12, unblocks R18, and every later item's live lanes use it.
+**Done 2026-11-19.** All three merged: `verify-ledger` (agent-ledger pull request 23, 2026-11-18),
+`verify-kit` (pull request 62 here, 2026-11-19) and `verify-quality` (the quality books' pull
+request 19, 2026-11-19). Each lives in its repo under `.claude/skills/`. This closes steps 1 and
+2 of H12. R30's items can name a `verify-<app>` drive as their check, and agentfiles R16 has
+`verify-kit` to call it.
 
 ### R28. The quality summary says what tests catch, by kind
 **What:** `quality.py summary --json` gains, per repo, `caught_on_pr` (tests with a failure
@@ -387,8 +379,14 @@ number comes from this output, and it must stay the same bytes on every run.
 `test_agentfiles.ConfigTests.test_cycle_detected` under agentfiles `caught_on_pr` and nothing
 under any `failed_on_main`; the property test "summary equals a recomputation from the raw
 artifacts" passes with the new keys; `check` still passes books written before the change.
-**Why not done:** Phase 1 measured cost only.
-**Prioritize when:** now. The data is already booked.
+**Status (2026-11-21):** units 1 and 2 are done. `caught_on_pr` shipped in bstack 0.14.0 (pull
+request 52) and `by_kind` in pull request 56, where a kind comes from an optional hand-edited
+`books/kinds.csv` (the real books have none yet, so every test counts as a unit test). On the
+real books, `summary --json --week 2026-W46` lists
+`test_agentfiles.ConfigTests.test_cycle_detected` under agentfiles `caught_on_pr` and nothing
+under any `failed_on_main`. Unit 3 is open: the `briefs/TEMPLATE.md` rows wait on the books
+repo's H5.
+**Prioritize when:** unit 3 when the books repo's H5 is answered.
 
 ## P1
 
@@ -435,21 +433,13 @@ JSON) by prototype; the repo has no YAML parser to lean on at run time.
 the `gh` item; on a docs-only commit it prints nothing.
 **Why not done:** New idea. `correct`'s rule table pairs rules with enforcement but nothing
 selects rules by what a diff touches.
-**Prioritize when:** after R27, so items can name a `verify-<app>` drive as their check.
+**Prioritize when:** now. R27 is done, so items can name a `verify-<app>` drive as their check.
 
 ### R31. Every commit says how it was verified
-**What:** A git trailer on each commit an agent writes: `Verified: receipt <run-id>`,
-`Verified: verify-work`, `Verified: tests` or `Verified: none <reason>`. `none` is allowed,
-so unverified commits can be listed. The Opening a PR playbook writes it and beau-agent
-carries the rule. Later the quality summary reports the share of commits on main by stamp.
-**Where:** `plugins/bstack/skills/beau-mode/playbooks/opening-a-pr.md`,
-`plugins/bstack/agents/beau-agent.md`, `plugins/bstack/skills/verify-work/SKILL.md`.
-**Depends on:** nothing.
-**Playbook:** Authoring a skill.
-**Done when:** a PR opened by a fresh beau-agent on a fixture task has the trailer on every
-commit, and `git log --format='%h %(trailers:key=Verified,valueonly)'` prints one value per commit.
-**Why not done:** Receipts cover spec criteria in governed runs. Ordinary commits record nothing.
-**Prioritize when:** before R32, whose commit gate reads the stamp.
+**Done 2026-11-18** in bstack 0.15.0 (pull request 53). The Opening a PR playbook writes the
+`Verified:` trailer and beau-agent carries the rule. Still open, and tracked in the quality
+roadmap's phase 1b: the summary reporting the share of commits on main by stamp. R32's commit
+gate reads the stamp.
 
 ### R32. Gates start in observe mode; two Claude Code hooks
 **What:** (1) Every verification gate has a mode: `off`, `observe` (log what it would have
@@ -473,22 +463,10 @@ a failing test back to the agent with the failing output.
 (the quality books show red pull-request runs).
 
 ### R33. One tuned reviewer: `REVIEW.md` and rounds that build
-**What:** A `REVIEW.md` per repo says what a reviewer of this code should look at.
-`interrogate` gives it to every adversary, always read from the default branch
-(`git show origin/main:REVIEW.md`), never from the change under review. Claude Code Review
-reads the same file. A second `interrogate` round on the same scope gets the first round's
-verified and dropped findings in its brief and does not start cold. Findings carry a severity:
-Important, Nit or Pre-existing. A pre-existing bug is still fixed, in its own PR.
-`scaffold-product` creates a starter `REVIEW.md`.
-**Where:** `plugins/bstack/skills/interrogate/SKILL.md`,
-`plugins/bstack/skills/scaffold-product/**`, a `REVIEW.md` at the root of agent-kit.
-**Depends on:** nothing. R11 (cross-model CLI reviewers) now waits on R34: add a reviewer only
-when a replay shows it finds what the first one misses.
-**Playbook:** Authoring a skill.
-**Done when:** an `interrogate` run on a branch that rewrites `REVIEW.md` shows the adversary
-brief quoting the default branch's text; a second round's brief lists the first round's findings.
-**Why not done:** `interrogate` was ported as a fresh panel per run.
-**Prioritize when:** the next contested change, or when a review repeats a finding already dropped.
+**Done 2026-11-18** in bstack 0.18.0 (pull request 57): `REVIEW.md` at the root of this repo, read
+from the default branch by `interrogate`, review rounds that build on the last one, and a starter
+`REVIEW.md` from `scaffold-product`. R11 (cross-model CLI reviewers) still waits on R34: add a
+reviewer only when a replay shows it finds what the first one misses.
 
 ## P2
 
