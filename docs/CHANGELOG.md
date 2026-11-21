@@ -3,6 +3,14 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.26.0 (2026-11-21)
+
+- New `debrief` skill closes out work for you: what was done, each claim with the check that ran, the commit, where its output is kept and what stays unchecked, the next items with where each comes from, why now and its impact, and the release note. Work that ships a change keeps this as `.changes/<date>-<slug>.json`, one record per PR.
+- `debrief.py check` refuses a record whose VERIFIED claim names no kept output, whose evidence path git ignores or doesn't track, or whose next item has no source, reason or impact. `debrief.py show` prints the brief and `debrief.py notes --since DATE` prints release notes from every record, newest first.
+- beau-mode replies no longer name a next step on its own: each says where it comes from, why now and its impact. Opening a PR writes the change record and its reply carries the brief.
+- `.changes/` counts as bookkeeping for receipts, so committing a record doesn't make a criterion's receipt stale.
+- Try: `/debrief`
+
 ## cfo 0.4.1 (2026-11-21)
 
 - The weekly Mac job now books skill versions once installed. `weekly-claude-code.sh` takes `--agentfiles-lock FILE` (default: `AGENTFILES_LOCK`, else `$AGENTFILES_HOME/agentfiles.lock`), and `--install` writes the path into the launch agent. Before this the installed job's environment had neither variable, so every row would have been booked with an empty version. Install the job again to pick it up.

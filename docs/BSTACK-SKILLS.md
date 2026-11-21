@@ -216,6 +216,15 @@ It never names a cause while two hypotheses fit the facts. When it stalls, it as
 | Returns | A hash-chained decision trail in the project's ledger (`.audit/runs/<run-id>/`, one entry per decision with why, evidence and result, checked by `ledger verify` and CI) and a catch-up reply that ends with an **Attention** section from the other model. |
 | Example | `/show-me-your-work catch me up` |
 
+### debrief
+
+| | |
+|---|---|
+| Use for | Closing out work for the human: "what did we just do", "what's next and why", "write the release note", and the end of any work that ships a change. |
+| Needs | Nothing. `debrief.py` is standard-library Python 3.9+. |
+| Returns | A brief in four parts (goal and what changed; each claim with its check, commit, kept record and what stays unchecked; next items with source, why now and impact; the release note), kept as `.changes/<date>-<slug>.json` when a change ships. `debrief.py check` refuses a VERIFIED claim with nothing kept, and `debrief.py notes` prints release notes from every record. |
+| Example | `/debrief` |
+
 ### figure-it-out
 
 | | |

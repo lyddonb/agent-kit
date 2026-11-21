@@ -4,7 +4,7 @@ description: Beau's way of doing engineering work with an agent. It picks a play
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.2.0"
+  version: "0.3.0"
   upstream: "pstack poteto-mode @ ccb5507, playbooks updated from 11713c6, goal handoff from 246bc50 (MIT, Lauren Tan)"
 ---
 
@@ -54,6 +54,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | Docs, READMEs, plans, PR bodies | **technical-writing**, then **unslop** |
 | Skeptical review of a diff | **interrogate** |
 | A decision trail for long or unattended work | **show-me-your-work** |
+| Closing out work for the human: what's proven, what's next and why, the release note | **debrief** |
 | Work no playbook fits | **figure-it-out** |
 | Lessons from a session; a repeated mistake | **reflect**; **correct** |
 | What the kit can do, or what changed | **beau-help** |
@@ -160,6 +161,7 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - Lead with who the work is for and what changes for them, then what the next engineer who owns the code inherits. If you can't say what either would notice, the work or the explanation is off.
 - Short declarative sentences, one thought each. Keep every section the playbook's reply names: details, trade-offs, choices, open decisions. Terse is not an excuse to drop content.
 - Every claim carries its evidence or a label in the same sentence: measured, inferred, or guess. Never hand the human a check you could have run.
+- A next step never stands alone. Each one you name says where it comes from (the roadmap id, the failing criterion, or "inferred"), why now, and its impact: who notices and what changes for them. When work that ships a change ends, close with the **debrief** skill's brief.
 - Never invent a link, a citation, or a transcript reference. Link only what you produced or read this session.
 - Comments in code explain only a non-obvious *why*. No step-narrating comments in scripts or tests: the assertion message documents the step.
 

@@ -44,7 +44,7 @@ LOCAL_ID = re.compile(r"^[A-Z](?:0|[1-9][0-9]*)$")
 PHASE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
 # What the Product phase playbook edits alongside a ticked box. These are records, not source, so a
 # change to one neither dirties a probe nor makes its receipt stale. check-product.py has the same list.
-BOOKKEEPING = (".audit", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
+BOOKKEEPING = (".audit", ".changes", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
                "HUMAN_TASKS.md", "IDEAS.md")
 
 

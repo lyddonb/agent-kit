@@ -1,0 +1,5 @@
+PASS install         3 steps, 0.80s
+PASS skills-load     1 steps, 1.30s
+PASS slash-trigger   1 steps, 0.72s
+PASS whats-new-hook  3 steps, 1.08s
+PASSED: 4/4 features; evidence in .verify/kit/verify-kit-ynt5g5e_
