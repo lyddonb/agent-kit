@@ -625,7 +625,14 @@ skills are counted. For governed runs the pass can read the redacted archives
 **Playbook:** Feature, from the findings above.
 **Done when:** a run over the last four weeks of real transcripts books rows, `check` passes,
 a second run changes nothing, and ten rows picked at random match the transcripts by hand.
-**Why not done:** The prototype was a throwaway script and nothing is booked. Unit 2 is next.
+**Why not done:** Unit 2 is built: `quality.py book-skills`, the book in `check` and `summary`, and the pass in
+`weekly-claude-code.sh --quality-repo`. A run over four weeks of real transcripts booked rows into a scratch copy of
+the books, passed `check`, changed nothing on a second run, and ten rows matched the transcripts by hand. Nothing is
+booked for real until unit 3 creates `books/skill-uses.csv` in the books repo and the Mac job is installed again with
+`--quality-repo`. Unit 3 is next. What unit 2 added to the findings above: each row carries `use`, a hash of the
+tool-call id, so a rerun adds nothing and `check` refuses a duplicate; only closed weeks are booked; a `Read` counts
+once per session and skill; and a skill outside the lock (cfo's, until agentfiles H13 is answered) is booked with its
+plugin name and an empty version.
 **Prioritize when:** now. It feeds agent-ledger's M3 unit 1, R41 and R3.
 
 ## P1
