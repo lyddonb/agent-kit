@@ -139,6 +139,127 @@ class CheckTest(DebriefBase):
         self.assertIn("file name must be", self.debrief("check").stderr)
 
 
+class BaseCheckTest(DebriefBase):
+    """`check --base`: a branch off `main` in the throwaway repo stands in for a pull request."""
+
+    def setUp(self):
+        super().setUp()
+        sh(self.repo, "git", "branch", "-M", "main")
+        sh(self.repo, "git", "switch", "-qc", "work")
+
+    def commit(self, message="work"):
+        sh(self.repo, "git", "add", "-A")
+        done = sh(self.repo, "git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", message)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def change_source(self, name="app.py"):
+        (self.repo / name).write_text("print(1)\n")
+        self.commit()
+
+    def check(self):
+        return self.debrief("check", "--base", "main")
+
+    def test_a_source_change_with_no_record_fails_and_names_the_file(self):
+        self.change_source()
+        done = self.check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("changes app.py and adds no change record", done.stderr)
+
+    def test_a_source_change_with_a_good_record_passes(self):
+        self.change_source()
+        self.write(self.good)
+        self.commit()
+        done = self.check()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("1 record(s) checked, 0 with problems", done.stdout)
+
+    def test_a_source_change_with_a_bad_record_fails(self):
+        self.change_source()
+        self.write(self.edited(record=""))
+        self.commit()
+        done = self.check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("VERIFIED without 'record'", done.stderr)
+
+    def test_a_change_to_bookkeeping_files_only_needs_no_record(self):
+        (self.repo / "ROADMAP.md").write_text("# Roadmap\n")
+        (self.repo / "docs" / "phases").mkdir(parents=True)
+        (self.repo / "docs" / "phases" / "P1-x.md").write_text("spec\n")
+        self.commit()
+        done = self.check()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("0 record(s) checked", done.stdout)
+
+    def test_deleting_a_source_file_owes_a_record(self):
+        sh(self.repo, "git", "rm", "-q", "proof.txt")
+        self.commit()
+        self.assertEqual(self.check().returncode, 1)
+
+    def test_a_record_already_on_the_base_does_not_count(self):
+        sh(self.repo, "git", "switch", "-q", "main")
+        self.write(self.good, "2026-11-01-older.json")
+        self.commit()
+        sh(self.repo, "git", "switch", "-qc", "later")
+        self.change_source()
+        done = self.check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("adds no change record", done.stderr)
+
+    def test_editing_an_old_record_does_not_count_but_is_checked(self):
+        sh(self.repo, "git", "switch", "-q", "main")
+        self.write(self.good, "2026-11-01-older.json")
+        self.commit()
+        sh(self.repo, "git", "switch", "-qc", "later")
+        self.change_source()
+        self.write(self.edited(record=""), "2026-11-01-older.json")
+        self.commit()
+        done = self.check()
+        self.assertIn("adds no change record", done.stderr)
+        self.assertIn("VERIFIED without 'record'", done.stderr)
+
+    def test_evidence_files_beside_a_record_are_not_records(self):
+        self.change_source()
+        folder = self.repo / ".changes" / "2026-11-21-import-dedupe"
+        folder.mkdir(parents=True)
+        (folder / "out.json").write_text("{}")
+        self.commit()
+        self.assertEqual(self.check().returncode, 1)
+
+    def test_commits_that_landed_on_the_base_since_the_branch_are_not_this_pull_request(self):
+        self.write(self.good)
+        self.change_source()
+        sh(self.repo, "git", "switch", "-q", "main")
+        (self.repo / "other.py").write_text("x = 1\n")
+        self.commit("someone else's change, with no record")
+        sh(self.repo, "git", "switch", "-q", "work")
+        self.assertEqual(self.check().returncode, 0)
+
+    def test_observe_reports_the_failure_and_exits_zero(self):
+        self.change_source()
+        done = self.debrief("check", "--base", "main", "--observe")
+        self.assertEqual(done.returncode, 0)
+        self.assertIn("adds no change record", done.stderr)
+        self.assertIn("observe: this pull request would have failed", done.stdout)
+
+    def test_observe_says_nothing_extra_when_the_check_passes(self):
+        self.change_source()
+        self.write(self.good)
+        self.commit()
+        self.assertNotIn("observe:", self.debrief("check", "--base", "main", "--observe").stdout)
+
+    def test_observe_without_base_and_an_unknown_base_under_observe_are_usage_errors(self):
+        self.assertEqual(self.debrief("check", "--observe").returncode, 2)
+        self.assertEqual(self.debrief("check", "--base", "origin/nope", "--observe").returncode, 2)
+
+    def test_an_unknown_base_is_a_usage_error(self):
+        done = self.debrief("check", "--base", "origin/nope")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("cannot compare HEAD with 'origin/nope'", done.stderr)
+
+    def test_base_and_files_together_are_refused(self):
+        self.assertEqual(self.debrief("check", "--base", "main", "x.json").returncode, 2)
+
+
 class RenderTest(DebriefBase):
     def test_show_prints_the_newest_record_with_every_part(self):
         older = copy.deepcopy(self.good)

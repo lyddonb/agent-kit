@@ -109,10 +109,11 @@ class RefusalTest(ReceiptBase):
 
 
 class BookkeepingListTest(unittest.TestCase):
-    def test_both_scripts_agree_on_which_files_are_records_not_source(self):
+    def test_the_scripts_agree_on_which_files_are_records_not_source(self):
         found = [re.search(r"^BOOKKEEPING = \((.*?)\)", p.read_text(), re.M | re.S).group(1).split()
-                 for p in (h.RECEIPT_PY, h.CHECK_PRODUCT_PY)]
+                 for p in (h.RECEIPT_PY, h.CHECK_PRODUCT_PY, h.DEBRIEF_PY)]
         self.assertEqual(found[0], found[1])
+        self.assertEqual(found[0], found[2])
         self.assertIn('"ROADMAP.md",', found[0])
 
 

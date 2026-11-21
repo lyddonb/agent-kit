@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "goal": "A pull request that changes real files cannot merge without a change record, so the brief, the evidence and the release note stop depending on the agent remembering.",
+  "changed": [
+    "debrief.py check --base REF fails a pull request that changes a file outside the bookkeeping files and adds no record, and checks the records it added or edited.",
+    "--observe prints what would have failed and exits 0.",
+    "agent-kit's CI runs the check on every pull request, in observe mode. It does not block a merge yet.",
+    "debrief.py carries the same bookkeeping list as receipt.py and check-product.py, and a test holds the three equal."
+  ],
+  "claims": [
+    {
+      "claim": "The check fails a pull request with a source change and no record, passes one with a good record or with bookkeeping changes only, ignores commits that landed on the base since the branch, and exits 0 under --observe.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_debrief.py (34 tests, throwaway git repos) under /usr/bin/python3 3.9.6 on macOS; make test (1,000 tests) under Python 3.12",
+      "commit": "a08f795",
+      "record": ".changes/2026-11-21-debrief-pr-check/unit-python39.txt",
+      "remaining": "Linux."
+    },
+    {
+      "claim": "On real history the check fails pull requests that had no record and passes the one that had.",
+      "verdict": "VERIFIED",
+      "check": "Replay over the last 30 merged agent-kit pull requests in a temporary checkout: 22 fail, 8 pass, no usage errors. #70 (55baad5) fails by name; #73 (7951786) passes.",
+      "commit": "a08f795",
+      "record": ".changes/2026-11-21-debrief-pr-check/replay.txt",
+      "remaining": "Whether all 22 deserved a record. Several were docs-only pull requests to files outside the bookkeeping list (REVIEW.md, docs/), and the replay cannot say if a record there is useful or noise."
+    },
+    {
+      "claim": "The step runs in GitHub Actions on a pull request and reports without blocking.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "This pull request's own CI run is the first run of the step. Read its log once it finishes."
+    }
+  ],
+  "next": [
+    {
+      "item": "Drop --observe in agent-kit's CI after a week of pull requests",
+      "source": "REVIEW.md, the rule that a new gate ships in observe mode",
+      "why_now": "Not yet. The week shows whether docs-only pull requests make the check noisy, which decides whether the exempt list needs to grow first.",
+      "impact": "Until then a pull request with no record still merges, and you only see it in the CI log."
+    },
+    {
+      "item": "Add the check to quality, agent-ledger and finances",
+      "source": "inferred",
+      "why_now": "Other projects were the main ask, and each already checks out a pinned agent-kit in CI, so it is one step per repo plus a pin bump.",
+      "impact": "Those repos get a record, and so a release note, for every pull request that changes real files: about 16 of 24, 22 of 25 and 20 of 21 of their recent ones."
+    },
+    {
+      "item": "Have scaffold-product add the CI step to new and adopted repos",
+      "source": "inferred",
+      "why_now": "After the week of observe, so new repos start with a rule that is known to be quiet.",
+      "impact": "A new project gets the brief, evidence and release notes with no setup."
+    }
+  ],
+  "release": {"see": "changes.yaml bstack@0.27.0"}
+}
