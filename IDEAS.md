@@ -138,3 +138,23 @@ Skill ops section (R38 to R41, and R25's method). Not committed to:
   The Quality Director proposes and never acts.
 - **A nightly verdict on every invocation.** R38 runs weekly and deterministic first. Go nightly
   only if a week turns out to be too slow to catch a harmful skill.
+
+## Fewer pure unit tests for agent-written code (2026-11-21)
+
+Beau's hypothesis, not tested yet: a pure unit test (one function or class, collaborators
+mocked) is worth less when agents write and change the code, so we should be stricter about
+how many get written and how many we keep. Investigate before changing any rule.
+
+- **Measure it first.** R28 groups cost and catches by test kind. After a few weeks of books,
+  compare unit tests with e2e, property and differential tests: catches per second of run time,
+  and how many unit tests have never failed on a PR.
+- **Expect the answer to differ by language.** Where a strong type system or formal verification
+  (`create-formal-verification-skill`) already rules out a class of bug, a unit test for that
+  class is paid for twice. A dynamic language with weak types needs more of them. So any limit
+  is a per-language default, not one number.
+- **A stricter rule for writing and keeping.** If the numbers agree: the playbooks ask a new unit
+  test to name the bug it catches that the types, a property test or the `verify-<app>` skill
+  would miss, and the Quality Director proposes retiring unit tests that have caught nothing.
+  It proposes and never acts.
+- **Reading.** In the KB: "Spec-Driven PBT" (saved 2026-11-14) on agents deriving property tests
+  from specs, and "Skeleton Coding" (saved 2026-11-08) on types and signatures as the spec.
