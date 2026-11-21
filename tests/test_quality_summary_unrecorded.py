@@ -138,6 +138,24 @@ class UnrecordedRepoTest(Case):
         self.assertEqual(self.result("--week", W46)["repos"]["open-tool"]["lifecycle"]["jobs"], 2)
         self.assertNotIn("open-tool", self.result("--week", W47)["repos"])
 
+    def test_unrecorded_means_no_test_record_started_this_week_even_for_a_run_recorded_in_the_next(self):
+        """The run's first job was created on Sunday and its test record started on Monday: in the Sunday week the repo is
+        unrecorded, and in the Monday week it is recorded with no lifecycle."""
+        b = tv.Builder(OPEN)
+        b.run("open-lib", "acme/open-lib", 1, SHA, jobs=[("build", ["Checkout", "Run tests"])])
+        b.runs[-1][0] = MONDAY
+        for job in b.jobs:
+            job[0] = SUNDAY
+        for step in b.steps:
+            step[0] = SUNDAY
+        self.write(b)
+        sunday_week = self.result("--week", W46)["repos"]["open-lib"]
+        self.assertIs(sunday_week["recorded"], False)
+        self.assertEqual(sunday_week["lifecycle"]["runs"], 1)
+        monday_week = self.result("--week", W47)["repos"]["open-lib"]
+        self.assertIs(monday_week["recorded"], True)
+        self.assertIsNone(monday_week["lifecycle"])
+
     def test_a_repo_with_run_rows_this_week_and_job_rows_only_in_another_is_recorded_with_a_null_lifecycle(self):
         b = tv.Builder(OPEN, TOOL)
         b.run("open-lib", "acme/open-lib", 1, SHA)
@@ -151,10 +169,10 @@ class UnrecordedRepoTest(Case):
         code, text = self.summary()
         self.assertEqual(code, 0, text)
         lines = text.splitlines()
-        i = lines.index("open-tool: no test records this week")
+        i = lines.index("open-tool: no test record started this week")
         self.assertTrue(lines[i + 1].startswith("  lifecycle: 1 runs, 1 jobs"), lines[i + 1])
         self.assertEqual(lines[i + 3], '  slowest step: "Build" median 2000 ms over 1 steps')
-        j = lines.index("secret-svc (private): no test records this week")
+        j = lines.index("secret-svc (private): no test record started this week")
         self.assertEqual(lines[j + 3], f'  slowest step: "{SEALED_STEP}" median 2000 ms over 1 steps')
         self.assertTrue(any(l.startswith("secret-app (private): 1 runs") for l in lines))
         self.assertTrue(any(l.startswith("open-lib: 1 runs") for l in lines))
@@ -251,6 +269,17 @@ class PublicOnlyTest(Case):
         self.assertEqual(self.result()["week"], W47)
         public = self.result("--public-only")
         self.assertEqual((public["week"], public["repos"]), (W47, {}))
+
+    def test_books_that_fail_check_print_no_problem_line_because_one_can_quote_a_private_repo(self):
+        b = books_of()
+        b.failures.append(["2026-11-10T12:00:00Z", "secret-app", SHA, "3.12", SEALED_TEST, "fail", tv.link("acme/secret-app", 55)])
+        self.write(b)
+        code, out = self.summary("--public-only", "--json")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "1 problems; no summary from unchecked books (run check to read them: --public-only prints none)\n")
+        code, out = self.summary("--json")  # without the flag the line is printed, as before
+        self.assertEqual(code, 1)
+        self.assertIn("acme/secret-app/actions/runs/55", out)
 
     def test_the_text_starts_with_a_line_that_says_so(self):
         self.write(books_of())

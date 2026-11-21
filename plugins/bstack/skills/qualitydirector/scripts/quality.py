@@ -2751,7 +2751,7 @@ def render_summary(s: dict) -> str:
     for name, r in s["repos"].items():
         repo = f"{name} (private)" if r.get("visibility") == "private" else name
         if r.get("recorded") is False:
-            lines.append(f"{repo}: no test records this week")
+            lines.append(f"{repo}: no test record started this week")
             lines.extend(_render_lifecycle(r["lifecycle"]))
             continue
         change = r["suite_ms_change"]
@@ -2784,6 +2784,9 @@ def cmd_summary(args: argparse.Namespace) -> int:
     books = load(args.books_dir)
     problems = run_checks(books)
     if problems:
+        if args.public_only:  # a problem line quotes the cell it faults, and that cell may be a private repo's
+            print(f"{len(problems)} problems; no summary from unchecked books (run check to read them: --public-only prints none)")
+            return 1
         _print_problems(problems)
         print(f"{len(problems)} problems; no summary from unchecked books")
         return 1
