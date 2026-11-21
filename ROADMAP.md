@@ -339,8 +339,11 @@ and pruned. Not-committed ideas from the same post are in [IDEAS.md](IDEAS.md).
 PR. Take the first entry whose **Depends on** is met. Build each PR in its own worktree and
 branch, run the beau-mode playbook the entry names, and stop at merge-ready: Beau merges.
 **Done when** is the predicate to hand to `verify-work`. A check added here must be proven to
-fail on a real past commit, as `correct` requires. A new gate ships in observe mode (R32)
-and is never switched to enforce in the PR that adds it. An entry that spans repos gets a
+fail on a real past commit, as `correct` requires. A new gate on what an agent did in a
+session ships in observe mode (R32) and is never switched to enforce in the PR that adds it. A
+static check in `make validate` is not such a gate: it may ship as an error when a replay over
+the repo's history shows no false failure, as the command lint did (PR 61: 137 commits, 0
+errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
 Order: R27 and R28 first, in parallel (different repos, no shared files). Then R29, R30, R31.
