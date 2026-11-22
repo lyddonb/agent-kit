@@ -5,7 +5,7 @@ What changed in each plugin release, newest first. In an agent, ask for `beau-he
 
 ## bstack 0.32.0 (2026-11-21)
 
-- A change that breaks an artifact the kit wrote into other repos now ships with its sweep. `quality.py sweep BOOKS_DIR KIND` lists the watched repos whose default branch holds a phase spec (`phase-spec`), a `verify-<app>` skill (`verify-skill`) or a `REVIEW.md` (`review-guide`), read from GitHub and not from a checkout. `--at DAY` reads the branch as it was that day. A repo it could not read is `could not check`, never `none`, and the exit code is 1.
+- A change that breaks an artifact the kit wrote into other repos now ships with its sweep. `quality.py sweep BOOKS_DIR KIND` lists the watched repos whose default branch holds a phase spec (`phase-spec`), a `verify-<app>` skill (`verify-skill`) or a `REVIEW.md` (`review-guide`), read from GitHub and not from a checkout. `--at DAY` reads the branch as it was that day. A repo it could not read is `could not check`, never `none`, and the exit code is 1. qualitydirector 0.13.0.
 - The list is safe to paste into a public PR: a private watched repo is not asked about and not named, only counted. `--with-private` names them for your own use, under a line that says so.
 - The Authoring a skill playbook has the step: paste the sweep under Blast radius and name the upgrade PR for each repo. agent-kit's checklist asks for it when a diff touches the phase spec, verify skill or review guide formats.
 - Try: `Run quality.py sweep on the quality books for phase-spec and tell me which repos hold one.`
