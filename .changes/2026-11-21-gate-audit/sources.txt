@@ -1,0 +1,32 @@
+Read on 2026-11-21 for the audit table in docs/ARCHITECTURE.md.
+
+Workflow files: git show origin/main:.github/workflows/<file> in each of the five repos.
+Public repos at: agent-kit eddf41c, agent-ledger 0c8dbf1, agentfiles f3b60b2. The two private repos were read at their origin/main the same day; their output is not kept here.
+
+$ gh api repos/lyddonb/agent-kit/rulesets/24852297 --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
+validate
+
+$ gh api repos/lyddonb/agentfiles/rulesets/24855444 --jq '[.rules[].type]'
+deletion, non_fast_forward, pull_request
+
+$ gh api repos/lyddonb/agent-ledger/branches/main/protection --jq '.required_status_checks.contexts, .enforce_admins.enabled, .required_pull_request_reviews.required_approving_review_count'
+test (3.10), test (3.12), test (3.13), ledger-verify
+true
+0
+
+$ gh api repos/lyddonb/agent-ledger/commits/2c154b2cdf4f39644b6baff22ab47f6ee687b426/check-runs   (head of PR 31)
+change-record | success
+ledger-verify | skipped
+ledger-verify | success
+ledger-verify-self | skipped
+ledger-verify-self | success
+test (3.10) | success
+test (3.12) | success
+test (3.13) | success
+
+$ make check && make validate   (at 6bb869a)
+kitgen: 26 generated files and 24 files with GENERATED blocks up to date
+validate: 39 skills in 7 plugins, 62 script commands, 0 errors, 0 warnings
+
+$ git -C agent-ledger show aceb335:action.yml | grep 'python -I'   (the commit the books repos pin, v1.0.0)
+        ledger() { python -I "$RUNNER_SCRIPT" "$@"; }
