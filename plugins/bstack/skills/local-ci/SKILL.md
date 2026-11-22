@@ -1,6 +1,6 @@
 ---
 name: local-ci
-description: Run a repo's CI on this machine instead of GitHub-hosted runners and report the result on the PR as the `local-ci` commit status. Use to move a private repo's CI off Actions minutes, to set up or check the launchd agent that runs it, when a PR's `local-ci` status is missing, pending or red, or for "run CI locally", "post local-ci", "why is local-ci red".
+description: Run a repo's CI on this machine instead of GitHub-hosted runners and report the result on the PR as the `local-ci` commit status, and run a local fallback for a job GitHub didn't start. Use to move a private repo's CI off Actions minutes, to set up or check the launchd agent that runs it, when a PR's `local-ci` status is missing, pending or red, when an Actions job failed without starting (spending limit, outage), or for "run CI locally", "post local-ci", "why is local-ci red".
 license: MIT
 metadata:
   author: lyddonb
@@ -35,6 +35,20 @@ Install from a checkout that stays put (the plist records the script's path and 
 - It tests the PR head, not the merge with the base. Rebase a PR that sits behind a base change before trusting a green.
 - `error` means the run never started (no `scripts/ci` at that commit, a failed checkout). It stays until a new commit or `--force`.
 - Red: read the PR comment or the run's log, reproduce with `./scripts/ci`, and fix the cause. `--force` reruns a sha that already has a verdict; use it only after fixing something outside the repo (a tool, the machine), never to fish for green.
+
+## When GitHub doesn't start a job that stays on Actions
+
+Checks that must not trust the branch they check (a `pull_request_target` job) and deploys stay on Actions. When GitHub never starts one (a spending limit, a failed payment, an outage: the job finishes with no steps and no runner), run its local fallback instead of waiting:
+
+```bash
+python3 <this skill's folder>/scripts/local_ci.py fallback --repo OWNER/NAME=CHECKOUT --pr N        # every job GitHub refused on the PR head
+python3 <this skill's folder>/scripts/local_ci.py fallback --repo OWNER/NAME=CHECKOUT --branch main --job deploy --dry-run
+```
+
+- It runs `scripts/fallback/<job name>` for each refused job and posts the status `<job name> (local fallback)`. A job that ran on GitHub, passed or failed, is never replaced: fix a real failure, don't route around it.
+- The script comes from the base branch (or the branch itself with `--branch`), never from the PR. The change to check is a separate checkout in `$LOCAL_CI_TARGET`: GitHub's merge commit for a PR, so the base is its first parent as in the Action. `$LOCAL_CI_EVENT` is `pull_request` or `push`.
+- A script with the line `# local-ci: explicit` runs only when named with `--job`. Mark every deploy that way. A deploy is a gated action: run it with `--dry-run` first and ask before the real one.
+- `--checker-ref REF` takes the script from REF instead. Use it only to try a fallback script before it reaches the base branch, and say so where the result is reported.
 
 ## Trust
 

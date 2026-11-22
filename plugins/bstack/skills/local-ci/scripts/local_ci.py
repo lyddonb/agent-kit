@@ -17,6 +17,16 @@ Usage:
   local_ci.py run     --repo OWNER/NAME=CHECKOUT (--pr N | --branch NAME) [--force]
   local_ci.py install --repo OWNER/NAME=CHECKOUT [--repo ...] [--interval SECONDS]   # launchd agent, macOS
   local_ci.py uninstall | status | print-plist --repo ...
+  local_ci.py fallback --repo OWNER/NAME=CHECKOUT (--pr N | --branch NAME) [--job NAME ...] [--dry-run]
+
+`fallback` is for jobs that stay on GitHub Actions. For each Actions job on the commit that GitHub
+never started (no steps and no runner: a spending limit, a failed payment, an outage), it runs
+`scripts/fallback/<job name>` and posts the commit status `<job name> (local fallback)`. A job that
+ran on GitHub, passed or failed, is never replaced. The script comes from the base branch (for a
+PR) or the branch itself (for --branch), never from the PR, and gets the commit to check as a
+separate checkout in $LOCAL_CI_TARGET (for a PR, GitHub's merge commit), so a branch can't change
+what checks it. A script with the line `# local-ci: explicit` (a deploy) runs only when named with
+--job. --dry-run sets LOCAL_CI_DRY_RUN=1 for the script.
 
 CHECKOUT is a local clone of the repo with an `origin` remote; local_ci.py only fetches into it and
 adds worktrees under its own state folder, so the clone's working tree is never touched.
@@ -140,9 +150,9 @@ def branch_job(repo: Repo, branch: str) -> Job:
     return Job(repo, head["sha"], f"refs/heads/{branch}", branch, None)
 
 
-def latest_status(job: Job) -> Optional[dict]:
+def latest_status(job: Job, context: str = CONTEXT) -> Optional[dict]:
     statuses = gh(f"repos/{job.repo.github}/commits/{job.sha}/statuses?per_page=100")
-    mine = [s for s in statuses if s["context"] == CONTEXT]  # newest first
+    mine = [s for s in statuses if s["context"] == context]  # newest first
     return mine[0] if mine else None
 
 
@@ -235,15 +245,7 @@ def run_job(job: Job, timeout: int) -> str:
             return state
         env = dict(os.environ, CI="1", LOCAL_CI="1", LOCAL_CI_REPO=job.repo.github,
                    LOCAL_CI_SHA=job.sha, LOCAL_CI_BASE=f"origin/{job.base}")
-        with log.open("w") as out:
-            proc = subprocess.Popen([str(ci)], cwd=work, env=env, stdout=out,
-                                    stderr=subprocess.STDOUT, start_new_session=True)
-            try:
-                code = proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
-                code = None
+        code = execute(ci, work, env, log, timeout)
         elapsed = took(time.monotonic() - started)
         if code == 0:
             state, description = "success", f"passed in {elapsed} on {host_name()}"
@@ -327,6 +329,161 @@ def cmd_run(job: Job, timeout: int, force: bool) -> int:
     return 0 if state == "success" else 1
 
 
+@dataclass(frozen=True)
+class HostedJob:
+    name: str
+    workflow: str
+    event: str
+    status: str
+    conclusion: Optional[str]
+    started: bool
+
+    @property
+    def refused(self) -> bool:
+        """GitHub finished it without ever starting it: no runner picked it up and no step ran."""
+        return (self.status == "completed" and not self.started
+                and self.conclusion in ("failure", "cancelled", "startup_failure"))
+
+    @property
+    def verdict(self) -> str:
+        return self.conclusion or self.status
+
+
+def hosted_jobs(repo: Repo, sha: str) -> List[HostedJob]:
+    """The newest run of each Actions job on the commit, skipped jobs left out."""
+    runs = gh(f"repos/{repo.github}/actions/runs?head_sha={sha}&per_page=100")["workflow_runs"]
+    newest = {}
+    for run in sorted(runs, key=lambda r: r["created_at"]):
+        jobs = gh(f"repos/{repo.github}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
+        for j in jobs:
+            if j.get("conclusion") == "skipped":
+                continue
+            newest[j["name"]] = HostedJob(j["name"], run["name"], run["event"], j["status"],
+                                          j.get("conclusion"), bool(j.get("steps") or j.get("runner_name")))
+    return list(newest.values())
+
+
+def execute(script: Path, cwd: Path, env: dict, log: Path, timeout: int) -> Optional[int]:
+    """Run script, output to log. Returns its exit code, or None if it timed out and was killed."""
+    with log.open("w") as out:
+        proc = subprocess.Popen([str(script)], cwd=cwd, env=env, stdout=out,
+                                stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            return proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            return None
+
+
+def fallback_context(job: str) -> str:
+    return f"{job} (local fallback)"
+
+
+@locked(wait=True)
+def cmd_fallback(repo: Repo, pr: Optional[int], branch: Optional[str], only: List[str],
+                 timeout: int, dry_run: bool, force: bool, checker_ref: Optional[str]) -> int:
+    if pr is not None:
+        info = gh(f"repos/{repo.github}/pulls/{pr}")
+        sha, base = info["head"]["sha"], info["base"]["ref"]
+        target_ref, event = f"refs/pull/{pr}/merge", "pull_request"
+    else:
+        sha = gh(f"repos/{repo.github}/commits/{branch}")["sha"]
+        base, target_ref, event = branch, f"refs/heads/{branch}", "push"
+    label = f"{repo.github}{'#' + str(pr) if pr is not None else ':' + branch}@{sha[:7]}"
+    jobs = hosted_jobs(repo, sha)
+    if only:
+        missing = sorted(set(only) - {j.name for j in jobs})
+        if missing:
+            print(f"{label}: no Actions job named {', '.join(missing)} on this commit "
+                  f"(jobs: {', '.join(sorted(j.name for j in jobs)) or 'none'})")
+            return 1
+        jobs = [j for j in jobs if j.name in only]
+    for j in jobs:
+        if not j.refused:
+            print(f"{label}: {j.name} ran on GitHub ({j.verdict}); no fallback")
+
+    refused = [j for j in jobs if j.refused]
+    if not refused:
+        return 0
+    git(repo.checkout, "fetch", "--quiet", "--no-tags", "origin",
+        f"+{target_ref}:refs/local-ci/target",
+        f"+refs/heads/{base}:refs/remotes/origin/{base}")
+    target_sha = git(repo.checkout, "rev-parse", "refs/local-ci/target")
+    if pr is not None:
+        merged_head = git(repo.checkout, "rev-parse", "refs/local-ci/target^2")
+        if merged_head != sha:
+            print(f"{label}: GitHub's merge commit still holds {merged_head[:7]}, not the head; "
+                  "try again in a minute", file=sys.stderr)
+            return 1
+    elif target_sha != sha:
+        print(f"{label}: {branch} moved to {target_sha[:7]}; run it again", file=sys.stderr)
+        return 1
+    checker = checker_ref or f"refs/remotes/origin/{base}"
+    checker_sha = git(repo.checkout, "rev-parse", checker)
+
+    root = state_dir() / "fallback" / repo.github.replace("/", "__") / sha
+    logs = state_dir() / "logs" / repo.github.replace("/", "__")
+    logs.mkdir(parents=True, exist_ok=True)
+    trusted, target = root / "checker", root / "target"
+    worst = 0
+    try:
+        if root.exists():
+            shutil.rmtree(root)
+        git(repo.checkout, "worktree", "prune")
+        git(repo.checkout, "worktree", "add", "--quiet", "--detach", str(trusted), checker_sha)
+        git(repo.checkout, "worktree", "add", "--quiet", "--detach", str(target), target_sha)
+        for j in refused:
+            script = trusted / "scripts" / "fallback" / j.name
+            if not os.access(script, os.X_OK):
+                print(f"{label}: {j.name} was not started by GitHub and has no scripts/fallback/{j.name} "
+                      f"at {checker_sha[:7]}; nothing to run")
+                worst = 1
+                continue
+            if "# local-ci: explicit" in script.read_text(errors="replace") and j.name not in only:
+                print(f"{label}: {j.name} was not started by GitHub; its fallback runs only when named "
+                      f"(--job {j.name})")
+                continue
+            context = fallback_context(j.name)
+            if not force and not dry_run:
+                latest = latest_status(Job(repo, sha, target_ref, base, pr), context)
+                if latest is not None and latest["state"] == "success":
+                    print(f"{label}: {j.name} already passed locally ({latest.get('description', '')})")
+                    continue
+            log = logs / f"{sha}.{j.name}.log"
+            env = dict(os.environ, CI="1", LOCAL_CI="1", LOCAL_CI_REPO=repo.github, LOCAL_CI_SHA=sha,
+                       LOCAL_CI_TARGET=str(target), LOCAL_CI_EVENT=event,
+                       LOCAL_CI_BASE=f"origin/{base}", LOCAL_CI_BASE_BRANCH=base,
+                       LOCAL_CI_DRY_RUN="1" if dry_run else "0")
+            started = time.monotonic()
+            from_note = "" if checker_ref is None else f", checker from {checker_sha[:7]}"
+            if not dry_run:
+                gh(f"repos/{repo.github}/statuses/{sha}", "-X", "POST",
+                   body={"state": "pending", "context": context,
+                         "description": f"GitHub didn't start it; running on {host_name()}"})
+            code = execute(script, trusted, env, log, timeout)
+            elapsed = took(time.monotonic() - started)
+            if code == 0:
+                state, desc = "success", f"GitHub didn't start it; passed on {host_name()} in {elapsed}{from_note}"
+            elif code is None:
+                state, desc = "failure", f"timed out after {took(timeout)} on {host_name()}{from_note}"
+            else:
+                state, desc = "failure", f"failed on {host_name()}{from_note}: {last_line(log)}"
+            print(f"{label}: {j.name} {'dry run ' if dry_run else ''}{state}: {desc}\n  log: {log}")
+            if not dry_run:
+                gh(f"repos/{repo.github}/statuses/{sha}", "-X", "POST",
+                   body={"state": state, "context": context, "description": desc[:DESCRIPTION_LIMIT]})
+            if state != "success":
+                worst = 1
+    finally:
+        for wt in (trusted, target):
+            if wt.exists():
+                subprocess.run(["git", "-C", str(repo.checkout), "worktree", "remove", "--force", str(wt)],
+                               capture_output=True)
+        shutil.rmtree(root, ignore_errors=True)
+    return worst
+
+
 def plist(repos: List[Repo], interval: int, timeout: int) -> bytes:
     args = [sys.executable, str(Path(__file__).resolve()), "tick", "--timeout", str(timeout)]
     for r in repos:
@@ -385,15 +542,20 @@ def cmd_status() -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("command", choices=["tick", "run", "install", "uninstall", "status", "print-plist"])
+    ap.add_argument("command", choices=["tick", "run", "fallback", "install", "uninstall", "status",
+                                        "print-plist"])
     ap.add_argument("--repo", action="append", type=Repo.parse, default=[])
     ap.add_argument("--pr", type=int)
     ap.add_argument("--branch")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--job", action="append", default=[])
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--checker-ref", help="fallback: take scripts/fallback from this ref instead of "
+                    "the base branch (only to try a fallback script before it merges)")
     ap.add_argument("--timeout", type=int, default=1800)
     ap.add_argument("--interval", type=int, default=300)
     a = ap.parse_args(argv)
-    if a.command in ("tick", "install", "print-plist", "run") and not a.repo:
+    if a.command in ("tick", "install", "print-plist", "run", "fallback") and not a.repo:
         ap.error(f"{a.command} needs at least one --repo OWNER/NAME=CHECKOUT")
     if a.command == "tick":
         return cmd_tick(a.repo, a.timeout)
@@ -402,6 +564,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             ap.error("run takes one --repo and exactly one of --pr or --branch")
         job = pr_job(a.repo[0], a.pr) if a.pr is not None else branch_job(a.repo[0], a.branch)
         return cmd_run(job, a.timeout, a.force)
+    if a.command == "fallback":
+        if len(a.repo) != 1 or (a.pr is None) == (a.branch is None):
+            ap.error("fallback takes one --repo and exactly one of --pr or --branch")
+        return cmd_fallback(a.repo[0], a.pr, a.branch, a.job, a.timeout, a.dry_run, a.force,
+                            a.checker_ref)
     if a.command == "install":
         return cmd_install(a.repo, a.interval, a.timeout)
     if a.command == "print-plist":

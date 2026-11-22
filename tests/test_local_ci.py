@@ -19,7 +19,8 @@ args = sys.argv[1:]
 path = os.environ["STUB_STATE"]
 st = json.load(open(path))
 assert args[0] == "api", args
-url = args[1].split("?")[0]
+url, _, query = args[1].partition("?")
+q = dict(kv.split("=", 1) for kv in query.split("&") if "=" in kv)
 method = args[args.index("-X") + 1] if "-X" in args else "GET"
 body = json.load(sys.stdin) if "--input" in args else None
 st.setdefault("calls", []).append([method, url, body])
@@ -36,6 +37,10 @@ elif method == "GET" and url == R + "/pulls":
     out = [[p for p in st["pulls"]]]
 elif method == "GET" and re.fullmatch(R + r"/pulls/\d+", url):
     out = next(p for p in st["pulls"] if p["number"] == int(url.split("/")[-1]))
+elif method == "GET" and url == R + "/actions/runs":
+    out = {"workflow_runs": st.get("runs", {}).get(q["head_sha"], [])}
+elif method == "GET" and re.fullmatch(R + r"/actions/runs/\d+/jobs", url):
+    out = {"jobs": st["jobs"][url.split("/")[-2]]}
 elif method == "POST" and url.startswith(R + "/statuses/"):
     body["updated_at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     st["statuses"].setdefault(url.split("/")[-1], []).append(body)
@@ -58,7 +63,7 @@ def sh(*args, cwd=None):
     return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
-class LocalCITest(unittest.TestCase):
+class Harness(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.origin = self.tmp / "origin.git"
@@ -124,6 +129,8 @@ class LocalCITest(unittest.TestCase):
     def final(self, sha):
         return [s for s in self.read_state()["statuses"].get(sha, []) if s["state"] != "pending"]
 
+
+class LocalCITest(Harness):
     def test_passing_pr_gets_success_and_no_comment(self):
         sha = self.add_pr(1, 'test "$LOCAL_CI_BASE" = origin/main && git rev-parse origin/main >/dev/null && echo fine')
         p = self.run_ci("tick")
@@ -259,6 +266,135 @@ class LocalCITest(unittest.TestCase):
         self.assertEqual(sh("git", "-C", str(self.checkout), "status", "--porcelain"), "?? scratch.txt")
         self.assertEqual(sh("git", "-C", str(self.checkout), "worktree", "list").count("\n"), 0,
                          "the throwaway worktree is removed")
+
+
+REFUSED = {"status": "completed", "conclusion": "failure", "steps": [], "runner_name": None}
+RAN_RED = {"status": "completed", "conclusion": "failure", "steps": [{"name": "x"}], "runner_name": "r1"}
+
+
+class FallbackTest(Harness):
+    """`fallback` runs scripts/fallback/<job> from the base branch for jobs GitHub never started."""
+
+    def setUp(self):
+        super().setUp()
+        self.seen = self.tmp / "seen.txt"
+        # The base branch's checker: records what it was given and passes.
+        self.fallback_on_main("ledger-verify", f'echo "target=$(git -C "$LOCAL_CI_TARGET" rev-parse HEAD) '
+                              f'event=$LOCAL_CI_EVENT dry=$LOCAL_CI_DRY_RUN" > {self.seen}')
+
+    def fallback_on_main(self, job, body, explicit=False):
+        d = str(self.dev)
+        sh("git", "-C", d, "checkout", "-q", "-B", "main", "origin/main")
+        f = self.dev / "scripts" / "fallback" / job
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("#!/bin/sh\n" + ("# local-ci: explicit\n" if explicit else "") + body + "\n")
+        f.chmod(0o755)
+        sh("git", "-C", d, "add", "-A")
+        sh("git", "-C", d, "commit", "-q", "-m", f"fallback {job}")
+        sh("git", "-C", d, "push", "-q", "origin", "HEAD:refs/heads/main")
+        sh("git", "-C", d, "fetch", "-q", "origin")
+        self.main_sha = sh("git", "-C", d, "rev-parse", "HEAD")
+        st = self.read_state()
+        st["branches"]["main"] = self.main_sha
+        self.write_state(st)
+
+    def pr_with_merge(self, number, pr_fallback_body=None):
+        """A PR whose own copy of the ledger fallback fails, plus GitHub's merge commit for it."""
+        d = str(self.dev)
+        sh("git", "-C", d, "checkout", "-q", "-B", f"pr{number}", "origin/main")
+        (self.dev / "change.txt").write_text(str(number))
+        if pr_fallback_body is not None:
+            (self.dev / "scripts/fallback/ledger-verify").write_text("#!/bin/sh\n" + pr_fallback_body + "\n")
+        sh("git", "-C", d, "add", "-A")
+        sh("git", "-C", d, "commit", "-q", "-m", f"pr {number}")
+        head = sh("git", "-C", d, "rev-parse", "HEAD")
+        sh("git", "-C", d, "push", "-q", "-f", "origin", f"HEAD:refs/pull/{number}/head")
+        sh("git", "-C", d, "checkout", "-q", "--detach", "origin/main")
+        sh("git", "-C", d, "merge", "-q", "--no-ff", "--no-edit", head)
+        merge = sh("git", "-C", d, "rev-parse", "HEAD")
+        sh("git", "-C", d, "push", "-q", "-f", "origin", f"HEAD:refs/pull/{number}/merge")
+        st = self.read_state()
+        st["pulls"].append({"number": number, "head": {"sha": head, "repo": {"full_name": REPO}},
+                            "base": {"ref": "main"}})
+        self.write_state(st)
+        return head, merge
+
+    def hosted(self, sha, **jobs):
+        st = self.read_state()
+        st.setdefault("runs", {})[sha] = [{"id": 900 + i, "name": n, "event": "pull_request_target",
+                                           "created_at": f"2026-01-01T00:00:0{i}Z"} for i, n in enumerate(jobs)]
+        st.setdefault("jobs", {}).update({str(900 + i): [dict(j, name=n)] for i, (n, j) in enumerate(jobs.items())})
+        self.write_state(st)
+
+    def fb(self, *args):
+        return self.run_ci("fallback", *args)
+
+    def test_refused_job_runs_the_base_branch_checker_on_the_merge_commit(self):
+        head, merge = self.pr_with_merge(20, pr_fallback_body="exit 1")
+        self.hosted(head, **{"ledger-verify": REFUSED})
+        p = self.fb("--pr", "20")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn(f"target={merge} event=pull_request dry=0", self.seen.read_text(),
+                      "the checker sees the merge commit, and the PR's failing copy of the script never ran")
+        st = [s for s in self.read_state()["statuses"][head] if s["context"] == "ledger-verify (local fallback)"]
+        self.assertEqual([s["state"] for s in st], ["pending", "success"])
+        self.assertIn("GitHub didn't start it", st[-1]["description"])
+
+    def test_job_that_ran_on_github_is_never_replaced(self):
+        head, _ = self.pr_with_merge(21)
+        self.hosted(head, **{"ledger-verify": RAN_RED})
+        p = self.fb("--pr", "21")
+        self.assertIn("ran on GitHub (failure); no fallback", p.stdout)
+        self.assertNotIn(head, self.read_state()["statuses"])
+        self.assertFalse(self.seen.exists())
+
+    def test_explicit_fallback_runs_only_when_named(self):
+        self.fallback_on_main("deploy", f"echo deployed > {self.tmp / 'deployed'}", explicit=True)
+        self.hosted(self.main_sha, deploy=REFUSED)
+        p = self.fb("--branch", "main")
+        self.assertIn("runs only when named", p.stdout)
+        self.assertFalse((self.tmp / "deployed").exists())
+        p = self.fb("--branch", "main", "--job", "deploy")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue((self.tmp / "deployed").exists())
+
+    def test_no_fallback_script_fails_without_a_status(self):
+        head, _ = self.pr_with_merge(22)
+        self.hosted(head, **{"other-job": REFUSED})
+        p = self.fb("--pr", "22")
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("no scripts/fallback/other-job", p.stdout)
+        self.assertNotIn(head, self.read_state()["statuses"])
+
+    def test_stale_merge_commit_is_refused(self):
+        head, _ = self.pr_with_merge(23)
+        newer = self.commit("echo x", "pr23", ref="refs/pull/23/head")
+        st = self.read_state()
+        st["pulls"][-1]["head"]["sha"] = newer
+        self.write_state(st)
+        self.hosted(newer, **{"ledger-verify": REFUSED})
+        p = self.fb("--pr", "23")
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("merge commit still holds", p.stderr)
+        self.assertFalse(self.seen.exists())
+
+    def test_dry_run_posts_nothing(self):
+        head, _ = self.pr_with_merge(24)
+        self.hosted(head, **{"ledger-verify": REFUSED})
+        p = self.fb("--pr", "24", "--dry-run")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("dry=1", self.seen.read_text())
+        self.assertNotIn(head, self.read_state()["statuses"])
+
+    def test_failing_checker_posts_failure(self):
+        self.fallback_on_main("ledger-verify", "echo chain broken >&2; exit 2")
+        head, _ = self.pr_with_merge(25)
+        self.hosted(head, **{"ledger-verify": REFUSED})
+        p = self.fb("--pr", "25")
+        self.assertEqual(p.returncode, 1)
+        st = self.read_state()["statuses"][head]
+        self.assertEqual(st[-1]["state"], "failure")
+        self.assertIn("chain broken", st[-1]["description"])
 
 
 if __name__ == "__main__":
