@@ -9,6 +9,13 @@
 
 - date: 2026-11-21
   plugin: bstack
+  version: 0.35.0
+  changes:
+    - "A reliability checklist item's result in a ledger run now comes from an exit code, not from the agent. `receipt.py --run RUN_ID --actor ACTOR --item ID` runs the item's check and appends a `verification` entry with the verdict, the command, the commit and the checklist's hash. A command item runs its own command as the committed checklist states it; a question item takes the command that answers its probe after `--`. The ledger's format is unchanged, so the entry shows in `ledger show` and not in `ledger receipts`."
+  try: "Run the reliability checklist against origin/main and record each item it prints in the ledger run."
+
+- date: 2026-11-21
+  plugin: bstack
   version: 0.34.0
   changes:
     - "A change that breaks an artifact the kit generated in other repos can now list the repos that hold one. `sweep.py BOOKS_DIR --artifact phase-spec` reads the quality books' watched repos through `gh api` and prints each repo with the files it holds (`phase-spec`, `verify-skill` or `review`). `--containing REGEX` keeps only files in the old format, `--at YYYY-MM-DD` reads the repos as they were that day so a past change can be replayed, and `--public-only` names no private repo."

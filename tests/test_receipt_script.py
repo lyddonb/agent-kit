@@ -266,5 +266,158 @@ class RealLedgerTest(ReceiptBase):
         self.assertEqual(self.last()["data"]["receipt"]["criterion"], "P2e-C8")
 
 
+CHECKLIST = ".agents/checklist.json"
+
+
+def checklist_text(*items):
+    return json.dumps({"version": 1, "items": [
+        {"id": i, "trigger": {"paths": ["**"]}, "check": check, "source": "made up",
+         "added": "2026-11-01", "review_by": "2027-02-01"} for i, check in items]})
+
+
+ITEMS = checklist_text(("passes", {"command": "echo checked; test -f src.txt"}),
+                       ("fails", {"command": "echo broken >&2; exit 3"}),
+                       ("asks", {"question": "Does it work signed out?", "probe": "Run it with no login."}))
+
+
+class ItemBase(ReceiptBase):
+    def setUp(self):
+        self.tmp = h.tmpdir(self)
+        self.repo = h.new_repo(self.tmp, {**PROBE_FILES, CHECKLIST: ITEMS})
+
+    def item(self, bin_dir, item_id, probe=(), extra=(), run_id="r1"):
+        cmd = [h.sys.executable, h.RECEIPT_PY, "--run", run_id, "--actor", h.ACTOR, "--item", item_id, *extra]
+        return h.run(cmd + (["--", *probe] if probe else []), self.repo, bin_dir)
+
+
+class ItemRefusalTest(ItemBase):
+    """A refused checklist item exits 2, runs nothing and writes nothing. These run without agent-ledger."""
+
+    def setUp(self):
+        super().setUp()
+        self.ok = h.stub_ledger_bin(self.tmp)
+        self.ledger_file().parent.mkdir(parents=True)
+        self.ledger_file().write_text("")
+        h.commit(self.repo, "run folder")
+
+    def assertRefused(self, done, fragment):
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertIn(fragment, done.stderr)
+        self.assertFalse((self.repo / "ran.marker").exists(), "the probe ran")
+        self.assertFalse((self.repo / ".evidence").exists(), "evidence was written")
+        self.assertEqual(self.ledger_file().read_text(), "")
+
+    def test_an_unknown_item_names_the_ones_the_file_has(self):
+        self.assertRefused(self.item(self.ok, "nope"), "'nope' is not an item in .agents/checklist.json at HEAD (it has: passes, fails, asks)")
+
+    def test_a_command_item_takes_no_command_of_the_callers(self):
+        self.assertRefused(self.item(self.ok, "passes", ["sh", "-c", "touch ran.marker"]),
+                           "it runs as the checklist states it")
+
+    def test_a_question_item_needs_a_command(self):
+        self.assertRefused(self.item(self.ok, "asks"), "put the command that answers its probe after `--`")
+
+    def test_an_item_that_is_only_in_the_working_tree_is_refused(self):
+        (self.repo / CHECKLIST).write_text(checklist_text(("new", {"command": "touch ran.marker"})))
+        self.assertRefused(self.item(self.ok, "new"), "'new' is not an item")
+
+    def test_a_checklist_that_is_not_committed_is_refused(self):
+        h.git(self.repo, "rm", "-q", CHECKLIST)
+        h.commit(self.repo, "no checklist")
+        self.assertRefused(self.item(self.ok, "passes"), "is not committed")
+
+    def test_a_committed_checklist_that_breaks_the_format_is_refused(self):
+        (self.repo / CHECKLIST).write_text('{"version": 1, "items": [{"id": "x"}]}')
+        h.commit(self.repo, "broken checklist")
+        self.assertRefused(self.item(self.ok, "x"), "the checklist at HEAD is not usable")
+
+    def test_item_and_criterion_together_are_refused(self):
+        self.assertRefused(self.item(self.ok, "passes", extra=["--spec", h.SPEC, "--criterion", "C8"]),
+                           "either --item, or --spec with --criterion")
+
+    def test_neither_item_nor_criterion_is_refused(self):
+        done = h.run([h.sys.executable, h.RECEIPT_PY, "--run", "r1", "--actor", h.ACTOR, "--", "true"], self.repo, self.ok)
+        self.assertRefused(done, "give --spec with --criterion, or --item")
+
+    def test_checklist_without_item_is_refused(self):
+        done = h.run([h.sys.executable, h.RECEIPT_PY, "--run", "r1", "--actor", h.ACTOR, "--spec", h.SPEC,
+                      "--criterion", "C8", "--checklist", CHECKLIST, "--", "true"], self.repo, self.ok)
+        self.assertRefused(done, "--checklist goes with --item")
+
+    def test_an_unknown_run_is_refused_before_the_command_runs(self):
+        (self.repo / CHECKLIST).write_text(checklist_text(("marks", {"command": "touch ran.marker"})))
+        h.commit(self.repo, "an item that leaves a mark")
+        done = self.item(self.ok, "marks", run_id="other")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("no ledger for run other", done.stderr)
+        self.assertFalse((self.repo / "ran.marker").exists(), "the command ran")
+
+
+@unittest.skipUnless(REAL, "needs agent-ledger 1.1.0 (set AGENT_LEDGER_SRC to its src folder)")
+class ItemRealLedgerTest(ItemBase):
+    def setUp(self):
+        super().setUp()
+        self.bin = h.real_ledger_bin(self.tmp)
+        init = h.run(["ledger", "init", "demo", "--actor", h.ACTOR, "--date", "2026-11-16"], self.repo, self.bin)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        self.run_id = "2026-11-16-demo"
+        self.head = h.commit(self.repo, "ledger")
+
+    def go(self, item_id, probe=(), extra=()):
+        return self.item(self.bin, item_id, probe, extra, run_id=self.run_id)
+
+    def last(self):
+        lines = (self.repo / ".audit/runs" / self.run_id / "ledger.jsonl").read_text().splitlines()
+        entry = json.loads(lines[-1])
+        self.assertEqual(entry["type"], "verification")
+        return entry
+
+    def test_a_command_item_runs_its_own_command_and_the_exit_code_is_the_verdict(self):
+        done = self.go("passes")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.splitlines()[-1], "checklist:passes VERIFIED (seq 2)")
+        entry = self.last()
+        self.assertEqual(entry["summary"], "checklist:passes VERIFIED")
+        data = entry["data"]
+        self.assertEqual(data["verdict"], "VERIFIED")
+        self.assertNotIn("receipt", data)
+        self.assertEqual(data["checklist"], {
+            "item": "passes", "file": CHECKLIST, "file_sha256": h.sha256_file(self.repo / CHECKLIST),
+            "probe": "sh -c 'echo checked; test -f src.txt'", "commit": self.head, "exit": 0, "dirty": False})
+        self.assertEqual((self.repo / ".evidence" / self.run_id / "checklist-passes.txt").read_text(), "checked\n")
+
+    def test_the_ledger_still_verifies_and_the_item_is_not_a_spec_receipt(self):
+        self.go("passes")
+        self.assertEqual(h.run(["ledger", "verify", f".audit/runs/{self.run_id}"], self.repo, self.bin).returncode, 0)
+        shown = h.run(["ledger", "receipts", self.run_id], self.repo, self.bin)
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertNotIn("passes", shown.stdout + shown.stderr)
+
+    def test_a_failing_command_item_is_not_verified(self):
+        done = self.go("fails")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.splitlines()[-1], "checklist:fails NOT VERIFIED (seq 2)")
+        self.assertEqual(self.last()["data"]["checklist"]["exit"], 3)
+
+    def test_a_question_item_records_the_command_that_answered_it(self):
+        done = self.go("asks", ["sh", "-c", "exit 0"])
+        self.assertEqual(done.stdout.splitlines()[-1], "checklist:asks VERIFIED (seq 2)")
+        self.assertEqual(self.last()["data"]["checklist"]["probe"], "sh -c 'exit 0'")
+
+    def test_not_run_and_a_dirty_tree_make_it_inconclusive(self):
+        self.assertEqual(self.go("asks", ["true"], ["--not-run", "the signed-out half"]).stdout.splitlines()[-1],
+                         "checklist:asks INCONCLUSIVE (seq 2)")
+        self.assertEqual(self.last()["data"]["checklist"]["not_run"], "the signed-out half")
+        (self.repo / "src.txt").write_text("two\n")
+        self.assertEqual(self.go("passes").stdout.splitlines()[-1], "checklist:passes INCONCLUSIVE (seq 3)")
+        self.assertTrue(self.last()["data"]["checklist"]["dirty"])
+
+    def test_the_command_run_is_the_committed_one_not_an_uncommitted_edit(self):
+        (self.repo / CHECKLIST).write_text(ITEMS.replace("echo broken >&2; exit 3", "exit 0"))
+        done = self.go("fails")
+        self.assertEqual(self.last()["data"]["checklist"]["exit"], 3)
+        self.assertIn("NOT VERIFIED", done.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
