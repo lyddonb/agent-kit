@@ -1,0 +1,39 @@
+sweep.py at d0e5bf0, Python 3.9.6, macOS, the real gh. BOOKS is the quality books folder.
+
+$ sweep.py BOOKS --artifact phase-spec --at 2026-11-16 --containing '^## Acceptance' --public-only    # the day before 088cd28
+sweep: 0 of 3 public watched repos hold phase-spec
+1 private repo(s) hold one; run without --public-only to see them
+[exit 0]
+
+Without --public-only the same command prints one holder line and 'sweep: 1 of 4 watched repos hold phase-spec'. The holder is a private repo, so that output is kept out of this repo.
+
+$ sweep.py BOOKS --artifact phase-spec --artifact verify-skill --artifact review --public-only    # today
+agent-ledger (lyddonb/agent-ledger): verify-skill: 1 file(s): .agents/skills/verify-ledger/SKILL.md
+agent-kit (lyddonb/agent-kit): verify-skill: 1 file(s): .claude/skills/verify-kit/SKILL.md
+agent-kit (lyddonb/agent-kit): review: 1 file(s): REVIEW.md
+sweep: 2 of 3 public watched repos hold phase-spec, verify-skill, review
+1 private repo(s) hold one; run without --public-only to see them
+[exit 0]
+
+$ sweep.py BOOKS --artifact review --public-only    # with a gh first on PATH whose 'auth status' exits 1
+agent-kit (lyddonb/agent-kit): review: 1 file(s): REVIEW.md
+sweep: 1 of 3 public watched repos hold review
+[exit 0]
+
+$ checklist.py --base 088cd28^ --head 088cd28    # at 21a1283
+checklist: 3 of 6 items match 774183c..088cd28 (17 changed files)
+phase-spec-format
+--
+generated-artifact-format
+  fired on: plugins/bstack/skills/scaffold-product/references/templates/AGENTS.md (and 2 more files)
+
+$ /usr/bin/python3 -m unittest tests.test_sweep tests.test_checklist
+Ran 56 tests in 22.542s
+
+OK
+
+verify-kit at 21a1283: PASSED: 4/4 features. make check validate unit: 1,153 tests pass. make claude-validate passes.
+
+$ sweep.py BOOKS --artifact phase-spec --containing '^## Acceptance' --public-only    # today: nothing left to upgrade
+sweep: 0 of 3 public watched repos hold phase-spec
+[exit 0]
