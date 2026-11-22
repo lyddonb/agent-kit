@@ -1,0 +1,47 @@
+A throwaway clone of agent-kit at 73281b3, with the installed ledger 1.2.0. Run id: 2026-11-22-item-receipt. ACTOR is an agent actor as JSON.
+
+$ receipt.py --run 2026-11-22-item-receipt --actor ACTOR --item plugins-in-step        # a command item: make check versions
+kitgen: 26 generated files and 24 files with GENERATED blocks up to date
+versions: 0 plugin(s) changed without a version bump
+checklist:plugins-in-step VERIFIED (seq 2)
+[exit 0]
+
+$ receipt.py --run 2026-11-22-item-receipt --actor ACTOR --item gh-call -- git grep -q 'gh api' -- plugins/bstack/skills/beau-mode/scripts/sweep.py    # a question item, with a command that answers part of it
+checklist:gh-call INCONCLUSIVE (seq 3)
+[exit 0]
+
+$ receipt.py --run 2026-11-22-item-receipt --actor ACTOR --item plugins-in-step -- true        # a caller's command for a command item
+receipt.py: refused: plugins-in-step's check is a command (make check versions); it runs as the checklist states it, so give no command after `--`
+[exit 2]
+
+$ ledger show 2026-11-22-item-receipt
+seq  ts                    type          actor                   summary
+1    2026-11-22T03:17:20Z  state         agent:claude@scratch#1  Run started
+                                                                 why: try receipt.py --item on agent-kit itself
+2    2026-11-22T03:17:21Z  verification  agent:claude@scratch#1  checklist:plugins-in-step VERIFIED
+                                                                 why: probe exited 0
+3    2026-11-22T03:17:33Z  verification  agent:claude@scratch#1  checklist:gh-call INCONCLUSIVE
+                                                                 why: probe exited 0; not run: a run with a gh whose auth status fails
+2026-11-22-item-receipt: 3 entries, verified; head 1b44e8a40ae31e6f0b94d92853e78140334885b93d80e823bdb35108dc2ce97f
+
+data of the entry at seq 2:
+{
+  "checklist": {
+    "commit": "a09a4e8f36927283883da4dce4d7cad8fb755c5e",
+    "dirty": false,
+    "exit": 0,
+    "file": ".agents/checklist.json",
+    "file_sha256": "5817cc5ee781614e323cc3600011a2149bf92cdc4c9fd24fb7d51412d6876931",
+    "item": "plugins-in-step",
+    "probe": "sh -c 'make check versions'"
+  },
+  "verdict": "VERIFIED"
+}
+
+$ ledger verify .audit/runs/2026-11-22-item-receipt
+ok 2026-11-22-item-receipt: 3 entries, head seq 3 1b44e8a40ae31e6f0b94d92853e78140334885b93d80e823bdb35108dc2ce97f
+note: chain-only check. It can't detect entries cut from the end or a rewritten suffix with recomputed hashes; seals and `verify --base` close that (M0 unit 4).
+[exit 0]
+
+$ ledger receipts 2026-11-22-item-receipt
+2026-11-22-item-receipt: no receipts

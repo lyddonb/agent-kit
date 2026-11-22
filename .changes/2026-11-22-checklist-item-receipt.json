@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "goal": "In a governed run, a reliability checklist item's result comes from an exit code and not from an entry the agent wrote by hand. This closes the one place R30 fell short of its roadmap entry, the way Beau chose on 2026-11-21: no change to the ledger's format.",
+  "changed": [
+    "receipt.py --item ID runs a checklist item's check and appends a verification entry whose verdict comes from the exit code, with the same dirty-tree and --not-run rules as a criterion receipt.",
+    "A command item runs its own command, read from the checklist as HEAD has it. A question item takes the command that answers its probe.",
+    "The entry carries data.checklist, not data.receipt, so it shows in ledger show and not in ledger receipts.",
+    "verify-work's checklist step and the checklist reference use it."
+  ],
+  "claims": [
+    {
+      "claim": "On agent-kit itself with the installed ledger 1.2.0, a command item is recorded VERIFIED from its exit code, a question item with part not run is INCONCLUSIVE, a caller's command for a command item is refused, and the run's chain still verifies.",
+      "verdict": "VERIFIED",
+      "check": "receipt.py --item in a throwaway clone of the repo at this commit, then ledger show, ledger verify and ledger receipts",
+      "commit": "73281b3",
+      "record": ".changes/2026-11-22-checklist-item-receipt/real-run.txt",
+      "remaining": "A run that is sealed and pushed through the ledger-verify check in CI."
+    },
+    {
+      "claim": "The committed command is what runs, not an uncommitted edit of it; every refusal exits 2 before anything runs; criterion receipts behave as before.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_receipt_script.py: 16 new tests, 45 in all, against agent-ledger 1.2.0's source on Python 3.12; the 10 that need no ledger also under /usr/bin/python3 3.9.6. make check validate unit, make claude-validate, verify-kit 4 of 4",
+      "commit": "73281b3",
+      "record": ".changes/2026-11-22-checklist-item-receipt/tests.txt",
+      "remaining": "CI does not set AGENT_LEDGER_SRC, so the six real-ledger tests are skipped there, as the criterion ones already are."
+    },
+    {
+      "claim": "An agent following verify-work's changed step uses the script for each item.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "No eval ran on the skill text. The command in it passes the command lint."
+    }
+  ],
+  "next": [
+    {
+      "item": "A gate that reads these entries",
+      "source": "ROADMAP.md R32",
+      "why_now": "Not yet: R32 waits on R6 and on H14.",
+      "impact": "Until then the entries are a record. Nothing fails a pull request whose printed items have none."
+    }
+  ],
+  "release": {"see": "changes.yaml bstack@0.35.0"}
+}
