@@ -13,6 +13,10 @@ A trigger matches when a changed file fits one of its `paths` globs and, when it
 that regular expression is found in a line the diff adds or removes in such a file. Each block
 says which file and line fired the item.
 
+The checklist cannot be switched off by the change it judges. The script also reads the file as
+the merge base has it, and an item there that matches this diff is printed with a `note:` line
+when the diff removes it, or edits it so that it no longer fires.
+
 Standard output holds the matching items and nothing else, so empty output means the script ran
 and nothing matched. A one-line count goes to standard error. `references/checklist.md` in this
 skill has the file format.
@@ -92,6 +96,7 @@ class Fired:
     path: str
     line: Optional[Line]
     more_paths: int
+    note: Optional[str] = None  # set when the item comes from the base's copy of the checklist
 
 
 # --- the checklist file ---------------------------------------------------------------------
@@ -294,6 +299,35 @@ def matching(items: list[Item], diff: Diff) -> list[Fired]:
     return [f for f in (fire(item, diff) for item in items) if f]
 
 
+def base_items(diff: Diff, rel: str) -> list[Item]:
+    """The checklist as the merge base has it. No file there, or one that does not parse, is no items:
+    the base's copy only ever adds items to the output, so a broken one cannot hide any."""
+    shown = subprocess.run(["git", "-C", str(diff.root), "show", f"{diff.base}:{rel}"], capture_output=True)
+    if shown.returncode != 0:
+        return []
+    try:
+        return parse_checklist(shown.stdout.decode("utf-8", "replace"), rel)
+    except Unusable as e:
+        print(f"checklist: the copy at {diff.base[:7]} is not usable and was not read: {e}", file=sys.stderr)
+        return []
+
+
+def taken_out(items: list[Item], before: list[Item], diff: Diff) -> list[Fired]:
+    """Items the diff itself turned off: the base's copy fires on this diff, and the item is gone
+    from the checklist now, or is still there and edited so that it no longer fires."""
+    now = {i.id: i for i in items}
+    out = []
+    for old in before:
+        new = now.get(old.id)
+        if new == old or (new is not None and fire(new, diff)):
+            continue
+        fired = fire(old, diff)
+        if fired:
+            how = "removes this item" if new is None else "edits this item so that it no longer fires"
+            out.append(dataclasses.replace(fired, note=f"this diff {how}; shown as it was at {diff.base[:7]}"))
+    return out
+
+
 # --- output ---------------------------------------------------------------------------------
 
 def _shown(text: str) -> str:
@@ -311,6 +345,8 @@ def where_fired(f: Fired) -> str:
 def as_text(f: Fired, today: datetime.date) -> str:
     item = f.item
     rows = [f"{item.id}", f"  fired on: {where_fired(f)}"]
+    if f.note:
+        rows.insert(1, f"  note: {f.note}")
     if isinstance(item.check, Command):
         rows.append(f"  command: {item.check.command}")
     else:
@@ -325,8 +361,11 @@ def as_dict(f: Fired, today: datetime.date) -> dict:
     fired = {"path": f.path, "more_paths": f.more_paths}
     if f.line is not None:
         fired.update(line=f.line.number, sign=f.line.sign, text=_shown(f.line.text))
-    return {"id": item.id, "fired": fired, "check": dataclasses.asdict(item.check), "source": item.source,
-            "added": str(item.added), "review_by": str(item.review_by), "overdue": item.review_by < today}
+    out = {"id": item.id, "fired": fired, "check": dataclasses.asdict(item.check), "source": item.source,
+           "added": str(item.added), "review_by": str(item.review_by), "overdue": item.review_by < today}
+    if f.note:
+        out["note"] = f.note
+    return out
 
 
 def main(argv: list[str], today: Optional[datetime.date] = None) -> int:
@@ -346,20 +385,27 @@ def main(argv: list[str], today: Optional[datetime.date] = None) -> int:
         if Path(top.stdout.strip()).resolve() != root:
             raise Unusable(f"run it from the repo root ({top.stdout.strip()}), or pass --root")
         file = Path(args.file).resolve() if args.file else root / DEFAULT_FILE
-        if not file.is_file():
-            if args.file:
-                raise Unusable(f"no checklist file at {args.file}")
+        if args.file and not file.is_file():
+            raise Unusable(f"no checklist file at {args.file}")
+        diff = read_diff(root, args.base, args.head)
+        try:
+            rel = file.relative_to(root).as_posix()
+        except ValueError:
+            rel = None  # a file outside the repo has no copy at the base
+        before = base_items(diff, rel) if rel else []
+        if not file.is_file() and not before:
             print(f"checklist: no {DEFAULT_FILE} in {root}; this repo has no checklist", file=sys.stderr)
             if args.json:
                 print("[]")
             return 0
-        try:
-            text = file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as e:
-            raise Unusable(f"cannot read {file}: {e}")
-        items = parse_checklist(text, args.file or DEFAULT_FILE)
-        diff = read_diff(root, args.base, args.head)
-        fired = matching(items, diff)
+        items: list[Item] = []
+        if file.is_file():
+            try:
+                text = file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                raise Unusable(f"cannot read {file}: {e}")
+            items = parse_checklist(text, args.file or DEFAULT_FILE)
+        fired = matching(items, diff) + taken_out(items, before, diff)
     except Unusable as e:
         print(f"checklist.py: {e}", file=sys.stderr)
         return 2

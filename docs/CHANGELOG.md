@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.32.0 (2026-11-21)
+
+- A change can no longer switch off the checklist item that judges it. `checklist.py` also reads `.agents/checklist.json` as the merge base has it: an item there that matches the diff still prints when the diff removes it, or edits it so that it no longer fires, with a `note:` line saying so. Deleting the whole file does not silence it.
+- Try: `Run the reliability checklist against origin/main.`
+
 ## bstack 0.31.0 (2026-11-21)
 
 - A repo can keep a reliability checklist, `.agents/checklist.json`: the mistakes that already happened there, each with a trigger read from the diff and a check to run. `verify-work` now runs `checklist.py --base REF` before a verdict and gets only the items the change could repeat, each with the line that fired it. A docs change gets no list. A failed item makes the verdict NOT VERIFIED, and one you could not check makes it INCONCLUSIVE.

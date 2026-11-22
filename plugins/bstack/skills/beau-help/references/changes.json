@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.32.0",
+      "date": "2026-11-21",
+      "plugin": "bstack",
+      "version": "0.32.0",
+      "changes": [
+        "A change can no longer switch off the checklist item that judges it. `checklist.py` also reads `.agents/checklist.json` as the merge base has it: an item there that matches the diff still prints when the diff removes it, or edits it so that it no longer fires, with a `note:` line saying so. Deleting the whole file does not silence it."
+      ],
+      "try": "Run the reliability checklist against origin/main."
+    },
+    {
       "id": "bstack@0.31.0",
       "date": "2026-11-21",
       "plugin": "bstack",
