@@ -155,6 +155,12 @@ class LocalCITest(unittest.TestCase):
         self.assertEqual(len(comments), 1, "the existing comment is edited, not a new one added")
         self.assertIn("passed", comments[0]["body"])
 
+    def test_tick_output_names_each_job(self):
+        self.add_pr(12, "echo ok")
+        p = self.run_ci("tick")
+        self.assertIn(f"{REPO}:main@{self.main_sha[:7]}: success", p.stdout)
+        self.assertIn(f"{REPO}#12@", p.stdout)
+
     def test_finished_sha_is_not_rerun(self):
         sha = self.add_pr(3, "echo ok")
         self.run_ci("tick")

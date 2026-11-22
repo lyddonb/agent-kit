@@ -85,7 +85,7 @@ class Job:
 
     @property
     def label(self) -> str:
-        where = f"#{self.pr}" if self.pr else self.ref.rsplit("/", 1)[-1]
+        where = f"#{self.pr}" if self.pr else ":" + self.ref.rsplit("/", 1)[-1]
         return f"{self.repo.github}{where}@{self.sha[:7]}"
 
 
@@ -367,7 +367,7 @@ def cmd_status() -> int:
     if results.exists():
         for line in results.read_text().splitlines()[-10:]:
             r = json.loads(line)
-            where = f"#{r['pr']}" if r["pr"] else "branch"
+            where = f"#{r['pr']}" if r["pr"] else " branch head"
             print(f"{r['at']} {r['repo']}{where} {r['sha'][:7]} {r['state']}: {r['description']}")
     return 0
 
