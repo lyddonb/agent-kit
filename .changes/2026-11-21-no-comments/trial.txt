@@ -1,0 +1,81 @@
+Two trials of the no-comments skill on a scratch repo seeded with one comment of each kind.
+Each: one agent (opus) followed SKILL.md from disk, with a hunter subagent (sonnet) given references/brief.md. Nobody answered questions and nothing was approved beforehand.
+
+Trial 1 ran the first draft of the skill text. It deleted 6 comments, kept the license header and the csv comment (adding a docs link), fixed total() and rows_for(), left the sort-order constraint unenforced with a test offered, and the check went from exit 1 to exit 0. It named ten unclear or contradictory sentences; all were rewritten.
+
+Trial 2 ran the rewritten text (commit 58bc6e8). Output below.
+
+== comments.py --base main --head cache-and-sort (the seeded commit) ==
+comments: the diff adds 7 to Python files
+ledgerkit/export.py:6: # open the file and write every row
+ledgerkit/export.py:7: # csv.writer ends each row with \r\n itself; without newline="" Windows writes \r\r\n
+ledgerkit/export.py:15: # add the amount to the count
+ledgerkit/ledger.py:9: # IMPORTANT: returns None when the cache is cold. Callers must call again.
+ledgerkit/ledger.py:14: # do not remove: billing depends on this sort order
+ledgerkit/ledger.py:19: # def rows_between(start, end, load):
+ledgerkit/ledger.py:20: #     return [rows_for(d, load) for d in range(start, end)]
+exit 1
+
+== comments.py --base main (working tree after trial 2) ==
+comments: the diff adds 0 to Python files
+exit 0
+
+== trial 2's diff ==
+diff --git a/ledgerkit/export.py b/ledgerkit/export.py
+index 2f09d7d..86bae15 100644
+--- a/ledgerkit/export.py
++++ b/ledgerkit/export.py
+@@ -3,8 +3,8 @@ import csv
+ 
+ 
+ def write_rows(path, rows):
+-    # open the file and write every row
+     # csv.writer ends each row with \r\n itself; without newline="" Windows writes \r\r\n
++    # https://docs.python.org/3/library/csv.html#csv.writer
+     with open(path, "w", newline="") as f:
+         csv.writer(f).writerows(rows)
+ 
+@@ -12,6 +12,5 @@ def write_rows(path, rows):
+ def total(rows):
+     count = 0
+     for row in rows:
+-        # add the amount to the count
+         count += row[1]
+-    return count + "0"  # type: ignore[operator]
++    return count
+diff --git a/ledgerkit/ledger.py b/ledgerkit/ledger.py
+index ef17cfe..49af072 100644
+--- a/ledgerkit/ledger.py
++++ b/ledgerkit/ledger.py
+@@ -1,20 +1,10 @@
+ # Copyright 2026 Ledgerkit contributors
+ # SPDX-License-Identifier: MIT
+-"""The ledger's rows, by date."""
+ 
+ _cache = {}
+ 
+ 
+ def rows_for(day, load):
+-    # IMPORTANT: returns None when the cache is cold. Callers must call again.
+     if day not in _cache:
+-        _cache[day] = load(day)
+-        return None
+-    rows = _cache[day]
+-    # do not remove: billing depends on this sort order
+-    rows.sort(key=lambda r: r[0])
+-    return rows
+-
+-
+-# def rows_between(start, end, load):
+-#     return [rows_for(d, load) for d in range(start, end)]
++        _cache[day] = sorted(load(day), key=lambda r: r[0])
++    return _cache[day]
+
+== trial 2 outcome ==
+Deleted: 2 narration comments, the commented-out function, the IMPORTANT note on our own code, the 'do not remove' note, a type: ignore that hid int + str, and the module docstring of ledger.py.
+Kept: the license header, and the csv newline comment, given a docs link on the next line of its block.
+Fixed: total() no longer adds a str; rows_for() no longer returns None on a cold cache.
+Unenforced: the sort order billing relies on. A test was offered in the reply.
+It reported five sentences where it had to guess, none a contradiction that stopped a step.
+
+After trial 2, two sentences changed and were not tried again: the brief now tells the hunter to leave Python docstrings alone (trial 2 deleted one), and step 5 says an unattended run puts its offer in the reply.

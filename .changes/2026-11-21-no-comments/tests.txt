@@ -1,0 +1,6 @@
+All at e548abb, the feature commit rebased onto main at 16205a9.
+make unit: OK (skipped=24), Python 3.12. tests/test_comments.py: 28 tests, also OK on /usr/bin/python3 3.9.6.
+Mutations of comments.py that tests/test_comments.py fails on (run before the rebase, script unchanged by it): no move matching (12 failures), no link rule (3), license kept past the header (1), no directive rule (1).
+make check validate versions: up to date, 0 errors, 0 plugins without a bump. make claude-validate: 8 of 8 passed.
+verify-kit drive all: PASSED 4/4. The session's init line lists agents bstack:beau-agent and bstack:comment-sicko, and the skill bstack:no-comments.
+comments.py --base origin/main on this branch: adds 0, exit 0.
