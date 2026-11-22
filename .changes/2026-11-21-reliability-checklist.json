@@ -42,10 +42,10 @@
       "remaining": "Linux, until this pull request's CI run finishes."
     },
     {
-      "claim": "bstack 0.30.0 still installs into Claude Code, its skills load, and the what's-new hook shows the new entry.",
+      "claim": "bstack 0.31.0 still installs into Claude Code, its skills load, and the what's-new hook shows the new entry.",
       "verdict": "VERIFIED",
       "check": "verify-kit: control-kit drive all, 4 of 4 features pass on the real claude CLI; make claude-validate passes",
-      "commit": "4eadb0b",
+      "commit": "d76bdd4",
       "record": ".changes/2026-11-21-reliability-checklist/verify-kit.txt",
       "remaining": "A model choosing a skill from plain words, and tools other than Claude Code: verify-kit does not map them."
     },
@@ -85,6 +85,6 @@
     }
   ],
   "release": {
-    "see": "changes.yaml bstack@0.30.0"
+    "see": "changes.yaml bstack@0.31.0"
   }
 }
