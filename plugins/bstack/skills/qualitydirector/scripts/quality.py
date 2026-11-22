@@ -81,7 +81,12 @@ everything listed was fetched, 1 when any run could not be, 2 on bad usage, a mi
 inside BOOKS_DIR. The calls it makes, in order, for each repo: `gh api --paginate
 "repos/O/N/actions/runs?status=completed&per_page=100&created=>=SINCE"`, `gh api repos/O/N`,
 and for each run `gh api --paginate "repos/O/N/actions/runs/ID/artifacts?per_page=100"` and, for
-each artifact, `gh api repos/O/N/actions/artifacts/ID/zip`. `--since` filters on a run's creation
+each artifact, `gh api repos/O/N/actions/artifacts/ID/zip`. GitHub lists at most 1000 results for a listing filtered by
+`created` or `status`, across all of a repo's workflows. When the first listing's `total_count` is over that, the listing is
+split at its middle day into `created=A..B` windows (the last stays open-ended) until each is under the cap, and it prints
+`listing: N runs since SINCE are over GitHub's 1000; listed in W windows`. A run listed twice is kept once (the larger
+`run_attempt`) and printed as `listing: run ID was listed twice; kept once`. A window listed once more when it came back short of its
+`total_count`, a window still short, and a single day over the cap are each `FAILED listing`, exit 1, and what was listed is fetched. `--since` filters on a run's creation
 date, so a re-run of an old run needs an earlier --since.
 
 Jobs. Once BOOKS_DIR/books/jobs.csv exists (and then books/steps.csv too: see "The job books"), `fetch` also stores what GitHub's Actions jobs API reports for each run it does not
@@ -3113,19 +3118,142 @@ def store_visibility(out_dir: str, repo: str, github: str, info: object) -> None
     print(f"  visibility: {visibility}")
 
 
+GH_LIST_CAP = 1000  # GitHub's runs listing returns at most this many results when it is filtered by `created` or `status`
+MAX_LIST_CALLS = 200  # listing calls per repo: enough to split years of runs to single days, a bound if GitHub's counts are wrong
+
+
+class Window(NamedTuple):
+    """A range of created dates, both days inclusive. `last` None is open-ended: runs created on or after `first`, by any clock."""
+    first: date
+    last: date | None
+
+    def query(self) -> str:
+        return f"%3E%3D{self.first.isoformat()}" if self.last is None else f"{self.first.isoformat()}..{self.last.isoformat()}"
+
+    def label(self) -> str:
+        return f"since {self.first.isoformat()}" if self.last is None else f"{self.first.isoformat()} to {self.last.isoformat()}"
+
+
+@dataclass
+class RunListing:
+    """What listing a repo's completed runs found: each run once, and what to say about how it was listed."""
+    runs: dict[int, dict] = field(default_factory=dict)
+    windows: int = 0
+    over: int | None = None  # the first listing's total_count when it was over the cap
+    twice: set[int] = field(default_factory=set)
+    problems: list[str] = field(default_factory=list)
+    calls: int = 0
+    stopped: bool = False  # MAX_LIST_CALLS was reached; windows not yet listed were left out
+
+    def add(self, runs: dict[int, dict]) -> None:
+        self.twice |= {run_id for run_id, run in runs.items() if _keep(self.runs, run)}
+
+
+def _keep(runs: dict[int, dict], run: dict) -> bool:
+    """Add a listed run by its id. A run already there is listed twice: the larger run_attempt, then the later updated_at, stays.
+    True when it was already there."""
+    def rank(r: dict) -> tuple[int, str]:
+        attempt, updated = r.get("run_attempt"), r.get("updated_at")
+        return (attempt if type(attempt) is int else 0, updated if isinstance(updated, str) else "")
+    old = runs.get(run["id"])
+    if old is None or rank(run) > rank(old):
+        runs[run["id"]] = run
+    return old is not None
+
+
+def _read_window(gh: Gh, github: str, window: Window) -> tuple[dict[int, dict], int, int | None, set[int]]:
+    """List one window: its runs by id, how many entries had no usable id, the total_count its first page reports (None when
+    it is missing or not an integer), and the ids it listed more than once."""
+    pages = gh.pages(f"repos/{github}/actions/runs?status=completed&per_page=100&created={window.query()}")
+    total = pages[0].get("total_count") if pages else None
+    runs, twice, unusable = {}, set(), 0
+    for page in pages:
+        for run in page.get("workflow_runs", []):
+            if not isinstance(run, dict) or type(run.get("id")) is not int:
+                unusable += 1
+                continue
+            if _keep(runs, run):
+                twice.add(run["id"])
+    return runs, unusable, total if type(total) is int else None, twice
+
+
+def _read_counted(gh: Gh, github: str, window: Window, found: RunListing):
+    """_read_window, counted against MAX_LIST_CALLS. None once the bound is reached (said once in the problems)."""
+    if found.calls >= MAX_LIST_CALLS:
+        if not found.stopped:
+            found.stopped = True
+            found.problems.append(f"{github}: stopped after {MAX_LIST_CALLS} listing calls; runs created {window.label()} and later windows were not listed")
+        return None
+    found.calls += 1
+    return _read_window(gh, github, window)
+
+
+def _list_window(gh: Gh, github: str, window: Window, today: date, found: RunListing, read=None) -> None:
+    try:
+        read = read or _read_counted(gh, github, window, found)
+    except GhError as e:
+        found.problems.append(f"{github}: listing {window.label()}: {e}")
+        return
+    if read is None:
+        return
+    runs, unusable, total, twice = read
+    if total is not None and total <= GH_LIST_CAP and len(runs) + unusable < total:
+        try:  # a run listed meanwhile moved the pages
+            again = _read_counted(gh, github, window, found)
+        except GhError as e:
+            again = None
+            found.problems.append(f"{github}: listing {window.label()} again: {e}")
+        if again is not None:  # what the first read found is kept whatever the second one does
+            again_runs, again_unusable, _, again_twice = again
+            for run in again_runs.values():
+                _keep(runs, run)
+            unusable, twice = max(unusable, again_unusable), twice | again_twice
+        if len(runs) + unusable < total:
+            found.problems.append(f"{github}: {len(runs)} of {total} runs listed {window.label()}")
+    over = total is not None and total > GH_LIST_CAP
+    end = max(today, window.first) if window.last is None else window.last
+    if over and end > window.first:  # what this window listed is a part of what its halves list
+        middle = window.first + (end - window.first) // 2
+        _list_window(gh, github, Window(window.first, middle), today, found)
+        _list_window(gh, github, Window(middle + timedelta(days=1), window.last), today, found)
+        return
+    found.windows += 1
+    found.twice |= twice
+    found.add(runs)
+    if over:
+        found.problems.append(f"{github}: {total} runs on {window.first.isoformat()}; GitHub lists at most {GH_LIST_CAP}")
+
+
+def list_runs(gh: Gh, github: str, since: str, today: date) -> RunListing:
+    """Every completed run created on or after `since`, each once. Over GitHub's cap the listing is split by created date.
+    Raises GhError when the first call fails."""
+    window = Window(date.fromisoformat(since), None)
+    first = _read_window(gh, github, window)
+    found = RunListing(over=first[2] if first[2] is not None and first[2] > GH_LIST_CAP else None, calls=1)
+    _list_window(gh, github, window, today, found, read=first)
+    return found
+
+
 def fetch_repo(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, since: str,
-               tally: FetchTally, booked: dict[str, int], booked_jobs: set[str] | None, visibility: bool = False) -> None:
+               tally: FetchTally, booked: dict[str, int], booked_jobs: set[str] | None, visibility: bool = False,
+               today: date | None = None) -> None:
     """`visibility` (the books have repos.csv): the repo's own call is made even when the listing fails or has no runs, and repo.json is written."""
     print(f"{repo} ({github}, {workflow}): runs created since {since}")
     try:
-        listing = gh.pages(f"repos/{github}/actions/runs?status=completed&per_page=100&created=%3E%3D{since}")
+        listing = list_runs(gh, github, since, today or datetime.now(timezone.utc).date())
     except GhError as e:
         tally.fail("listing", str(e))
         if visibility:
             store_visibility(out_dir, repo, github, _repo_info(gh, github)[0])
         return
-    runs = sorted((r for page in listing for r in page.get("workflow_runs", []) if isinstance(r, dict)
-                   and r.get("name") == workflow and type(r.get("id")) is int), key=lambda r: r["id"])
+    runs = sorted((r for r in listing.runs.values() if r.get("name") == workflow), key=lambda r: r["id"])
+    if listing.over is not None:
+        print(f"  listing: {listing.over} runs since {since} are over GitHub's {GH_LIST_CAP}; listed in {listing.windows} windows")
+    for run in runs:
+        if run["id"] in listing.twice:
+            print(f"  listing: run {run['id']} was listed twice; kept once")
+    for problem in listing.problems:
+        tally.fail("listing", problem)
     tally.listed += len(runs)
     if not runs and not visibility:
         return
@@ -3289,7 +3417,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     gh, tally, booked = Gh(exe), FetchTally(jobs_adopted=booked_jobs is not None), _booked_per_run(books)
     for repo, github, workflow in watched:
         since = args.since or _latest_started(books, repo) or (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
-        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs, books.tables[REPOS].present)
+        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs, books.tables[REPOS].present, today)
     t = tally
     print(f"fetched {t.runs} runs ({t.artifacts} artifacts); listed {t.listed}; skipped {t.forks} forks, "
           f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts"

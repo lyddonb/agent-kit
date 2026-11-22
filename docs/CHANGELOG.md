@@ -3,11 +3,17 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
-## bstack 0.30.0 (2026-11-21)
+## bstack 0.31.0 (2026-11-21)
 
 - A repo can keep a reliability checklist, `.agents/checklist.json`: the mistakes that already happened there, each with a trigger read from the diff and a check to run. `verify-work` now runs `checklist.py --base REF` before a verdict and gets only the items the change could repeat, each with the line that fired it. A docs change gets no list. A failed item makes the verdict NOT VERIFIED, and one you could not check makes it INCONCLUSIVE.
 - `correct` sends a mistake that a diff can show to the checklist instead of the rule table. agent-kit's own checklist starts with five items: a books layout change, a phase spec format change, anything under `plugins/`, a `gh` call, and a skill description change.
 - Try: `Run the reliability checklist against origin/main and check each item it prints.`
+
+## bstack 0.30.0 (2026-11-21)
+
+- `quality.py fetch` no longer silently misses runs in a busy repo. GitHub returns at most 1,000 runs for a listing filtered by date, counting every workflow in the repo. When a watched repo has more than that since `--since`, fetch splits the listing by created date and lists each part, and prints `listing: N runs since DAY are over GitHub's 1000; listed in W windows`. A single day with more than 1,000 runs cannot be split: fetch reports it as `FAILED listing` with the day and both numbers, exits 1, and still fetches what it did list.
+- A run that GitHub lists twice, because a new run shifted the pages while they were read, is now fetched and counted once (the larger `run_attempt` is kept), and fetch says `listing: run ID was listed twice; kept once`. A listing that comes back short of GitHub's own count is listed once more and reported as `FAILED listing` if it is still short. A repo under the cap makes the same calls and prints the same lines as before. qualitydirector 0.12.0.
+- Try: `Run quality.py fetch for the books with --since 30 days ago and tell me whether any listing was split or reported short.`
 
 ## bstack 0.29.0 (2026-11-21)
 
