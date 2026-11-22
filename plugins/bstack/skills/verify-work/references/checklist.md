@@ -34,6 +34,10 @@ Standard output holds the matching items and nothing else. Empty output means th
 | 0 | It ran. The items are checks for you to run, and the script blocks nothing. A repo with no `.agents/checklist.json` also exits 0, and says so on standard error. |
 | 2 | It could not run: a folder that is not the top of a git work tree, a ref git does not know, a checklist file that is not JSON or breaks the format, or `--file` naming a file that is not there. A format message names the item and the key. |
 
+## Recording an item in a ledger run
+
+In a run that keeps a ledger, `scripts/receipt.py --run RUN_ID --actor ACTOR_JSON --item ID` runs the item's check and appends a `verification` entry whose verdict comes from the exit code: 0 is VERIFIED, anything else NOT VERIFIED, and a dirty tree or `--not-run TEXT` makes a pass INCONCLUSIVE. A command item runs its own command, read from the checklist as HEAD has it, so an uncommitted edit cannot change what ran. A question item needs the command that answers its probe after `--`. The entry's `data.checklist` holds the item's id, the file and its hash, the command, the commit and the exit code, and the output is kept in `.evidence/<run-id>/checklist-<id>.txt`. `ledger show` lists the entry. `ledger receipts` does not: it lists spec criteria.
+
 ## The file
 
 `.agents/checklist.json` at the repo root, or the file `--file` names:

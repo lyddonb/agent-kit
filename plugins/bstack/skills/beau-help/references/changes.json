@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.35.0",
+      "date": "2026-11-21",
+      "plugin": "bstack",
+      "version": "0.35.0",
+      "changes": [
+        "A reliability checklist item's result in a ledger run now comes from an exit code, not from the agent. `receipt.py --run RUN_ID --actor ACTOR --item ID` runs the item's check and appends a `verification` entry with the verdict, the command, the commit and the checklist's hash. A command item runs its own command as the committed checklist states it; a question item takes the command that answers its probe after `--`. The ledger's format is unchanged, so the entry shows in `ledger show` and not in `ledger receipts`."
+      ],
+      "try": "Run the reliability checklist against origin/main and record each item it prints in the ledger run."
+    },
+    {
       "id": "bstack@0.34.0",
       "date": "2026-11-21",
       "plugin": "bstack",
