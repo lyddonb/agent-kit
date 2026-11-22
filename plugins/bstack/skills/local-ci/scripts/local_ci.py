@@ -140,12 +140,16 @@ def branch_job(repo: Repo, branch: str) -> Job:
     return Job(repo, head["sha"], f"refs/heads/{branch}", branch, None)
 
 
-def needs_run(job: Job, timeout: int) -> bool:
+def latest_status(job: Job) -> Optional[dict]:
     statuses = gh(f"repos/{job.repo.github}/commits/{job.sha}/statuses?per_page=100")
     mine = [s for s in statuses if s["context"] == CONTEXT]  # newest first
-    if not mine:
+    return mine[0] if mine else None
+
+
+def needs_run(job: Job, timeout: int) -> bool:
+    latest = latest_status(job)
+    if latest is None:
         return True
-    latest = mine[0]
     if latest["state"] != "pending":
         return False
     started = dt.datetime.fromisoformat(latest["updated_at"].replace("Z", "+00:00"))
@@ -271,21 +275,24 @@ def run_job(job: Job, timeout: int) -> str:
             shutil.rmtree(work, ignore_errors=True)
 
 
-def locked(fn):
-    """One run at a time on this machine; a tick that finds the lock taken does nothing."""
-    def wrapper(*a, **k):
-        state_dir().mkdir(parents=True, exist_ok=True)
-        with (state_dir() / "lock").open("w") as fh:
-            try:
-                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                print("another local-ci run holds the lock; skipping")
-                return 0
-            return fn(*a, **k)
-    return wrapper
+def locked(wait: bool):
+    """One run at a time on this machine. A tick that finds the lock taken does nothing; `run`
+    waits for it, so it never reports on a sha another run on this machine is still working on."""
+    def deco(fn):
+        def wrapper(*a, **k):
+            state_dir().mkdir(parents=True, exist_ok=True)
+            with (state_dir() / "lock").open("w") as fh:
+                try:
+                    fcntl.flock(fh, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    print("another local-ci run holds the lock; skipping")
+                    return 0
+                return fn(*a, **k)
+        return wrapper
+    return deco
 
 
-@locked
+@locked(wait=False)
 def cmd_tick(repos: List[Repo], timeout: int) -> int:
     bad = 0
     for repo in repos:
@@ -306,11 +313,15 @@ def cmd_tick(repos: List[Repo], timeout: int) -> int:
     return 1 if bad else 0
 
 
-@locked
+@locked(wait=True)
 def cmd_run(job: Job, timeout: int, force: bool) -> int:
-    if not force and not needs_run(job, timeout):
-        print(f"{job.label}: already has a finished {CONTEXT} status (pass --force to rerun)")
-        return 0
+    """Exit 0 only when the sha's verdict is success, whether this call ran it or found it."""
+    latest = None if force else latest_status(job)
+    if latest is not None and latest["state"] != "pending":
+        # Holding the lock, a pending can only be from a run that died or another machine: rerun it.
+        print(f"{job.label}: {latest['state']} (existing: {latest.get('description', '')}; "
+              f"pass --force to rerun)")
+        return 0 if latest["state"] == "success" else 1
     state = run_job(job, timeout)
     print(f"{job.label}: {state}")
     return 0 if state == "success" else 1

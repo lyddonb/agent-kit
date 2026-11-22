@@ -30,8 +30,10 @@ Install from a checkout that stays put (the plist records the script's path and 
 
 ## On a PR in a local-CI repo
 
-- After pushing, run it now rather than waiting for the tick: `local_ci.py run --repo OWNER/NAME=CHECKOUT --pr N`. It exits 0 only on `success`.
+- After pushing, run it now rather than waiting for the tick: `local_ci.py run --repo OWNER/NAME=CHECKOUT --pr N`. It waits for any run in progress on this machine and exits 0 only when the head's verdict is `success`, whether it ran it or found it.
 - A PR is green only when its head sha has a `success` `local-ci` status. No status means the machine was off or asleep: run it yourself. Never read a missing status as passing.
+- It tests the PR head, not the merge with the base. Rebase a PR that sits behind a base change before trusting a green.
+- `error` means the run never started (no `scripts/ci` at that commit, a failed checkout). It stays until a new commit or `--force`.
 - Red: read the PR comment or the run's log, reproduce with `./scripts/ci`, and fix the cause. `--force` reruns a sha that already has a verdict; use it only after fixing something outside the repo (a tool, the machine), never to fish for green.
 
 ## Trust

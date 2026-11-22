@@ -1,19 +1,23 @@
-$ python3 -m unittest tests.test_local_ci  (at d734712)
-test_failing_pr_gets_failure_and_one_comment_then_edited_on_pass (tests.test_local_ci.LocalCITest) ... ok
-test_finished_sha_is_not_rerun (tests.test_local_ci.LocalCITest) ... ok
-test_fork_pr_never_runs (tests.test_local_ci.LocalCITest) ... ok
-test_missing_scripts_ci_is_error (tests.test_local_ci.LocalCITest) ... ok
-test_moved_head_posts_nothing_for_the_old_sha (tests.test_local_ci.LocalCITest) ... ok
+$ python3 -m unittest -v tests.test_local_ci
 test_old_finished_status_is_not_rerun (tests.test_local_ci.LocalCITest) ... ok
 test_passing_pr_gets_success_and_no_comment (tests.test_local_ci.LocalCITest) ... ok
+test_run_exit_code_follows_an_existing_verdict (tests.test_local_ci.LocalCITest) ... ok
 test_run_force_reruns_a_finished_sha (tests.test_local_ci.LocalCITest) ... ok
+test_run_reruns_a_fresh_pending_once_it_holds_the_lock (tests.test_local_ci.LocalCITest) ... ok
+test_run_waits_for_a_tick_holding_the_lock (tests.test_local_ci.LocalCITest) ... /Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/case.py:550: ResourceWarning: unclosed file <_io.BufferedReader name=4>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/case.py:550: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
 test_stale_pending_is_rerun_and_fresh_pending_is_not (tests.test_local_ci.LocalCITest) ... ok
 test_tick_output_names_each_job (tests.test_local_ci.LocalCITest) ... ok
 test_timeout_is_failure (tests.test_local_ci.LocalCITest) ... ok
 
 ----------------------------------------------------------------------
-Ran 12 tests in 15.572s
+Ran 15 tests in 21.528s
 
 OK
 
-Mutants, each run against the suite: skip logic (finished vs pending) -> test_old_finished_status_is_not_rerun FAIL; fork filter off -> test_fork_pr_never_runs FAIL; moved-head check off -> test_moved_head_posts_nothing_for_the_old_sha FAIL.
+Mutants, each run against the suite: skip logic -> test_old_finished_status_is_not_rerun FAIL; fork filter off -> test_fork_pr_never_runs FAIL; moved-head check off -> test_moved_head_posts_nothing_for_the_old_sha FAIL; run not waiting for the lock -> test_run_waits_for_a_tick_holding_the_lock FAIL.

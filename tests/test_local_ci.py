@@ -212,11 +212,43 @@ class LocalCITest(unittest.TestCase):
         self.run_ci("tick")
         self.assertNotIn(sha, self.read_state()["statuses"])
 
+    def test_run_exit_code_follows_an_existing_verdict(self):
+        sha = self.add_pr(13, "exit 1")
+        self.run_ci("tick")
+        p = self.run_ci("run", "--pr", "13")
+        self.assertEqual(p.returncode, 1, "an existing failure is not reported as success")
+        self.assertIn("failure (existing", p.stdout)
+        self.assertEqual(len(self.final(sha)), 1, "nothing reruns without --force")
+
+    def test_run_reruns_a_fresh_pending_once_it_holds_the_lock(self):
+        sha = self.add_pr(14, "echo ok")
+        st = self.read_state()
+        st["statuses"][sha] = [{"state": "pending", "context": "local-ci", "updated_at": "2099-01-01T00:00:00Z"}]
+        self.write_state(st)
+        p = self.run_ci("run", "--pr", "14")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(self.final(sha)[-1]["state"], "success")
+
+    def test_run_waits_for_a_tick_holding_the_lock(self):
+        sha = self.add_pr(15, "sleep 2; exit 1")
+        tick = subprocess.Popen([sys.executable, str(SCRIPT), "tick", "--repo", f"{REPO}={self.checkout}"],
+                                env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        lock = self.tmp / "ci-state" / "lock"
+        for _ in range(100):
+            if self.read_state().get("statuses", {}).get(sha):
+                break
+            subprocess.run(["sleep", "0.1"])
+        p = self.run_ci("run", "--pr", "15")
+        tick.wait()
+        self.assertTrue(lock.exists())
+        self.assertEqual(p.returncode, 1, "run waited and reported the tick's failure, not 0 for 'skipping'")
+        self.assertNotIn("skipping", p.stdout)
+
     def test_run_force_reruns_a_finished_sha(self):
         sha = self.add_pr(9, "echo ok")
         self.run_ci("tick")
         p = self.run_ci("run", "--pr", "9")
-        self.assertIn("already has", p.stdout)
+        self.assertIn("success (existing", p.stdout)
         self.run_ci("run", "--pr", "9", "--force")
         self.assertEqual(len(self.final(sha)), 2)
 
