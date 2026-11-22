@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.36.0 (2026-11-22)
+
+- A private repo's CI can now run on your Mac instead of GitHub-hosted runners. The new local-ci skill runs the repo's `scripts/ci` at each open PR head and the default branch head in a throwaway worktree, and posts the result as the `local-ci` commit status, which the PR's checks list shows. A red run also leaves one PR comment with the end of the log. `local_ci.py install --repo OWNER/NAME=CHECKOUT` sets up a launchd agent that checks every five minutes; `local_ci.py run --pr N` runs one PR now.
+- Try: `Move this repo's CI to local-ci and run it on my open PR.`
+
 ## bstack 0.35.0 (2026-11-21)
 
 - A reliability checklist item's result in a ledger run now comes from an exit code, not from the agent. `receipt.py --run RUN_ID --actor ACTOR --item ID` runs the item's check and appends a `verification` entry with the verdict, the command, the commit and the checklist's hash. A command item runs its own command as the committed checklist states it; a question item takes the command that answers its probe after `--`. The ledger's format is unchanged, so the entry shows in `ledger show` and not in `ledger receipts`.
