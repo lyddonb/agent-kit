@@ -1,10 +1,10 @@
 ---
 name: qualitydirector
-description: The Quality Director measures what a repo's tests cost and what they catch, from per-test time and outcome, and proposes changes for you to approve. It records a unittest run to JSON Lines, fetches the runs of watched repos from GitHub, books them into the quality books (runs.csv, failures.csv, tests-weekly.csv), checks them, summarizes a week as JSON, audits a repo's workflow files for CI speed facts (`audit-ci`), books skill use from this machine's agent transcripts (`book-skills`), and checks text for private repo details before it goes public (`leak-check`). Use for "run the weekly quality brief", "record the tests", "how long do our tests take", "fetch and book the test runs", "book the test runs", "quality summary for the week", "check the quality books", "audit the CI of a repo", "which CI speed proposals are open", "which tests are slow or flaky", "book skill use", "which skills get used", "check this for private repo details before it goes public", or when a quality books CI check fails.
+description: The Quality Director measures what a repo's tests cost and what they catch, from per-test time and outcome, and proposes changes for you to approve. It records a unittest or pytest run (`record`, `record-junit`) to JSON Lines, fetches the runs of watched repos from GitHub, books them into the quality books, checks them, summarizes a week as JSON, audits a repo's workflow files for CI speed facts (`audit-ci`), books skill use from this machine's agent transcripts (`book-skills`), and checks text for private repo details before it goes public (`leak-check`). Use for "run the weekly quality brief", "record the tests", "record a pytest run", "how long do our tests take", "fetch and book the test runs", "quality summary for the week", "check the quality books", "audit the CI of a repo", "which CI speed proposals are open", "which tests are slow or flaky", "book skill use", "which skills get used", "check this for private repo details before it goes public", or when a quality books CI check fails.
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.13.0"
+  version: "0.14.0"
 ---
 
 # Quality Director
@@ -49,6 +49,52 @@ The recorder is stricter than plain unittest in three cases, where it exits 1 in
 - A test ended the process while it ran (`os._exit(0)`), which leaves an `error` row.
 
 A recorder started with SIGHUP or SIGINT ignored (under `nohup`, or `cmd &` in a non-interactive shell) leaves it ignored for the suite, as plain unittest would; SIGTERM and SIGHUP otherwise go on to the suite. Bad usage exits 2, including an output directory that is missing or not writable, which is found before any test runs. The file goes to the path as given from the starting directory, even if a test changes directory.
+
+## Record a pytest run
+
+For a repo whose tests run under pytest. The command runs your pytest command and turns the JUnit XML file pytest writes into the same record `record` writes, so `fetch`, `ingest`, `check` and `summary` need no change.
+
+```sh
+uv run python <skill dir>/scripts/quality.py record-junit --junit "$RUNNER_TEMP/junit.xml" \
+  --out "$RUNNER_TEMP/test-results.jsonl" --repo NAME \
+  --sha "${{ github.event.pull_request.head.sha || github.sha }}" \
+  -- pytest --junitxml="$RUNNER_TEMP/junit.xml"
+```
+
+In a GitHub Actions job for a uv project, the step and the upload that follows it:
+
+```yaml
+- name: Run tests and record them
+  run: >
+    uv run python <skill dir>/scripts/quality.py record-junit
+    --junit "$RUNNER_TEMP/junit.xml" --out "$RUNNER_TEMP/test-results.jsonl" --repo NAME
+    --sha "${{ github.event.pull_request.head.sha || github.sha }}"
+    -- pytest --junitxml="$RUNNER_TEMP/junit.xml"
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: test-results-NAME
+    path: ${{ runner.temp }}/test-results.jsonl
+```
+
+The rules:
+
+- Run quality.py with the interpreter the tests use (`uv run python ...`): the header's `python` is the version of the interpreter that runs quality.py.
+- Everything after `--` is the command. It runs without a shell, in the current directory and environment, with stdin, stdout and stderr inherited, and the command adds no arguments to it. Pytest must write `--junit FILE` itself (`--junitxml=FILE`). Call pytest directly or through `uv run`, which keeps its exit status. A wrapper that changes the status (`make test` exits 2 when a test fails) makes every failing run incomplete.
+- Before anything runs, these exit 2: no command after `--`, a command that is not found, an `--out` that cannot be written, a `--junit` directory that does not exist, and a `--junit` file that already exists. The last rule means a file left by an earlier run is never booked. Delete it first. The command never deletes or edits the file.
+- `wall_ms` is the time around the whole command, measured from outside. `exit_code` is the command's status as a shell says it (128+N after signal N). `sha` and `evidence` are set as `record` sets them.
+- The command exits with the same verdict as `record`: the command's own status when it is not 0, and 1 when a 0 run is incomplete, has no rows or has a fail or error row.
+- `complete` is `true` only when the command exited 0, 1 or 5, the XML file was read and converted, and nothing in it is in doubt (below). Pytest's 0 is all passed, 1 some failed, 2 interrupted (also a collection error when not running under pytest-xdist), 3 an internal error, 4 a usage error and 5 no tests collected. Exits 2, 3 and 4 and a death by signal give `complete: false`. Exit 5 is complete with no rows, and the run is still red.
+- Two things put a file that parsed in doubt, and make the run incomplete with one stderr line each. A test id listed more than once with a passing entry is how a rerun plugin (pytest-rerunfailures) writes a failed attempt, as an empty testcase: the failure would be booked as a pass, so reruns are not supported. And an exit of 1 with no failing test in the file means pytest saw a failure that the file does not show in a form this reader knows. A test listed twice with a failure and a teardown error is not in doubt.
+- When the file is missing, not a regular file, unreadable or refused, the record has no test rows and `complete: false`, one line on stderr says why, and the exit status is never 0, so the run books as red and is never silently missing.
+- The file is refused when it is over 8 MB, has a DOCTYPE declaration anywhere, is not valid XML, has a root other than `testsuites` or `testsuite`, or has more than 20,000 testcases. It is read with the standard library parser and nothing in it is evaluated.
+- Every `testcase` becomes one row, in file order. The `id` is `classname.name`, or `name` when the classname is empty (a collection error is `tests.test_broken`), and `(unnamed test)` when both are empty.
+- Every `testcase` element counts, at any depth and in any namespace. The `outcome` is `error` when the testcase has an `error` child, else `fail` for a `failure`, else `skip` for a `skipped`, else `pass`. Child names are matched without their namespace and in any case, and a plugin's `rerunFailure`, `flakyFailure`, `rerunError` and `flakyError` count as a failure or an error: that attempt failed. So an xfail is `skip`, a non-strict xpass is `pass`, a strict xpass is `fail`, and a setup, teardown or collection error is `error`.
+- `ms` is the testcase's `time` in milliseconds, rounded. Only a plain decimal number in ASCII digits is read (`1.5`, `2e-3`); anything else (missing, negative, `nan`, `inf`, `1_000`) gives 0, and one test's time is capped at a day (86,400,000 ms). By default pytest's time includes fixture setup and teardown, which matches what `record` measures.
+- An id over 1000 characters is shortened to exactly 1000: its first 984 characters, then `...#` and the first 12 hex characters of the SHA-256 of the full id. The same id always gives the same short id, and two long ids that share a prefix stay apart.
+- No other id is changed. An id with a control character or a formula-like start is written as it is, and `ingest` then rejects the whole file, as it would a unittest record.
+
+Per-test times under parallel workers (pytest-xdist, `-n`) include contention for the CPU, so they are not comparable with a serial run. The suite's `wall_ms` is comparable.
 
 ## The books
 
