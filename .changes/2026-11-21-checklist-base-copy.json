@@ -32,5 +32,5 @@
       "impact": "Until a gate reads it, running the checklist and doing what it prints stay the author's choice. This change only fixes which items apply."
     }
   ],
-  "release": {"see": "changes.yaml bstack@0.32.0"}
+  "release": {"see": "changes.yaml bstack@0.33.0"}
 }
