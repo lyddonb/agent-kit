@@ -1,0 +1,83 @@
+Run on commit 83d1aaf, 2026-11-21, macOS, Python 3.12, against the quality books and the real GitHub API.
+BOOKS_DIR stands for the quality books checkout.
+
+$ quality.py sweep BOOKS_DIR phase-spec --at 2026-11-16
+sweep phase-spec: 0 of 3 public watched repos held docs/phases/*.md on the default branch on 2026-11-16
+none: lyddonb/agent-kit
+none: lyddonb/agent-ledger
+none: lyddonb/agentfiles
+1 private watched repo was not checked and is not named here. Check with --with-private, and keep that answer out of public text.
+exit 0
+
+$ quality.py sweep BOOKS_DIR phase-spec
+sweep phase-spec: 0 of 3 public watched repos held docs/phases/*.md on the default branch today
+none: lyddonb/agent-kit
+none: lyddonb/agent-ledger
+none: lyddonb/agentfiles
+1 private watched repo was not checked and is not named here. Check with --with-private, and keep that answer out of public text.
+exit 0
+
+$ quality.py sweep BOOKS_DIR verify-skill
+sweep verify-skill: 2 of 3 public watched repos held .agents/skills/verify-*/SKILL.md or .claude/skills/verify-*/SKILL.md on the default branch today
+- lyddonb/agent-kit: .claude/skills/verify-kit/SKILL.md
+- lyddonb/agent-ledger: .agents/skills/verify-ledger/SKILL.md
+none: lyddonb/agentfiles
+1 private watched repo was not checked and is not named here. Check with --with-private, and keep that answer out of public text.
+exit 0
+
+$ quality.py sweep BOOKS_DIR review-guide
+sweep review-guide: 1 of 3 public watched repos held REVIEW.md on the default branch today
+- lyddonb/agent-kit: REVIEW.md
+none: lyddonb/agent-ledger
+none: lyddonb/agentfiles
+1 private watched repo was not checked and is not named here. Check with --with-private, and keep that answer out of public text.
+exit 0
+
+$ checklist.py --base 088cd28^ --head 088cd28   (item ids only)
+checklist: 3 of 6 items match 774183c..088cd28 (17 changed files)
+phase-spec-format
+format-sweep
+plugins-in-step
+
+$ checklist.py --base 1efc163^ --head 1efc163   (a docs-only commit)
+checklist: 0 of 6 items match d76bdd4..1efc163 (2 changed files)
+
+$ git ls-tree on origin/main of each public repo's local checkout, the same question asked without GitHub
+  (counts: verify skills, REVIEW.md, phase specs today; phase specs at the last commit by 2026-11-16)
+agent-kit: 1 1 0; 774183c: 0
+agent-ledger: 1 0 0; 62b981f: 0
+agentfiles: 0 0 0; 0c2fbd4: 0
+
+$ PATH=SHIM:$PATH quality.py sweep BOOKS_DIR review-guide   (SHIM/gh exits 1 on `auth status` and passes the rest to the real gh)
+sweep review-guide: 1 of 3 public watched repos held REVIEW.md on the default branch today
+- lyddonb/agent-kit: REVIEW.md
+none: lyddonb/agent-ledger
+none: lyddonb/agentfiles
+1 private watched repo was not checked and is not named here. Check with --with-private, and keep that answer out of public text.
+exit 0
+
+$ python -m unittest -v test_quality_sweep   (in tests/)
+test_a_commit_listing_that_names_no_commit_is_could_not_check (test_quality_sweep.AtADayTest.test_a_commit_listing_that_names_no_commit_is_could_not_check) ... ok
+test_a_day_that_is_not_a_date_is_a_usage_error (test_quality_sweep.AtADayTest.test_a_day_that_is_not_a_date_is_a_usage_error) ... ok
+test_it_reads_the_commit_of_that_day_and_names_it (test_quality_sweep.AtADayTest.test_it_reads_the_commit_of_that_day_and_names_it) ... ok
+test_a_star_stays_inside_one_folder (test_quality_sweep.GlobTest.test_a_star_stays_inside_one_folder) ... ok
+test_a_private_repo_is_never_asked_about_or_named (test_quality_sweep.PrivateRepoTest.test_a_private_repo_is_never_asked_about_or_named) ... ok
+test_a_repo_with_no_visibility_row_or_a_failed_lookup_counts_as_private (test_quality_sweep.PrivateRepoTest.test_a_repo_with_no_visibility_row_or_a_failed_lookup_counts_as_private) ... ok
+test_books_without_visibility_are_refused_before_any_call (test_quality_sweep.PrivateRepoTest.test_books_without_visibility_are_refused_before_any_call) ... ok
+test_nothing_private_is_printed_when_every_call_fails (test_quality_sweep.PrivateRepoTest.test_nothing_private_is_printed_when_every_call_fails) ... ok
+test_with_private_names_them_under_a_warning (test_quality_sweep.PrivateRepoTest.test_with_private_names_them_under_a_warning) ... ok
+test_an_unknown_kind_is_a_usage_error (test_quality_sweep.PublicListTest.test_an_unknown_kind_is_a_usage_error) ... ok
+test_each_kind_matches_only_where_its_generator_writes (test_quality_sweep.PublicListTest.test_each_kind_matches_only_where_its_generator_writes) ... ok
+test_it_lists_the_public_repo_that_holds_one_and_says_which_holds_none (test_quality_sweep.PublicListTest.test_it_lists_the_public_repo_that_holds_one_and_says_which_holds_none) ... ok
+test_json_holds_every_path (test_quality_sweep.PublicListTest.test_json_holds_every_path) ... ok
+test_more_paths_than_are_shown_are_counted (test_quality_sweep.PublicListTest.test_more_paths_than_are_shown_are_counted) ... ok
+test_a_failed_call_is_could_not_check_and_exits_1 (test_quality_sweep.UnknownIsNotNoneTest.test_a_failed_call_is_could_not_check_and_exits_1) ... ok
+test_a_file_list_cut_short_with_a_match_still_holds (test_quality_sweep.UnknownIsNotNoneTest.test_a_file_list_cut_short_with_a_match_still_holds) ... ok
+test_a_file_list_cut_short_with_no_match_is_could_not_check (test_quality_sweep.UnknownIsNotNoneTest.test_a_file_list_cut_short_with_no_match_is_could_not_check) ... ok
+test_an_answer_that_is_not_a_file_list_is_could_not_check (test_quality_sweep.UnknownIsNotNoneTest.test_an_answer_that_is_not_a_file_list_is_could_not_check) ... ok
+test_books_that_fail_check_are_refused (test_quality_sweep.UnknownIsNotNoneTest.test_books_that_fail_check_are_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in N s
+
+OK

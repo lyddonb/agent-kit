@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "goal": "Roadmap R40: when a change breaks an artifact the kit generated in other repos (a phase spec, a verify-<app> skill, a REVIEW.md), the PR lists the watched repos that hold one and names the upgrade PR for each.",
+  "changed": [
+    "`quality.py sweep BOOKS_DIR KIND` lists the watched repos whose default branch holds the artifact, read from GitHub's file list and not from a checkout. `--at DAY` reads the branch as it was that day.",
+    "The list names public repos only. A repo the books do not count as public is not asked about and not named, only counted, unless `--with-private` is given.",
+    "The Authoring a skill playbook has the rule as step 7, and agent-kit's checklist has a `format-sweep` item that asks for the list when a diff touches those formats.",
+    "The replay against the 0.12.0 spec change lists no repo: none of the three public watched repos held a phase spec that day. The roadmap's done-when expected a list of product repos, and the public list is empty."
+  ],
+  "claims": [
+    {
+      "claim": "Replayed against the 0.12.0 spec change (`sweep phase-spec --at 2026-11-16`, the day before commit 088cd28 landed), the public list is empty: none of the three public watched repos held a file under docs/phases/.",
+      "verdict": "VERIFIED",
+      "check": "quality.py sweep on the quality books against the real GitHub API, macOS, Python 3.12",
+      "commit": "83d1aaf",
+      "record": ".changes/2026-11-21-format-sweep/replay.txt",
+      "remaining": "The run used today's watch list, not the list of 2026-11-16. The private watched repo is not in this output by design: its answer was read with --with-private and is kept out of this repo."
+    },
+    {
+      "claim": "sweep finds real artifacts: today it lists the two public repos that hold a verify skill and the one that holds a REVIEW.md, and works where `gh auth status` fails.",
+      "verdict": "VERIFIED",
+      "check": "quality.py sweep verify-skill and review-guide on the quality books against the real GitHub API. The auth probe ran sweep behind a gh whose `auth status` exits 1: same output, exit 0, three `gh api` calls.",
+      "commit": "83d1aaf",
+      "record": ".changes/2026-11-21-format-sweep/replay.txt",
+      "remaining": "`git ls-tree` on each public repo's local origin/main gave the same answer in all twelve cells. No real repo's file list was large enough for GitHub to cut it short: that path is covered by a test on a made-up answer."
+    },
+    {
+      "claim": "By default a private watched repo is never asked about and nothing of it is printed, on success, with --json, with --at, and when every call fails. A repo with no visibility row, a failed lookup or a private row in its past counts as private.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_quality_sweep.py, PrivateRepoTest, on made-up books with one private repo and a fake gh that logs every call. With the filter removed, or with a second privacy rule in place of private_repos, these tests fail.",
+      "commit": "83d1aaf",
+      "record": ".changes/2026-11-21-format-sweep/replay.txt",
+      "remaining": "A fixture. On the real books the default output was read by hand and passed leak-check."
+    },
+    {
+      "claim": "The `format-sweep` checklist item fires on the commit that made the 0.12.0 spec change and stays quiet on a docs-only commit.",
+      "verdict": "VERIFIED",
+      "check": "checklist.py --base 088cd28^ --head 088cd28, and the same on 1efc163",
+      "commit": "e22484a",
+      "record": ".changes/2026-11-21-format-sweep/replay.txt",
+      "remaining": "Its paths have no pattern, so any edit to the six format files asks the question, breaking or not."
+    },
+    {
+      "claim": "An agent that follows step 7 of the Authoring a skill playbook runs the sweep and puts the list and the upgrade PRs in its PR.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "No eval ran on the new playbook text, and no breaking format change has shipped since."
+    }
+  ],
+  "next": [
+    {
+      "item": "Decide whether a product repo must be on the watch list before the kit generates artifacts in it",
+      "source": "inferred",
+      "why_now": "The sweep reads only `watched.csv`, and the watch list changes over time. A repo that holds a phase spec and is not watched never appears in any sweep.",
+      "impact": "Left alone, the next breaking format change can still miss a repo, and the PR's list will look complete."
+    },
+    {
+      "item": "R29: read the checklist from the base ref as well as the working tree",
+      "source": "ROADMAP.md R29",
+      "why_now": "`format-sweep` is one more item a PR can delete or loosen in the diff it judges.",
+      "impact": "A change that breaks a format and edits the item out gets no question."
+    },
+    {
+      "item": "Test step 7 on a fresh agent with a fixture change",
+      "source": "ROADMAP.md R13",
+      "why_now": "The rule is prose until an agent is seen following it, and the next breaking change is the first real use.",
+      "impact": "If agents skip the step, product repos break as they did at 0.12.0 and the script goes unused."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml, bstack 0.32.0"
+  }
+}
