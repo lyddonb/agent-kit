@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "goal": "Stop spending GitHub Actions minutes on private repos: run their CI on the Mac and report the result on the PR.",
+  "changed": [
+    "New bstack skill local-ci: local_ci.py runs a repo's scripts/ci at a commit in a throwaway worktree and posts the `local-ci` commit status; a red run on a PR leaves one comment with the end of the log.",
+    "install sets up a launchd agent that ticks every five minutes over open PR heads and the default branch head, skipping any sha with a finished status and rerunning a stale pending one."
+  ],
+  "claims": [
+    {
+      "claim": "Pass, fail with one edited comment, finished vs stale pending, missing scripts/ci, timeout, moved head, fork PRs, --force and an untouched clone behave as the SKILL.md says.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_local_ci.py, 12 end-to-end tests against a real bare repo and a stub gh; three mutants each turn one test red",
+      "commit": "d734712",
+      "record": ".changes/2026-11-22-local-ci/tests.txt",
+      "remaining": "The stub gh, not GitHub. macOS only for install."
+    },
+    {
+      "claim": "Against real GitHub, run --pr posts success on a passing PR and failure plus a comment naming the broken file on a failing one, and the installed launchd agent's first tick gave every open PR head and default branch head a verdict.",
+      "verdict": "VERIFIED",
+      "check": "four private-repo PRs and one throwaway PR with a planted formatting error, statuses read back with gh api; local_ci.py status after the first tick",
+      "commit": "47fd0c3",
+      "record": "https://github.com/lyddonb/agent-kit/pull/87",
+      "remaining": "The repos are private, so the statuses are not linked here. Only one machine has run it."
+    }
+  ],
+  "next": [
+    {
+      "item": "Book local runs' test records in the quality books",
+      "source": "inferred",
+      "why_now": "Repos that move to local-ci stop producing the Actions artifacts that quality.py fetch reads.",
+      "impact": "Until then those repos' per-test time and flakes drop out of the weekly brief."
+    }
+  ],
+  "release": {"see": "changes.yaml bstack@0.36.0"}
+}
