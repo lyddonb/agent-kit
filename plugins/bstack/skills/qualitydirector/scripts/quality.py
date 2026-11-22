@@ -752,6 +752,12 @@ def cmd_record(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 JUNIT_TAG_LEN = 12  # hex characters of the hash that keeps two shortened ids apart
+MAX_JUNIT_TEST_MS = 24 * 60 * 60 * 1000  # one test's time is capped at a day, so duplicate ids cannot add up past MAX_NUMBER
+_JUNIT_SECONDS = re.compile(r"[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")  # ASCII digits only: float() also takes "1_000" and other scripts' digits
+# A child element's name, without its namespace and in lower case, and the outcome it gives. pytest writes the first
+# three; the rerun and flaky ones come from plugins that rerun a failed test, and an attempt that failed is a failure.
+_JUNIT_OUTCOMES = (("error", "error"), ("rerunerror", "error"), ("flakyerror", "error"),
+                   ("failure", "fail"), ("rerunfailure", "fail"), ("flakyfailure", "fail"), ("skipped", "skip"))
 
 
 class _NoDoctype(ET.TreeBuilder):
@@ -769,27 +775,47 @@ def _junit_id(classname: str, name: str) -> str:
     return full[:MAX_CELL - len(tag)] + tag
 
 
+def _local(tag: object) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
+
+
 def _junit_outcome(case: ET.Element) -> str:
-    for child, outcome in (("error", "error"), ("failure", "fail"), ("skipped", "skip")):
-        if case.find(child) is not None:
+    children = {_local(child.tag) for child in case}
+    for name, outcome in _JUNIT_OUTCOMES:
+        if name in children:
             return outcome
     return "pass"
 
 
 def _junit_ms(text: str | None) -> int:
-    try:
-        seconds = float(text) if text is not None else 0.0
-    except ValueError:
+    """Seconds as pytest writes them, in whole milliseconds from 0 to a day. Anything that is not a plain decimal number is 0."""
+    if text is None or not _JUNIT_SECONDS.fullmatch(text):
         return 0
-    if not math.isfinite(seconds) or seconds < 0:
-        return 0
-    return round(min(seconds * 1000, MAX_NUMBER))  # seconds * 1000 can overflow to inf, which round() refuses
+    return round(min(float(text) * 1000, MAX_JUNIT_TEST_MS))  # a huge exponent gives inf, which min() caps
+
+
+def junit_doubts(rows: list[dict], child_code: int) -> list[str]:
+    """Why a converted file cannot be believed as a complete account of the run, though it parsed.
+    A test listed more than once with a passing entry is how a rerun plugin writes a failed attempt
+    (as an empty testcase), so the failure would be booked as a pass. And pytest's exit 1 says a test
+    failed, so a file with no failing row has dropped it in a shape this reader does not know."""
+    doubts = []
+    seen: dict[str, list[str]] = {}
+    for row in rows:
+        seen.setdefault(row["id"], []).append(row["outcome"])
+    rerun = sorted(test_id for test_id, outcomes in seen.items() if len(outcomes) > 1 and "pass" in outcomes)
+    if rerun:
+        doubts.append(f"{len(rerun)} test ids appear more than once with a passing entry (first: {printable(rerun[0])[:200]}); "
+                      "this is how a rerun plugin writes a failed attempt, and reruns are not supported")
+    if child_code == 1 and not any(row["outcome"] in FAILING for row in rows):
+        doubts.append("the command exited 1, which pytest uses when a test failed, but the file has no failing test")
+    return doubts
 
 
 def junit_rows(root: ET.Element) -> list[dict]:
-    """One row per testcase, in the file's order. Raises ValueError when there are too many."""
+    """One row per testcase (in any namespace), in the file's order. Raises ValueError when there are too many."""
     rows = []
-    for case in root.iter("testcase"):
+    for case in (el for el in root.iter() if _local(el.tag) == "testcase"):
         if len(rows) >= MAX_TEST_ROWS:
             raise ValueError(f"more than {MAX_TEST_ROWS} testcases")
         rows.append({"id": _junit_id(case.get("classname") or "", case.get("name") or ""),
@@ -800,6 +826,8 @@ def junit_rows(root: ET.Element) -> list[dict]:
 def read_junit(path: str) -> tuple[list[dict], str | None]:
     """The rows of a JUnit XML file, or no rows and why the file was refused. Nothing in it is evaluated."""
     try:
+        if not stat.S_ISREG(os.stat(path).st_mode):  # a FIFO would block the read forever
+            return [], "it is not a regular file"
         with open(path, "rb") as f:
             data = f.read(MAX_ARTIFACT_BYTES + 1)
     except FileNotFoundError:
@@ -884,9 +912,10 @@ def cmd_record_junit(args: argparse.Namespace) -> int:
     if child_code is None:
         return 2
     rows, why = read_junit(junit)
-    if why:
-        print(f"quality.py: junit file {printable(args.junit)}: {why}; recording the run as incomplete", file=sys.stderr)
-    complete = why is None and child_code in (0, 1, 5)  # pytest's 2, 3 and 4 mean it stopped early or never started; 5 ran and found nothing
+    doubts = [why] if why else junit_doubts(rows, child_code)
+    for doubt in doubts:
+        print(f"quality.py: junit file {printable(args.junit)}: {doubt}; recording the run as incomplete", file=sys.stderr)
+    complete = not doubts and child_code in (0, 1, 5)  # pytest's 2, 3 and 4 mean it stopped early or never started; 5 ran and found nothing
     header = run_header(args.repo, rows, started, wall_ms, child_code, complete, sha, env)
     code = exit_code(child_code, rows, complete)
     wrote = _write_record(out, args.out, header, rows)

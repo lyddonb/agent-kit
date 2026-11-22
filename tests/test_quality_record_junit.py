@@ -152,8 +152,42 @@ class Outcomes(RecordJunitCase):
                  "negative": "-1", "nan": "nan", "inf": "inf", "overflow": "1e400", "huge": "1e300", "times_1000_overflows": "1e306", "zero": "0"}
         rec = self.run_cmd(xml=junit_xml(*(case("t", n, time=v) for n, v in times.items())))
         got = {r["id"]: r["ms"] for r in rec.rows}
+        day = quality.MAX_JUNIT_TEST_MS
         self.assertEqual(got, {"t.plain": 1234, "t.rounds": 2, "t.tiny": 0, "t.missing": 0, "t.text": 0, "t.empty": 0,
-                               "t.negative": 0, "t.nan": 0, "t.inf": 0, "t.overflow": 0, "t.huge": 1 << 53, "t.times_1000_overflows": 1 << 53, "t.zero": 0})
+                               "t.negative": 0, "t.nan": 0, "t.inf": 0, "t.overflow": day, "t.huge": day, "t.times_1000_overflows": day, "t.zero": 0})
+
+    def test_only_plain_ascii_decimal_seconds_are_read(self):
+        times = {"underscore": "1_000", "arabic_indic": "\u0661", "plus": "+1", "spaces": " 1 ", "exp": "1.5e1", "just_under_a_day": "86399.999"}
+        rec = self.run_cmd(xml=junit_xml(*(case("t", n, time=v) for n, v in times.items())))
+        self.assertEqual({r["id"]: r["ms"] for r in rec.rows},
+                         {"t.underscore": 0, "t.arabic_indic": 0, "t.plus": 0, "t.spaces": 0, "t.exp": 15000, "t.just_under_a_day": 86399999})
+
+    def test_outcome_children_in_any_case_or_namespace_and_rerun_or_flaky_ones_count(self):
+        rec = self.run_cmd(xml=junit_xml(
+            case("t", "upper", child="<Failure/>"), case("t", "ns", child='<f:failure xmlns:f="urn:x"/>'),
+            case("t", "rerun", child="<rerunFailure/>"), case("t", "flaky", child="<flakyFailure/>"),
+            case("t", "flaky_error", child="<flakyError/>"), case("t", "inside_output", child="<system-out>&lt;failure/&gt;</system-out>"),
+            '<n:testcase xmlns:n="urn:y" classname="t" name="namespaced" time="0.1"><n:error/></n:testcase>'), code=1)
+        self.assertEqual(rec.outcomes(), {"t.upper": "fail", "t.ns": "fail", "t.rerun": "fail", "t.flaky": "fail",
+                                          "t.flaky_error": "error", "t.inside_output": "pass", "t.namespaced": "error"})
+        self.assertTrue(rec.header["complete"])
+
+    def test_a_rerun_plugins_empty_failed_attempt_makes_the_run_incomplete(self):
+        rec = self.run_cmd(xml=junit_xml(case("t", "flaky", time="0.000"), case("t", "flaky"), case("t", "steady")), code=0)
+        self.assertFalse(rec.header["complete"])
+        self.assertEqual(rec.exit, 1)
+        self.assertIn("appear more than once with a passing entry", rec.proc.stderr)
+
+    def test_a_test_with_a_failure_and_a_teardown_error_listed_twice_is_believed(self):
+        rec = self.run_cmd(xml=junit_xml(case("t", "both", child=FAIL), case("t", "both", child=ERROR)), code=1)
+        self.assertTrue(rec.header["complete"], rec.proc.stderr)
+        self.assertEqual(rec.proc.stderr, "")
+
+    def test_exit_1_with_no_failing_test_in_the_file_is_incomplete(self):
+        rec = self.run_cmd(xml='<testsuites failures="3"><testsuite>' + case("t", "a") + "</testsuite></testsuites>", code=1)
+        self.assertFalse(rec.header["complete"])
+        self.assertEqual(rec.exit, 1)
+        self.assertIn("exited 1", rec.proc.stderr)
 
 
 class Ids(RecordJunitCase):
@@ -273,6 +307,10 @@ class Refused(RecordJunitCase):
         rec = self.run_cmd(child=[sys.executable, "-c", "raise SystemExit(4)"])
         self.assertRefused(rec, "did not write it")
         self.assertEqual((rec.exit, rec.header["exit_code"]), (4, 4))
+
+    def test_a_fifo_left_at_the_path_is_refused_and_does_not_hang(self):
+        rec = self.run_cmd(child=["sh", "-c", 'mkfifo "$1"', "x", "junit.xml"])
+        self.assertRefused(rec, "not a regular file")
 
     def test_file_too_big(self):
         pad = "<!-- " + "x" * quality.MAX_ARTIFACT_BYTES + " -->"
