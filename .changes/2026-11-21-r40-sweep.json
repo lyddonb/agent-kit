@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "goal": "Roadmap R40: a change that breaks an artifact the kit generated in other repos ships with the list of watched repos that hold one.",
+  "changed": [
+    "sweep.py BOOKS_DIR --artifact NAME lists the watched repos holding a phase spec, a verify skill or a REVIEW.md, read through gh api. --containing keeps files in the old format, --at reads a past day, --public-only names no private repo.",
+    "The Authoring a skill playbook has a step that runs it and puts the repos in the PR.",
+    "The reliability checklist has a sixth item, generated-artifact-format.",
+    "No upgrade PR is owed today: the same sweep without --at finds no watched repo, public or private, still holding a phase spec in the old format."
+  ],
+  "claims": [
+    {
+      "claim": "Replayed against the 0.12.0 spec change, it lists the watched repo that held a phase spec in the old format.",
+      "verdict": "VERIFIED",
+      "check": "sweep.py on the real quality books with the real gh, --artifact phase-spec --at 2026-11-16 --containing '^## Acceptance': 1 of 4 watched repos; with --public-only, 0 of 3 public and 1 private",
+      "commit": "d0e5bf0",
+      "record": ".changes/2026-11-21-r40-sweep/replay.txt",
+      "remaining": "Only the --public-only output is kept here, because the holder is private. Nobody ran the old or new checker against that repo: the sweep finds the old format by a pattern."
+    },
+    {
+      "claim": "It works where gh auth status fails, and the new checklist item fires on the commit behind it (088cd28).",
+      "verdict": "VERIFIED",
+      "check": "sweep.py with a gh wrapper whose auth status exits 1; checklist.py --base 088cd28^ --head 088cd28",
+      "commit": "21a1283",
+      "record": ".changes/2026-11-21-r40-sweep/replay.txt",
+      "remaining": "A real Claude Code cloud session."
+    },
+    {
+      "claim": "Private repos are never named under --public-only, failures included, and hostile gh output ends in a message.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_sweep.py (25 tests, fake gh) under /usr/bin/python3 3.9.6; make check validate unit (1,153 tests); verify-kit 4 of 4; make claude-validate",
+      "commit": "21a1283",
+      "record": ".changes/2026-11-21-r40-sweep/replay.txt",
+      "remaining": "A gh answer over 32 MB is refused only after it is read into memory. A slow regular expression given to --containing is not guarded."
+    },
+    {
+      "claim": "An agent following the new playbook step runs the sweep and lists the repos in its PR.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "No eval ran on the playbook text. The command in it passes the command lint."
+    }
+  ],
+  "next": [],
+  "release": {
+    "see": "changes.yaml bstack@0.33.0"
+  }
+}

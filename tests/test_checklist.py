@@ -320,7 +320,8 @@ class SeededChecklistTest(unittest.TestCase):
     def test_it_parses_and_no_trigger_is_dead(self):
         items = checklist.parse_checklist((ROOT / ".agents/checklist.json").read_text(), ".agents/checklist.json")
         self.assertEqual([i.id for i in items],
-                         ["books-layout", "phase-spec-format", "plugins-in-step", "gh-call", "skill-description"])
+                         ["books-layout", "phase-spec-format", "plugins-in-step", "gh-call", "skill-description",
+                          "generated-artifact-format"])
         tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], check=True, capture_output=True,
                                  text=True).stdout.split("\0")
         for i in items:

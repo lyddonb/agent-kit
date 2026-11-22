@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.33.0 (2026-11-21)
+
+- A change that breaks an artifact the kit generated in other repos can now list the repos that hold one. `sweep.py BOOKS_DIR --artifact phase-spec` reads the quality books' watched repos through `gh api` and prints each repo with the files it holds (`phase-spec`, `verify-skill` or `review`). `--containing REGEX` keeps only files in the old format, `--at YYYY-MM-DD` reads the repos as they were that day so a past change can be replayed, and `--public-only` names no private repo.
+- The Authoring a skill playbook has a step for it: list the repos in the PR and open or name an upgrade PR for each. The reliability checklist gains `generated-artifact-format`, which fires on a change to the product scaffold's checker and templates or to the verification skill generator.
+- Try: `Run sweep.py on the quality books for review, and tell me which watched repos hold a REVIEW.md.`
+
 ## bstack 0.32.0 (2026-11-21)
 
 - A change can no longer switch off the checklist item that judges it. `checklist.py` also reads `.agents/checklist.json` as the merge base has it: an item there that matches the diff still prints when the diff removes it, or edits it so that it no longer fires, with a `note:` line saying so. Deleting the whole file does not silence it.
