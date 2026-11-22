@@ -3,6 +3,13 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.36.0 (2026-11-21)
+
+- New `no-comments` skill deletes the comments a change adds and fixes the code that leaned on them. A `comment-sicko` subagent removes every comment outside a short keep-list (license headers, public API doc comments, constraints from things we cannot change, issue links) and flags the symbols a comment was covering for. You get the fixes, and an offer to turn each "do not remove" note into a type, a test or a check. Adapted from pstack.
+- A diff that adds a comment to a Python file can now fail a check. `comments.py --base origin/main` lists each added comment and exits 1. A moved comment adds nothing, and a shebang, a tool directive, a license header and a comment with a link always pass. agent-kit's own reliability checklist runs it on every change to a Python file.
+- beau-mode's rule on comments is stricter: a comment that explains a surprise in our own code is no longer allowed, because the fix is to reshape the code. Opening a PR runs `no-comments` when the diff adds comments.
+- Try: `Run /no-comments on this branch's diff.`
+
 ## bstack 0.35.0 (2026-11-21)
 
 - A reliability checklist item's result in a ledger run now comes from an exit code, not from the agent. `receipt.py --run RUN_ID --actor ACTOR --item ID` runs the item's check and appends a `verification` entry with the verdict, the command, the commit and the checklist's hash. A command item runs its own command as the committed checklist states it; a question item takes the command that answers its probe after `--`. The ledger's format is unchanged, so the entry shows in `ledger show` and not in `ledger receipts`.

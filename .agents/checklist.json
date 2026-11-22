@@ -105,6 +105,21 @@
       "source": "bstack 0.12.0 (commit 088cd28): phase specs changed format, `check-product.py` began to enforce it, and no step listed the product repos holding a spec in the old format.",
       "added": "2026-11-21",
       "review_by": "2027-02-21"
+    },
+    {
+      "id": "added-comment",
+      "trigger": {
+        "paths": [
+          "**/*.py"
+        ],
+        "pattern": "#"
+      },
+      "check": {
+        "command": "python3 plugins/bstack/skills/no-comments/scripts/comments.py --base origin/main"
+      },
+      "source": "No incident is on record. The item holds this repo to the no-comments rule bstack 0.36.0 adopted from pstack. Replayed over the 156 commits on main before it, the command fails on 60, for example commit 990c84f, which added 70 comments.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
     }
   ]
 }
