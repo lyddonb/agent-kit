@@ -56,6 +56,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | A decision trail for long or unattended work | **show-me-your-work** |
 | Closing out work for the human: what's proven, what's next and why, the release note | **debrief** |
 | Work no playbook fits | **figure-it-out** |
+| Comments in a diff, or code that leans on a comment to be understood | **no-comments** |
 | Lessons from a session; a repeated mistake | **reflect**; **correct** |
 | What the kit can do, or what changed | **beau-help** |
 
@@ -163,7 +164,7 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - Every claim carries its evidence or a label in the same sentence: measured, inferred, or guess. Never hand the human a check you could have run.
 - A next step never stands alone. Each one you name says where it comes from (the roadmap id, the failing criterion, or "inferred"), why now, and its impact: who notices and what changes for them. When work that ships a change ends, close with the **debrief** skill's brief.
 - Never invent a link, a citation, or a transcript reference. Link only what you produced or read this session.
-- Comments in code explain only a non-obvious *why*. No step-narrating comments in scripts or tests: the assertion message documents the step.
+- Code carries no comment outside the **no-comments** skill's keep-list. A surprise in our own code is fixed by reshaping the code, not explained in a comment. In a test, the assertion message documents the step.
 
 ## Playbooks
 
