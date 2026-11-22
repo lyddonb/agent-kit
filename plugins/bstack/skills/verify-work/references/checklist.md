@@ -81,4 +81,16 @@ Any other key is refused, so a misspelled key cannot silently turn an item off.
 
 ## What it does not do
 
-It selects checks. It does not run them, and it does not fail a build. The checklist file is read from the working tree, so a change can edit the item that would have judged it: review a diff to `.agents/checklist.json` as you would a diff to a test.
+It selects checks. It does not run them, and it does not fail a build.
+
+## A change cannot switch off its own item
+
+The script reads the checklist twice: from the working tree, and as the merge base has it. An item in the base's copy that matches the diff is still printed when the diff removes it, or edits it so that it no longer fires, with a line that says so:
+
+```text
+gh-call
+  note: this diff removes this item; shown as it was at 1e3f753
+  fired on: .github/workflows/release.yml:31: +gh auth status
+```
+
+Check it like any other item. If the item is wrong, removing it is fine: say why in the pull request. Deleting the whole file does not silence it either. A new item, and an edit that keeps the item firing, are read from the working tree. This covers the checklist's content, not the script: an agent runs the installed plugin's copy, and nothing in CI runs either.

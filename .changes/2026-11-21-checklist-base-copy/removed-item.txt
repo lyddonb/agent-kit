@@ -1,0 +1,16 @@
+On agent-kit at 7f7c871, Python 3.9.6, macOS: a scratch edit removes the gh-call item from .agents/checklist.json and adds a gh call to scripts/install.sh. Nothing from it is committed.
+
+$ checklist.py --base HEAD        # this commit's script
+checklist: 1 of 4 items match 7f7c871..working tree (3 changed files)
+gh-call
+  note: this diff removes this item; shown as it was at 7f7c871
+  fired on: scripts/install.sh:77: +gh auth status
+  question: Does it work where `gh auth status` fails?
+  probe: Run the script or the documented steps with a `gh` first on PATH whose `auth status` exits 1 while its other subcommands pass through to the real one. A Claude Code cloud session behaves this way, because a proxy supplies the credential. Nothing may stop on `gh auth status`: test access with the API call the work needs.
+  source: Pull request 45 (commit 02faa18) fixed it; pull request 40 (commit 74caa8d) introduced it: step 0 of the weekly brief ran `gh auth status` and stopped a cloud run that could reach GitHub.
+  added 2026-11-21, review by 2027-02-21
+[exit 0]
+
+$ checklist.py --base HEAD        # the script as of origin/main (bstack 0.31.0), same scratch edit
+checklist: 0 of 4 items match 7f7c871..working tree (3 changed files)
+[exit 0]

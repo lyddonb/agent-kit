@@ -148,6 +148,74 @@ class MatchingTest(Repo):
                                                      "text": "-- tool login"})
 
 
+class BaseCopyTest(Repo):
+    """A diff cannot switch off the item that judges it."""
+
+    def rewrite(self, items):
+        self.write(".agents/checklist.json", json.dumps({"version": 1, "items": items}))
+
+    def change_layout(self):
+        self.write("src/books.py", 'SCHEMA = ("a", "c")\nprint(1)\n')
+
+    def test_an_item_the_diff_removes_still_fires_and_says_so(self):
+        self.change_layout()
+        self.rewrite(ITEMS[1:])
+        self.commit("layout change that drops its own item")
+        fired = self.fired()
+        self.assertEqual(list(fired), ["layout"])
+        code, out, err = self.run_cli("--base", "main")
+        self.assertIn("layout\n  note: this diff removes this item; shown as it was at ", out)
+        self.assertIn("1 of 2 items match", err)
+
+    def test_an_item_edited_so_it_no_longer_fires_is_shown_as_it_was(self):
+        self.change_layout()
+        self.rewrite([item("layout", ["src/other.py"], r"^\s*SCHEMA\s*=")] + ITEMS[1:])
+        code, out, _ = self.run_cli("--base", "main", "--json")
+        got = json.loads(out)
+        self.assertEqual([g["id"] for g in got], ["layout"])
+        self.assertIn("edits this item so that it no longer fires", got[0]["note"])
+        self.assertEqual(got[0]["fired"]["path"], "src/books.py")
+
+    def test_an_edit_that_keeps_the_item_firing_prints_it_once_without_a_note(self):
+        self.change_layout()
+        self.rewrite([item("layout", ["src/books.py"], r"^\s*SCHEMA\s*=", source="reworded")] + ITEMS[1:])
+        code, out, _ = self.run_cli("--base", "main", "--json")
+        got = json.loads(out)
+        self.assertEqual([g["id"] for g in got], ["layout"])
+        self.assertNotIn("note", got[0])
+        self.assertEqual(got[0]["source"], "reworded")
+
+    def test_a_removed_item_that_does_not_match_the_diff_stays_quiet(self):
+        self.write("docs/guide.md", "# Guide\n\nwords\n")
+        self.rewrite(ITEMS[1:])
+        self.assertEqual(self.fired(), {})
+
+    def test_deleting_the_whole_checklist_does_not_silence_it(self):
+        self.change_layout()
+        (self.repo / ".agents/checklist.json").unlink()
+        code, out, err = self.run_cli("--base", "main")
+        self.assertEqual(code, 0)
+        self.assertIn("layout\n  note: this diff removes this item", out)
+        self.assertNotIn("this repo has no checklist", err)
+
+    def test_a_new_item_is_read_from_the_working_tree(self):
+        self.write("docs/guide.md", "# Guide\n\nwords\n")
+        self.rewrite(ITEMS + [item("docs", ["docs/**"])])
+        self.assertEqual(list(self.fired()), ["docs"])
+
+    def test_a_base_copy_that_does_not_parse_is_reported_and_skipped(self):
+        self.git("checkout", "-q", "main")
+        self.write(".agents/checklist.json", "{not json")
+        self.commit("break the base's copy")
+        self.git("checkout", "-q", "-b", "fix")
+        self.rewrite(ITEMS)
+        self.change_layout()
+        code, out, err = self.run_cli("--base", "main", "--json")
+        self.assertEqual(code, 0, err)
+        self.assertEqual([g["id"] for g in json.loads(out)], ["layout"])
+        self.assertIn("is not usable and was not read", err)
+
+
 class OutputTest(Repo):
     def test_text_output_carries_the_check_the_source_and_the_dates(self):
         self.write("src/new.py", "tool login\n")
@@ -181,7 +249,10 @@ class RefusalTest(Repo):
         return err
 
     def test_a_repo_with_no_checklist_is_not_an_error(self):
+        self.git("checkout", "-q", "main")
         (self.repo / ".agents/checklist.json").unlink()
+        self.commit("this repo never kept one")
+        self.git("checkout", "-q", "-b", "work")
         code, out, err = self.run_cli("--base", "main")
         self.assertEqual((code, out), (0, ""))
         self.assertIn("this repo has no checklist", err)
@@ -249,7 +320,8 @@ class SeededChecklistTest(unittest.TestCase):
     def test_it_parses_and_no_trigger_is_dead(self):
         items = checklist.parse_checklist((ROOT / ".agents/checklist.json").read_text(), ".agents/checklist.json")
         self.assertEqual([i.id for i in items],
-                         ["books-layout", "phase-spec-format", "plugins-in-step", "gh-call", "skill-description"])
+                         ["books-layout", "phase-spec-format", "plugins-in-step", "gh-call", "skill-description",
+                          "generated-artifact-format"])
         tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], check=True, capture_output=True,
                                  text=True).stdout.split("\0")
         for i in items:
