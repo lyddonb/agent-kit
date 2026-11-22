@@ -11,6 +11,7 @@ Usage:
     uv run --python 3.12 quality.py summary BOOKS_DIR [--week YYYY-Www] [--json] [--public-only]
     uv run --python 3.12 quality.py audit-ci REPO_DIR [--json]
     uv run --python 3.12 quality.py leak-check BOOKS_DIR FILE [FILE ...] [--json]
+    uv run --python 3.12 quality.py sweep BOOKS_DIR KIND [--at YYYY-MM-DD] [--with-private] [--json]
     uv run --python 3.12 quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE]
                                                 [--since YYYY-MM-DD] [--dry-run] [--json]
 
@@ -223,6 +224,11 @@ Standard library only; needs Python 3.10 or later (run it through uv).
 Shape: `Books` is loaded once (the CSV tables with line numbers; the job books only when the files exist). Each entry in `CHECKS`
 takes a `Books` and yields `Problem`s. A new check is a new entry in that registry. Ingest
 and summary read the checked tables as typed rows (`RunRow`, `FailureRow`, `WeeklyRow`, `KindRow`, `JobRow`, `StepRow`).
+
+`sweep` says which watched repos hold an artifact the kit generated (KIND: phase-spec, verify-skill or review-guide), for a PR
+that changes the artifact's format. It asks GitHub for the default branch's file list (`--at DAY`: as it was at the end of that
+day, UTC) and reads no checkout. Private repos are not asked about or named, only counted, unless `--with-private` is given.
+Exit 0 when every repo answered, 1 when one could not be checked, 2 when it could not run (no books/repos.csv included).
 """
 import sys
 
@@ -237,6 +243,7 @@ import bisect
 import contextlib
 import csv
 import errno
+import fnmatch
 import hashlib
 import io
 import json
@@ -2823,7 +2830,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
 # fetch: GitHub's own account of each run, and its test-results artifacts, onto disk
 # ---------------------------------------------------------------------------
 #
-# `fetch` is the only command that talks to GitHub, through the `gh` CLI (`gh api`). It writes
+# `fetch` and `sweep` are the only commands that talk to GitHub, through the `gh` CLI (`gh api`). `fetch` writes
 # under OUT_DIR only, never under BOOKS_DIR. What it writes is what `ingest` reads:
 #   OUT_DIR/<repo>/<run_id>/manifest.json             the API's account of the run (see Manifest)
 #   OUT_DIR/<repo>/<run_id>/artifacts/<name>/*.jsonl  the run's test-results-* artifacts, unzipped
@@ -4577,6 +4584,147 @@ def cmd_leak_check(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# sweep: which watched repos hold an artifact the kit generated, for a PR that changes the artifact's format
+# ---------------------------------------------------------------------------
+#
+# `sweep BOOKS_DIR KIND` is read-only. For each watched repo the books count as public it asks GitHub for the file list of the
+# default branch (`gh api "repos/O/N/git/trees/HEAD?recursive=1"`, one call) and matches the paths against the kind's globs. With
+# `--at DAY` it first asks for the last commit on the default branch by the end of that day (UTC) and lists that commit's tree,
+# which is how a past format change is replayed. A local checkout is never read: it can be missing, stale or on a branch, and
+# the upgrade PR goes to the default branch. A repo has one of three states, and a call that failed or a file list GitHub cut
+# short is `unknown`, never `none`.
+#
+# The list is written to go into a PR on a public repo, so a private repo (private_repos: anything repos.csv does not call
+# public in every row) is not asked about and not named: only how many were left out is printed. `--with-private` asks about
+# them too and names them, under a first line that says the output is not for a public place.
+
+SWEEP_VERSION = 1
+SWEEP_SHOWN_PATHS = 3
+SWEEP_KINDS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "phase-spec": ("a product phase spec (scaffold-product, the Product phase playbook)", ("docs/phases/*.md",)),
+    "verify-skill": ("a verify-<app> skill (create-verification-skill)",
+                     (".agents/skills/verify-*/SKILL.md", ".claude/skills/verify-*/SKILL.md")),
+    "review-guide": ("a review guide (scaffold-product, read by interrogate)", ("REVIEW.md",)),
+}
+SWEEP_PRIVATE_BANNER = "PRIVATE: this list names private repos. Keep it out of pull requests, commits and any public place."
+
+
+class Held(NamedTuple):
+    """What one repo answered. state: `holds` (paths is not empty), `none`, or `unknown` (why says what failed)."""
+    github: str
+    private: bool
+    state: str
+    paths: tuple[str, ...] = ()
+    commit: str = ""
+    why: str = ""
+
+
+def glob_segments_match(path: str, glob: str) -> bool:
+    """`*` and `?` stay inside one path segment, and the segment counts must agree."""
+    parts, wanted = path.split("/"), glob.split("/")
+    return len(parts) == len(wanted) and all(fnmatch.fnmatchcase(part, want) for part, want in zip(parts, wanted))
+
+
+def _api_json(gh: Gh, endpoint: str):
+    try:
+        return json.loads(gh.api(endpoint))
+    except (ValueError, RecursionError):
+        raise GhError(f"gh api {endpoint.split('?')[0]} did not answer with JSON") from None
+
+
+def _commit_by(gh: Gh, github: str, day: date) -> str | None:
+    """The last commit on the default branch by the end of `day` (UTC), or None when the repo had none yet."""
+    found = _api_json(gh, f"repos/{github}/commits?until={day.isoformat()}T23:59:59Z&per_page=1")
+    if not isinstance(found, list):
+        raise GhError(f"gh api repos/{github}/commits did not answer with a list")
+    if not found:
+        return None
+    sha = found[0].get("sha") if isinstance(found[0], dict) else None
+    if type(sha) is not str or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise GhError(f"gh api repos/{github}/commits did not name a commit")
+    return sha
+
+
+def held_in(gh: Gh, github: str, private: bool, globs: tuple[str, ...], day: date | None) -> Held:
+    try:
+        ref = "HEAD"
+        if day is not None:
+            ref = _commit_by(gh, github, day)
+            if ref is None:
+                return Held(github, private, "none", why=f"no commit by {day.isoformat()}")
+        listing = _api_json(gh, f"repos/{github}/git/trees/{ref}?recursive=1")
+        if not isinstance(listing, dict) or not isinstance(listing.get("tree"), list) or type(listing.get("sha")) is not str:
+            raise GhError(f"gh api repos/{github}/git/trees did not answer with a file list")
+        paths = tuple(sorted(e["path"] for e in listing["tree"] if isinstance(e, dict) and e.get("type") == "blob"
+                             and type(e.get("path")) is str and any(glob_segments_match(e["path"], g) for g in globs)))
+        if listing.get("truncated") is not False and not paths:
+            raise GhError("GitHub cut the file list short, so a missing match proves nothing")
+    except GhError as e:
+        return Held(github, private, "unknown", why=_audit_text(e))
+    return Held(github, private, "holds" if paths else "none", tuple(_audit_text(p) for p in paths), _audit_text(listing["sha"]))
+
+
+def sweep_report(kind: str, day: date | None, held: list[Held], private_skipped: int, with_private: bool) -> dict:
+    return {"v": SWEEP_VERSION, "kind": kind, "globs": list(SWEEP_KINDS[kind][1]), "at": day.isoformat() if day else None,
+            "with_private": with_private, "private_not_checked": private_skipped,
+            "repos": [{"github": h.github, "state": h.state, "paths": list(h.paths), "commit": h.commit, "why": h.why,
+                       **({"private": h.private} if with_private else {})} for h in held]}
+
+
+def render_sweep(report: dict) -> str:
+    repos, when = report["repos"], f"on {report['at']}" if report["at"] else "today"
+    holds = [r for r in repos if r["state"] == "holds"]
+    lines = [SWEEP_PRIVATE_BANNER] if report["with_private"] else []
+    lines.append(f"sweep {report['kind']}: {len(holds)} of {len(repos)} {'' if report['with_private'] else 'public '}watched repos "
+                 f"held {' or '.join(report['globs'])} on the default branch {when}")
+    for r in holds:
+        shown, more = r["paths"][:SWEEP_SHOWN_PATHS], len(r["paths"]) - SWEEP_SHOWN_PATHS
+        lines.append(f"- {r['github']}{' (private)' if r.get('private') else ''}: {', '.join(shown)}"
+                     + (f" and {more} more" if more > 0 else "") + (f" (commit {r['commit'][:7]})" if report["at"] else ""))
+    for state, label in (("none", "none"), ("unknown", "could not check")):
+        for r in repos:
+            if r["state"] == state:
+                lines.append(f"{label}: {r['github']}{' (private)' if r.get('private') else ''}" + (f" ({r['why']})" if r["why"] else ""))
+    n = report["private_not_checked"]
+    if n:
+        lines.append(f"{n} private watched repo{'s were' if n != 1 else ' was'} not checked and {'are' if n != 1 else 'is'} not named here. "
+                     "Check with --with-private, and keep that answer out of public text.")
+    return "\n".join(lines)
+
+
+def cmd_sweep(args: argparse.Namespace) -> int:
+    if not os.path.isdir(args.books_dir):
+        print(f"quality.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    day = _day(args.at) if args.at else None
+    if args.at and day is None:
+        print("quality.py: --at must be a date like 2026-11-15", file=sys.stderr)
+        return 2
+    exe = find_gh()
+    if exe is None:
+        print("quality.py: cannot find the gh CLI (put it on PATH, or set QUALITY_GH to its path)", file=sys.stderr)
+        return 2
+    books = load(args.books_dir)
+    problems = run_checks(books)
+    if problems:
+        _print_problems(problems)
+        print(f"{len(problems)} problems; no sweep with books that fail check")
+        return 2
+    if not books.tables[REPOS].present:
+        print(f"quality.py: sweep needs {REPOS}: visibility is not booked, so no repo can be called public (run fetch and ingest with it)",
+              file=sys.stderr)
+        return 2
+    private = private_repos(books)
+    watched = sorted((github, repo in private) for repo, (github, _) in watch_list(books).items())
+    asked = [w for w in watched if args.with_private or not w[1]]
+    gh, globs = Gh(exe), SWEEP_KINDS[args.kind][1]
+    held = [held_in(gh, github, is_private, globs, day) for github, is_private in asked]
+    report = sweep_report(args.kind, day, held, len(watched) - len(asked), args.with_private)
+    print(json.dumps(report, indent=2, sort_keys=True) if args.json else render_sweep(report))
+    return 1 if any(h.state == "unknown" for h in held) else 0
+
+
+# ---------------------------------------------------------------------------
 # book-skills: skill use from this machine's agent transcripts into books/skill-uses.csv
 # ---------------------------------------------------------------------------
 #
@@ -5034,6 +5182,13 @@ def main(argv: list[str] | None = None) -> int:
     leak.add_argument("files", nargs="+", metavar="FILE", help="a text file, or - for stdin")
     leak.add_argument("--json", action="store_true")
     leak.set_defaults(func=cmd_leak_check)
+    sweep = sub.add_parser("sweep", help="which watched repos hold an artifact the kit generated (read-only, asks GitHub)")
+    sweep.add_argument("books_dir", metavar="BOOKS_DIR")
+    sweep.add_argument("kind", choices=sorted(SWEEP_KINDS), metavar="KIND", help=", ".join(sorted(SWEEP_KINDS)))
+    sweep.add_argument("--at", metavar="YYYY-MM-DD", help="the default branch as it was at the end of this day (UTC), not today")
+    sweep.add_argument("--with-private", action="store_true", help="ask about private repos too and name them; not for a public place")
+    sweep.add_argument("--json", action="store_true")
+    sweep.set_defaults(func=cmd_sweep)
     args = parser.parse_args(argv)
     return args.func(args)
 

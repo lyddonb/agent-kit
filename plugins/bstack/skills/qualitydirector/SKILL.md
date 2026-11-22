@@ -210,6 +210,28 @@ Output is one line per match, `PATH:LINE: KIND: TEXT`, sorted, each once (`-` na
 
 Exit 0: no match. Exit 1: a match, or a file that could not be read (`PATH: unreadable: why`, on stderr with `--json`). Exit 2: a usage error, books that fail `check`, or no `books/repos.csv`, because with no visibility booked nothing can be called public. A file is never opened through a symlink, and one over 1 MB, one that is not a regular file, or the 2001st file is refused.
 
+## List the repos a format change reaches
+
+```sh
+uv run --python 3.12 <skill dir>/scripts/quality.py sweep BOOKS_DIR KIND [--at YYYY-MM-DD] [--with-private] [--json]
+```
+
+`sweep` says which watched repos hold an artifact the kit generated, so a PR that breaks the artifact's format can list them and name the upgrade PR for each (the Authoring a skill playbook's sweep step). It is read-only and writes nothing.
+
+| KIND | Matches on the default branch | Written by |
+|---|---|---|
+| `phase-spec` | `docs/phases/*.md` | `scaffold-product` and the Product phase playbook |
+| `verify-skill` | `.agents/skills/verify-*/SKILL.md`, `.claude/skills/verify-*/SKILL.md` | `create-verification-skill` |
+| `review-guide` | `REVIEW.md` at the root | `scaffold-product` |
+
+It asks GitHub and never reads a local checkout, which can be missing, stale or on a branch: one call per repo, `gh api "repos/O/N/git/trees/HEAD?recursive=1"`, the file list of the default branch, where the upgrade PR will land. `*` in a glob stays inside one folder. With `--at DAY` it first asks for the last commit on the default branch by the end of that day (UTC) and lists that commit, which replays a past format change. It never calls `gh auth status`.
+
+**Private repos.** The list is written to be pasted into a PR on a public repo. A repo the books do not count as public (the rule `leak-check` uses: no `public` row in `books/repos.csv`, a failed lookup, or ever private) is not asked about and not named. The last line says how many were left out. `--with-private` asks about them too, marks each `(private)`, and opens with a line that says the output must stay out of public text: use it to find the private repos to upgrade, and paste only the default output.
+
+Each repo is in one of three states: listed with up to three paths (`and N more` after that, every path with `--json`), `none`, or `could not check` with the reason. A failed call, or a file list GitHub cut short with no match in it, is `could not check` and never `none`. With `--json` it is one object, keys sorted: `v`, `kind`, `globs`, `at`, `with_private`, `private_not_checked` and `repos` (`github`, `state`: `holds`, `none` or `unknown`, `paths`, `commit`, `why`).
+
+Exit 0: every repo asked about answered. Exit 1: at least one could not be checked. Exit 2: a usage error, no `gh`, books that fail `check`, or no `books/repos.csv`, because with no visibility booked nothing can be called public.
+
 ## Audit a repo's CI
 
 ```sh
