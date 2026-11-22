@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "goal": "A change cannot switch off the reliability checklist item that judges it. This was the follow-up R30 left for roadmap R29: the checklist file was read only from the working tree.",
+  "changed": [
+    "checklist.py also reads .agents/checklist.json as the merge base has it. An item there that matches the diff still prints, with a note, when the diff removes it or edits it so that it no longer fires.",
+    "Deleting the whole checklist file no longer reads as a repo with no checklist.",
+    "The gate audit table in docs/ARCHITECTURE.md has a row for the checklist."
+  ],
+  "claims": [
+    {
+      "claim": "On agent-kit, a diff that removes the gh-call item and adds a gh call still gets the item, marked as removed. The script before this change prints nothing for the same diff.",
+      "verdict": "VERIFIED",
+      "check": "A scratch edit on the real repo, run through this commit's checklist.py and through origin/main's, under /usr/bin/python3 3.9.6",
+      "commit": "7f7c871",
+      "record": ".changes/2026-11-21-checklist-base-copy/removed-item.txt",
+      "remaining": "The fault is planted: no past commit removed a checklist item, since the file is a day old."
+    },
+    {
+      "claim": "Removed items, items edited to stop firing, a deleted file, an edit that keeps firing, a new item and a base copy that does not parse each behave as documented.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_checklist.py (31 tests, 7 of them new) under /usr/bin/python3 3.9.6; make check validate unit (1,128 tests) under Python 3.12; verify-kit drive all, 4 of 4",
+      "commit": "7f7c871",
+      "record": ".changes/2026-11-21-checklist-base-copy/tests.txt",
+      "remaining": "Linux, until this pull request's CI run finishes."
+    }
+  ],
+  "next": [
+    {
+      "item": "Nothing reads whether the printed checks were done",
+      "source": "ROADMAP.md R32",
+      "why_now": "Not yet. R32 waits on R6 and on H14.",
+      "impact": "Until a gate reads it, running the checklist and doing what it prints stay the author's choice. This change only fixes which items apply."
+    }
+  ],
+  "release": {"see": "changes.yaml bstack@0.32.0"}
+}
