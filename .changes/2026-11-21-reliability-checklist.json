@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "goal": "Roadmap R30: a per-repo reliability checklist whose items print only when the diff could repeat the mistake behind them, run by verify-work before a verdict and fed by correct.",
+  "changed": [
+    "checklist.py --base REF reads .agents/checklist.json and prints the items whose trigger matches the diff, each with the file and line that fired it. It exits 0 when it ran and 2 when it could not.",
+    "The file format is JSON, chosen by a prototype: a regular expression with | breaks a Markdown table row unless a hand-written parser adds an escape rule.",
+    "agent-kit has its own checklist of five items: books layout, phase spec format, anything under plugins/, a gh call, a skill description.",
+    "verify-work runs the checklist before its verdict. correct sends a mistake a diff can show to the checklist instead of the rule table.",
+    "Short of the roadmap entry in one place: in a governed run each item is a hand-written verification ledger entry, not a receipt from receipt.py, which accepts only a phase spec criterion."
+  ],
+  "claims": [
+    {
+      "claim": "On agent-kit's history the checklist prints the books item and not the gh item at 990c84f, prints the gh item at 02faa18, and prints nothing on a docs-only commit (cb5299b).",
+      "verdict": "VERIFIED",
+      "check": "checklist.py --base C^ --head C for each commit, under /usr/bin/python3 3.9.6 on macOS",
+      "commit": "7d73375",
+      "record": ".changes/2026-11-21-reliability-checklist/done-when.txt",
+      "remaining": "Linux, and Python versions between 3.9 and 3.12."
+    },
+    {
+      "claim": "The new checks fail on real past commits: the gh item fires on 74caa8d, the commit that introduced `gh auth status`, and the books item's probe fails at 990c84f on books written before it (exit 1) and passes on its own (exit 0).",
+      "verdict": "VERIFIED",
+      "check": "checklist.py --base 74caa8d^ --head 74caa8d; quality.py check from 990c84f on the fixture books of 990c84f^ and of 990c84f",
+      "commit": "7d73375",
+      "record": ".changes/2026-11-21-reliability-checklist/books-probe.txt",
+      "remaining": "The probes of the other three items were not run against a past failure. Two of them (phase spec format, skill description) have no failure on record."
+    },
+    {
+      "claim": "The script runs on every commit in the repo's history without an error.",
+      "verdict": "VERIFIED",
+      "check": "Replay over the 136 non-merge commits on origin/main that have a parent: 0 non-zero exits; 41 commits print nothing",
+      "commit": "7d73375",
+      "record": ".changes/2026-11-21-reliability-checklist/replay.txt",
+      "remaining": "Whether each firing was useful. plugins-in-step fires on 95 of 136 commits, skill-description on 24, and books-layout on 9, most of them a new books file rather than a changed one."
+    },
+    {
+      "claim": "Triggers match as documented: globs, added and removed lines, untracked files, --head. Every refusal exits 2 with a message, including a folder that is not the repo root, which is never read as a repo with no checklist.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_checklist.py (24 tests on throwaway git repos) under /usr/bin/python3 3.9.6; make check validate unit (1,107 tests) under Python 3.12. With removed lines ignored on purpose, 2 of the tests fail.",
+      "commit": "4eadb0b",
+      "record": ".changes/2026-11-21-reliability-checklist/unit-python39.txt",
+      "remaining": "Linux, until this pull request's CI run finishes."
+    },
+    {
+      "claim": "bstack 0.31.0 still installs into Claude Code, its skills load, and the what's-new hook shows the new entry.",
+      "verdict": "VERIFIED",
+      "check": "verify-kit: control-kit drive all, 4 of 4 features pass on the real claude CLI; make claude-validate passes",
+      "commit": "d76bdd4",
+      "record": ".changes/2026-11-21-reliability-checklist/verify-kit.txt",
+      "remaining": "A model choosing a skill from plain words, and tools other than Claude Code: verify-kit does not map them."
+    },
+    {
+      "claim": "An agent following verify-work's new step runs the checklist and checks each item before its verdict.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "No eval ran on the changed skill text. The command in the step passes the command lint in make validate, and that is all."
+    }
+  ],
+  "next": [
+    {
+      "item": "agent-ledger's first checklist item: an entry format change keeps existing chains verifying",
+      "source": "ROADMAP.md R30, last sentence of What",
+      "why_now": "It needs this release installed, and it is one file in agent-ledger.",
+      "impact": "A change to the ledger's entry format gets the question asked before merge. Left undone, only agent-kit has a checklist."
+    },
+    {
+      "item": "Decide what a receipt for a checklist item is",
+      "source": "ROADMAP.md R30 (\"in a governed run each item gets a receipt\")",
+      "why_now": "receipt.py refuses anything that is not a phase spec criterion, and its receipt shape belongs to agent-ledger's S3 spec. Extending either was out of scope here.",
+      "impact": "Until then an item's result in a governed run is an entry an agent wrote by hand, which nothing checks against the probe's exit code."
+    },
+    {
+      "item": "Keep the checklist out of reach of the change it judges",
+      "source": "ROADMAP.md R29",
+      "why_now": "The file is read from the working tree, so a pull request can delete the item that would have fired on it. R29's audit table should list it.",
+      "impact": "A reviewer has to notice a diff to .agents/checklist.json. One fix: also read the base ref's copy and print items the diff removed or edited."
+    },
+    {
+      "item": "R40 and R35 unit 3",
+      "source": "ROADMAP.md R40, R35",
+      "why_now": "Both waited on R30.",
+      "impact": "R40 adds its item to this checklist."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.31.0"
+  }
+}

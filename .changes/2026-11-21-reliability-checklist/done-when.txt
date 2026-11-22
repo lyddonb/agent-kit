@@ -1,0 +1,60 @@
+checklist.py and .agents/checklist.json at 7d73375 (the commit that adds them), Python 3.9.6, macOS. Each run: checklist.py --base C^ --head C, stdout and stderr together.
+
+$ checklist.py --base 990c84f^ --head 990c84f    # feat(bstack): quality books ingest and summary
+checklist: 3 of 5 items match aa2b6f9..990c84f (21 changed files)
+books-layout
+  fired on: plugins/bstack/skills/qualitydirector/scripts/quality.py:84: -WEEKLY_SCHEMA = ("week", "repo", "test_id", "runs", "failed", "p50_ms", "max_ms")
+  question: Do books written by the last release still pass `check`?
+  probe: Copy the last release's fixture books out of git (`git archive origin/main tests/fixtures/quality/books tests/fixtures/books | tar -x -C "$TMPDIR"`) then run this branch's `quality.py check` on the copied `tests/fixtures/quality` and `books.py check` on the copied `tests/fixtures/books`. If either fails, the layout changed: the `changes.yaml` entry must say so and name the upgrade step, and the books repo's pin moves in the same PR that changes its files.
+  source: Pull request 39 (commit 990c84f): `tests-weekly.csv` went from `p50_ms` to `total_ms`, and books written before it stopped passing `check`.
+  added 2026-11-21, review by 2027-02-21
+
+plugins-in-step
+  fired on: plugins/bstack/.claude-plugin/plugin.json (and 5 more files)
+  command: make check versions
+  source: Pull request 21 (commit f3b34a8): a plugin changed without a version bump never reaches people who installed it. Commit 8da9fa5 was a bump made after the fact.
+  added 2026-11-21, review by 2027-02-21
+
+skill-description
+  fired on: plugins/bstack/skills/qualitydirector/SKILL.md:3: -description: The Quality Director measures what a repo's tests cost and what they catch, from per-test time and outcome, and proposes changes for you to approve...
+  question: Does the skill still trigger on the phrases its description lists after "Use for" or "Use when"?
+  probe: Drive `skills-load` with the `verify-kit` skill to prove the skill is still listed under its name. Then, in a session with the plugin installed from this checkout, type each phrase the old description listed and see that the skill loads. `verify-kit` does not map a model choosing a skill from plain words, so report any phrase you did not try as not verified.
+  source: Commit 1c80567 (2026-11-07): a description that said `verify-<app>` was flagged by claude.ai's marketplace sync and stored with the brackets removed. No lost trigger phrase is on record; the item comes from roadmap R30.
+  added 2026-11-21, review by 2027-02-21
+[exit 0]
+
+$ checklist.py --base 02faa18^ --head 02faa18    # fix(qualitydirector): check GitHub access with a real API call
+checklist: 2 of 5 items match bd8e9d3..02faa18 (9 changed files)
+plugins-in-step
+  fired on: plugins/bstack/.claude-plugin/plugin.json (and 4 more files)
+  command: make check versions
+  source: Pull request 21 (commit f3b34a8): a plugin changed without a version bump never reaches people who installed it. Commit 8da9fa5 was a bump made after the fact.
+  added 2026-11-21, review by 2027-02-21
+
+gh-call
+  fired on: plugins/bstack/skills/qualitydirector/references/weekly-brief.md:12: -gh auth status
+  question: Does it work where `gh auth status` fails?
+  probe: Run the script or the documented steps with a `gh` first on PATH whose `auth status` exits 1 while its other subcommands pass through to the real one. A Claude Code cloud session behaves this way, because a proxy supplies the credential. Nothing may stop on `gh auth status`: test access with the API call the work needs.
+  source: Pull request 45 (commit 02faa18) fixed it; pull request 40 (commit 74caa8d) introduced it: step 0 of the weekly brief ran `gh auth status` and stopped a cloud run that could reach GitHub.
+  added 2026-11-21, review by 2027-02-21
+[exit 0]
+
+$ checklist.py --base cb5299b^ --head cb5299b    # docs(review): a static check may ship as an error after a clean replay
+checklist: 0 of 5 items match e41e755..cb5299b (2 changed files)
+[exit 0]
+
+$ checklist.py --base 74caa8d^ --head 74caa8d    # docs(bstack): weekly brief picks its branch first and never does arithmetic
+checklist: 2 of 5 items match 75671d0..74caa8d (1 changed file)
+plugins-in-step
+  fired on: plugins/bstack/skills/qualitydirector/references/weekly-brief.md
+  command: make check versions
+  source: Pull request 21 (commit f3b34a8): a plugin changed without a version bump never reaches people who installed it. Commit 8da9fa5 was a bump made after the fact.
+  added 2026-11-21, review by 2027-02-21
+
+gh-call
+  fired on: plugins/bstack/skills/qualitydirector/references/weekly-brief.md:12: +gh auth status
+  question: Does it work where `gh auth status` fails?
+  probe: Run the script or the documented steps with a `gh` first on PATH whose `auth status` exits 1 while its other subcommands pass through to the real one. A Claude Code cloud session behaves this way, because a proxy supplies the credential. Nothing may stop on `gh auth status`: test access with the API call the work needs.
+  source: Pull request 45 (commit 02faa18) fixed it; pull request 40 (commit 74caa8d) introduced it: step 0 of the weekly brief ran `gh auth status` and stopped a cloud run that could reach GitHub.
+  added 2026-11-21, review by 2027-02-21
+[exit 0]

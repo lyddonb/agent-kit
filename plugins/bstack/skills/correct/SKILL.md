@@ -33,4 +33,6 @@ Fix the most frequent classes now, one commit each. Prove each new check fails o
 
 Keep a table in the repo's agent instruction file that pairs each rule with what enforces it. When the human corrects you, fix the mistake and add the rule. If the rule was already there and nothing enforced it, that's a repeat: enforce it at the highest level in the same change. Drop a rule once its mistake can't happen anymore.
 
+Section 2 still comes first: a class that architecture, types or a lint can remove is fixed there. Of the classes left, one a diff can show (it is visible in which files changed, or in a changed line) becomes an item in the repo's checklist, `.agents/checklist.json`, in place of its row in the table. **verify-work** then prints it only for a change that could repeat it, with the check to run. Replay the item before you keep it: it must fire on the commit that made the mistake. The **verify-work** skill's `references/checklist.md` has the format. A class no diff shows stays in the table.
+
 **Reply:** each class with its evidence, the level you chose, and why a higher level didn't work.

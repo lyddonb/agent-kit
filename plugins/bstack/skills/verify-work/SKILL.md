@@ -19,11 +19,18 @@ Check the real thing, not a proxy. A green build, a passing unit test or a subag
 4. **Capture a baseline first** when the claim is a change ("faster", "no longer duplicates", "looks the same"): the same check on the code before the change.
 5. **Run the check and read the actual output**: the rows in the database, the HTTP response body, the rendered screen, the file on disk. When it passes suspiciously easily, suspect the observation before the system (`prove-it-works`).
 6. **Script it when you can.** A small script that reruns the check is better evidence than a one-time look, because a reviewer can rerun it. Keep it with the change or link it.
-7. **Give a verdict**:
+7. **Run the repo's reliability checklist** when it has one (`.agents/checklist.json`), with the branch's base as `--base`:
+
+   ```bash
+   python3 <this skill's folder>/scripts/checklist.py --base origin/main
+   ```
+
+   It prints the past mistakes this diff could repeat, each with the line that fired it and a check. No output means nothing matched. Run each item's command, or answer its question by running its probe, and put the result in the evidence beside the item's id. An item whose check fails makes the verdict NOT VERIFIED. An item you could not check makes it INCONCLUSIVE, however well the predicate held. In a run with a ledger, record each item as its own `verification` entry (**show-me-your-work** has the command): the item's id and its outcome in `--summary`, the command or probe you ran in `--why`, and the commit in `--evidence`. `references/checklist.md` has the file format and how to write an item.
+8. **Give a verdict**:
    - **VERIFIED**: the predicate held on the real surface. Show the evidence.
    - **NOT VERIFIED**: it failed. Show what you saw.
    - **INCONCLUSIVE**: you couldn't observe the real thing (wrong surface, missing access, flaky environment). Say exactly what is missing. Inconclusive is never reported as a pass.
-8. **Write a receipt when the claim is a spec criterion.** If the predicate is a criterion or anti-criterion in a phase spec (`C8` in `docs/phases/P2e-...md`), run its probe through the script, so the verdict comes from the exit code and not from you:
+9. **Write a receipt when the claim is a spec criterion.** If the predicate is a criterion or anti-criterion in a phase spec (`C8` in `docs/phases/P2e-...md`), run its probe through the script, so the verdict comes from the exit code and not from you:
 
    ```bash
    python3 <this skill's folder>/scripts/receipt.py --run <run-id> --actor '<you>' \
@@ -31,7 +38,7 @@ Check the real thing, not a proxy. A green build, a passing unit test or a subag
    ```
 
    It records which probe ran, on which commit, and what came back, as a ledger entry (**show-me-your-work** says how to start a run and write `--actor`; a PR with no run yet starts one for itself). Commit your work, and the criterion itself, before you run it, and make that commit with `--trailer 'Verified: receipt <run-id>'`: a probe run on uncommitted changes or beside an untracked file is recorded as INCONCLUSIVE. Ticking the box and updating `ROADMAP.md` can come before or after. Pass `--not-run '<what>'` when the spec's probe has a part you did not run, which also records INCONCLUSIVE. Never write a receipt by hand for a probe a command can run. When a person is the probe (their words after a trial period), record their exact words with `ledger append`, with them as the actor.
-9. **Stamp the commit** that holds the change with a `Verified:` git trailer. VERIFIED earns `Verified: verify-work`. NOT VERIFIED and INCONCLUSIVE are `Verified: none <reason>`. A commit a receipt names keeps the `receipt` stamp from step 8 and is never amended. The Opening a PR playbook in **beau-mode** has the values and the command.
+10. **Stamp the commit** that holds the change with a `Verified:` git trailer. VERIFIED earns `Verified: verify-work`. NOT VERIFIED and INCONCLUSIVE are `Verified: none <reason>`. A commit a receipt names keeps the `receipt` stamp from step 9 and is never amended. The Opening a PR playbook in **beau-mode** has the values and the command.
 
 ## Output
 

@@ -1,0 +1,12 @@
+The books-layout item's probe, run at the commit behind it (990c84f, pull request 39) with that commit's quality.py.
+
+$ quality.py check <fixture books as of 990c84f^>    # quality.py from 990c84f
+books/failures.csv:1: missing file
+books/tests-weekly.csv:1: header does not match the schema: expected week,repo,test_id,runs,failed,total_ms,max_ms
+books/tests-weekly.csv:2: max_ms (40) is more than total_ms (12)
+3 problems
+[exit 1]
+
+$ quality.py check <fixture books as of 990c84f>     # quality.py from 990c84f
+ok, 7 rows, 0 problems
+[exit 0]

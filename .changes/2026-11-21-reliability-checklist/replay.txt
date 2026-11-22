@@ -1,0 +1,9 @@
+Replay at 7d73375 over every non-merge commit on origin/main (eddf41c) that has a parent: checklist.py --base C^ --head C --json.
+commits replayed: 136, runs that exited non-zero: 0
+commits each item fired on ('(nothing)' = commits with no item):
+  41 (nothing)
+   9 books-layout
+   7 gh-call
+   8 phase-spec-format
+  95 plugins-in-step
+  24 skill-description
