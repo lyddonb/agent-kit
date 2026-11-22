@@ -87,6 +87,24 @@
       "source": "Commit 1c80567 (2026-11-07): a description that said `verify-<app>` was flagged by claude.ai's marketplace sync and stored with the brackets removed. No lost trigger phrase is on record; the item comes from roadmap R30.",
       "added": "2026-11-21",
       "review_by": "2027-02-21"
+    },
+    {
+      "id": "generated-artifact-format",
+      "trigger": {
+        "paths": [
+          "plugins/bstack/skills/scaffold-product/scripts/check-product.py",
+          "plugins/bstack/skills/scaffold-product/references/templates/**",
+          "plugins/bstack/skills/create-verification-skill/SKILL.md",
+          "plugins/bstack/skills/create-verification-skill/references/**"
+        ]
+      },
+      "check": {
+        "question": "If this change breaks an artifact the kit generated in other repos (a phase spec, a `verify-<app>` skill, `REVIEW.md`), do you know which watched repos hold one?",
+        "probe": "Run `python3 plugins/bstack/skills/beau-mode/scripts/sweep.py BOOKS_DIR --artifact phase-spec --public-only` (BOOKS_DIR is the quality books folder; use `verify-skill` or `review` for the other kinds, and add `--containing REGEX` for the old format). List the repos in the PR and open or name the upgrade PR for each. No repo listed, or a change that breaks nothing old, needs a line saying so."
+      },
+      "source": "bstack 0.12.0 (commit 088cd28): phase specs changed format, `check-product.py` began to enforce it, and no step listed the product repos holding a spec in the old format.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
     }
   ]
 }
