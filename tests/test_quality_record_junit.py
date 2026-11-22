@@ -92,7 +92,7 @@ class RecordJunitCase(unittest.TestCase):
         (self.work / "fake_child.py").write_text(FAKE_CHILD)
 
     def env(self, extra=None) -> dict:
-        clean = {k: v for k, v in os.environ.items() if not k.startswith("GITHUB_")}
+        clean = {k: v for k, v in os.environ.items() if not k.startswith(("GITHUB_", "RUNNER_"))}  # CI sets both; the header reads them
         clean["GIT_CEILING_DIRECTORIES"] = str(self.work.parent)  # no repo above the temp dir
         clean["PYTHONDONTWRITEBYTECODE"] = "1"
         clean.update(extra or {})
