@@ -5,6 +5,7 @@ workflow files, not the books.
 
 Usage:
     uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
+    uv run python quality.py record-junit --junit FILE --out OUT --repo NAME [--sha SHA] -- COMMAND [ARG ...]
     uv run --python 3.12 quality.py fetch BOOKS_DIR OUT_DIR [--since YYYY-MM-DD] [--repo SLUG]
     uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs|visibility]
     uv run --python 3.12 quality.py check BOOKS_DIR [--base REF]
@@ -14,6 +15,7 @@ Usage:
     uv run --python 3.12 quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE]
                                                 [--since YYYY-MM-DD] [--dry-run] [--json]
 
+`record-junit` runs COMMAND (pytest, with `--junitxml=FILE`) and writes the same record from the XML file it left.
 `record` runs `python -m unittest discover -s TESTS_DIR` and writes what happened to FILE as
 JSON Lines: a run header, then one line per test with its outcome (pass, fail, error, skip) and
 milliseconds. Then it prints `recorded N tests in M ms -> FILE`.
@@ -240,6 +242,7 @@ import errno
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import select
@@ -248,6 +251,7 @@ import signal
 import stat
 import subprocess
 import time
+import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
@@ -740,6 +744,152 @@ def cmd_record(args: argparse.Namespace) -> int:
     header = run_header(args.repo, tally.rows, started, wall_ms, child_code, tally.complete, sha, env)
     code = exit_code(child_code, tally.rows, tally.complete)
     wrote = _write_record(out, args.out, header, tally.rows)
+    return code if wrote or code else 1
+
+
+# ---------------------------------------------------------------------------
+# record-junit
+# ---------------------------------------------------------------------------
+
+JUNIT_TAG_LEN = 12  # hex characters of the hash that keeps two shortened ids apart
+
+
+class _NoDoctype(ET.TreeBuilder):
+    def doctype(self, name, pubid, system):  # reached only when a DOCTYPE hides from the raw-bytes search (UTF-16)
+        raise ET.ParseError("has a DOCTYPE declaration")
+
+
+def _junit_id(classname: str, name: str) -> str:
+    full = f"{classname}.{name}" if classname else name
+    if not full:
+        return "(unnamed test)"
+    if len(full) <= MAX_CELL:
+        return full
+    tag = "..." + "#" + hashlib.sha256(full.encode("utf-8", "surrogatepass")).hexdigest()[:JUNIT_TAG_LEN]
+    return full[:MAX_CELL - len(tag)] + tag
+
+
+def _junit_outcome(case: ET.Element) -> str:
+    for child, outcome in (("error", "error"), ("failure", "fail"), ("skipped", "skip")):
+        if case.find(child) is not None:
+            return outcome
+    return "pass"
+
+
+def _junit_ms(text: str | None) -> int:
+    try:
+        seconds = float(text) if text is not None else 0.0
+    except ValueError:
+        return 0
+    if not math.isfinite(seconds) or seconds < 0:
+        return 0
+    return round(min(seconds * 1000, MAX_NUMBER))  # seconds * 1000 can overflow to inf, which round() refuses
+
+
+def junit_rows(root: ET.Element) -> list[dict]:
+    """One row per testcase, in the file's order. Raises ValueError when there are too many."""
+    rows = []
+    for case in root.iter("testcase"):
+        if len(rows) >= MAX_TEST_ROWS:
+            raise ValueError(f"more than {MAX_TEST_ROWS} testcases")
+        rows.append({"id": _junit_id(case.get("classname") or "", case.get("name") or ""),
+                     "outcome": _junit_outcome(case), "ms": _junit_ms(case.get("time"))})
+    return rows
+
+
+def read_junit(path: str) -> tuple[list[dict], str | None]:
+    """The rows of a JUnit XML file, or no rows and why the file was refused. Nothing in it is evaluated."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read(MAX_ARTIFACT_BYTES + 1)
+    except FileNotFoundError:
+        return [], "the child did not write it"
+    except OSError as e:
+        return [], f"cannot read it: {printable(e.strerror or type(e).__name__)}"
+    if len(data) > MAX_ARTIFACT_BYTES:
+        return [], f"it is larger than {_size(MAX_ARTIFACT_BYTES)}"
+    if b"<!doctype" in data.lower():
+        return [], "it has a DOCTYPE declaration"
+    try:
+        root = ET.fromstring(data, parser=ET.XMLParser(target=_NoDoctype()))
+    except Exception as e:  # ParseError, an unknown encoding (LookupError), anything: the file is untrusted
+        return [], f"it is not valid XML: {printable(str(e))[:200]}"
+    if root.tag not in ("testsuites", "testsuite"):
+        return [], f"its root is {printable(str(root.tag))[:100]}, not testsuites or testsuite"
+    try:
+        return junit_rows(root), None
+    except ValueError as e:
+        return [], f"it has {e}"
+    except Exception as e:
+        return [], f"it could not be converted: {printable(type(e).__name__)}"
+
+
+def _junit_usage_problem(args: argparse.Namespace, out: str, junit: str) -> str | None:
+    if not args.child:
+        return "no command after --"
+    if shutil.which(args.child[0]) is None:
+        return f"command not found: {printable(args.child[0])}"
+    problem = _output_problem(out)
+    if problem:
+        return problem
+    if os.path.lexists(junit):
+        return f"{printable(args.junit)} already exists; remove it so that a file from an earlier run is never booked"
+    if not os.path.isdir(os.path.dirname(junit)):
+        return f"junit directory does not exist: {printable(os.path.dirname(junit))}"
+    if junit == out:
+        return "--junit and --out are the same path"
+    return None
+
+
+def _run_command(command: list[str]) -> int | None:
+    """Run command without a shell and return its status as a shell says it; None if it could not start."""
+    box: list[subprocess.Popen] = []
+
+    def relay(signum, frame):
+        # Ctrl-C reaches the child through the terminal's process group; SIGTERM and SIGHUP only reach
+        # this process, so pass them on and still write the record.
+        if signum != signal.SIGINT and box:
+            box[0].send_signal(signum)
+
+    saved = {}
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            if signal.getsignal(sig) == signal.SIG_IGN:
+                continue
+            saved[sig] = signal.signal(sig, relay)
+        try:
+            box.append(subprocess.Popen(command))
+        except OSError as e:
+            print(f"quality.py: cannot start {printable(command[0])}: {printable(e.strerror or type(e).__name__)}", file=sys.stderr)
+            return None
+        return _shell_code(box[0].wait())
+    finally:
+        for sig, old in saved.items():
+            signal.signal(sig, old)
+
+
+def cmd_record_junit(args: argparse.Namespace) -> int:
+    out = os.path.abspath(args.out)
+    junit = os.path.abspath(args.junit)
+    problem = _junit_usage_problem(args, out, junit)
+    if problem:
+        print(f"quality.py: {problem}", file=sys.stderr)
+        return 2
+    env = dict(os.environ)
+    started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    sha = args.sha or env.get("GITHUB_SHA") or _git_head(os.getcwd())
+    t0 = time.perf_counter()
+    child_code = _run_command(args.child)
+    wall_ms = max(0, round((time.perf_counter() - t0) * 1000))
+    if child_code is None:
+        return 2
+    rows, why = read_junit(junit)
+    if why:
+        print(f"quality.py: junit file {printable(args.junit)}: {why}; recording the run as incomplete", file=sys.stderr)
+    complete = why is None and child_code in (0, 1, 5)  # pytest's 2, 3 and 4 mean it stopped early or never started; 5 ran and found nothing
+    header = run_header(args.repo, rows, started, wall_ms, child_code, complete, sha, env)
+    code = exit_code(child_code, rows, complete)
+    wrote = _write_record(out, args.out, header, rows)
     return code if wrote or code else 1
 
 
@@ -4988,6 +5138,14 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--sha", type=_sha_arg, metavar="SHA",
                         help="the commit the run tests, 40 lowercase hex (wins over GITHUB_SHA and git)")
     record.set_defaults(func=cmd_record)
+    junit = sub.add_parser("record-junit", help="run a command (pytest) and write per-test time and outcome from its JUnit XML file",
+                           usage="quality.py record-junit --junit FILE --out OUT --repo NAME [--sha SHA] -- COMMAND [ARG ...]")
+    junit.add_argument("--junit", required=True, metavar="FILE", help="the JUnit XML file COMMAND writes; it must not exist yet")
+    junit.add_argument("--out", required=True, metavar="OUT")
+    junit.add_argument("--repo", required=True, metavar="NAME")
+    junit.add_argument("--sha", type=_sha_arg, metavar="SHA",
+                       help="the commit the run tests, 40 lowercase hex (wins over GITHUB_SHA and git)")
+    junit.set_defaults(func=cmd_record_junit)
     check = sub.add_parser("check", help="validate the quality books")
     check.add_argument("books_dir", metavar="BOOKS_DIR")
     check.add_argument("--base", metavar="REF", help="fail if a runs.csv line at REF changed or was removed")
@@ -5034,7 +5192,14 @@ def main(argv: list[str] | None = None) -> int:
     leak.add_argument("files", nargs="+", metavar="FILE", help="a text file, or - for stdin")
     leak.add_argument("--json", action="store_true")
     leak.set_defaults(func=cmd_leak_check)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    child: list[str] = []
+    if argv[:1] == ["record-junit"] and "--" in argv:
+        cut = argv.index("--")
+        argv, child = argv[:cut], argv[cut + 1:]
     args = parser.parse_args(argv)
+    if args.command == "record-junit":
+        args.child = child
     return args.func(args)
 
 

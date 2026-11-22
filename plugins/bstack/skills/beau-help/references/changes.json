@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.32.0",
+      "date": "2026-11-21",
+      "plugin": "bstack",
+      "version": "0.32.0",
+      "changes": [
+        "A repo whose tests run under pytest can now have a test record. `quality.py record-junit --junit FILE --out OUT --repo NAME -- pytest --junitxml=FILE` runs pytest, reads the JUnit XML file it wrote and writes the same record `record` writes, so `fetch`, `ingest`, `check` and `summary` book it with no change. A run that pytest cut short, or whose XML file is missing or refused, is recorded as incomplete and red, never missing. Test ids over 1000 characters are shortened with a hash so the books accept them. qualitydirector 0.13.0."
+      ],
+      "try": "Record a pytest run of a repo with quality.py record-junit and check the file passes ingest."
+    },
+    {
       "id": "bstack@0.31.0",
       "date": "2026-11-21",
       "plugin": "bstack",

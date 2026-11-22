@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.32.0 (2026-11-21)
+
+- A repo whose tests run under pytest can now have a test record. `quality.py record-junit --junit FILE --out OUT --repo NAME -- pytest --junitxml=FILE` runs pytest, reads the JUnit XML file it wrote and writes the same record `record` writes, so `fetch`, `ingest`, `check` and `summary` book it with no change. A run that pytest cut short, or whose XML file is missing or refused, is recorded as incomplete and red, never missing. Test ids over 1000 characters are shortened with a hash so the books accept them. qualitydirector 0.13.0.
+- Try: `Record a pytest run of a repo with quality.py record-junit and check the file passes ingest.`
+
 ## bstack 0.31.0 (2026-11-21)
 
 - A repo can keep a reliability checklist, `.agents/checklist.json`: the mistakes that already happened there, each with a trigger read from the diff and a check to run. `verify-work` now runs `checklist.py --base REF` before a verdict and gets only the items the change could repeat, each with the line that fired it. A docs change gets no list. A failed item makes the verdict NOT VERIFIED, and one you could not check makes it INCONCLUSIVE.
