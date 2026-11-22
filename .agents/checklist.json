@@ -36,6 +36,26 @@
       "review_by": "2027-02-21"
     },
     {
+      "id": "format-sweep",
+      "trigger": {
+        "paths": [
+          "plugins/bstack/skills/scaffold-product/scripts/check-product.py",
+          "plugins/bstack/skills/scaffold-product/references/**",
+          "plugins/bstack/skills/beau-mode/playbooks/product-phase.md",
+          "plugins/bstack/skills/create-verification-skill/SKILL.md",
+          "plugins/bstack/skills/create-verification-skill/references/**",
+          "plugins/bstack/skills/maintain-verification-skill/SKILL.md"
+        ]
+      },
+      "check": {
+        "question": "If this breaks a phase spec, a `verify-<app>` skill or a `REVIEW.md` that the last release wrote, does the PR list the watched repos that hold one, with the upgrade PR for each?",
+        "probe": "Decide first whether an artifact the last release wrote now fails a check or is read differently (for phase specs, the `phase-spec-format` probe answers it). If not, say so and stop. If so, run `plugins/bstack/skills/qualitydirector/scripts/quality.py sweep BOOKS_DIR KIND` on the quality books for each kind the change breaks (`phase-spec`, `verify-skill`, `review-guide`), paste the output under the PR's `## Blast radius`, and beside each listed repo name the upgrade PR. Run it again with `--with-private` for the repos the first output only counts, and keep that output out of the PR. A `could not check` line, or no books to read, makes this item not verified."
+      },
+      "source": "Commit 088cd28 (2026-11-17, bstack 0.12.0): phase specs changed format and `check-product.py` began to enforce it, which was breaking for product repos, and no step listed the repos that held a spec. Roadmap R40.",
+      "added": "2026-11-21",
+      "review_by": "2027-02-21"
+    },
+    {
       "id": "plugins-in-step",
       "trigger": {
         "paths": [

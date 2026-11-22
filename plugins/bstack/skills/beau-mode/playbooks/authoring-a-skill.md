@@ -15,6 +15,7 @@ source: pstack/skills/poteto-mode/playbooks/authoring-a-skill.md @ ccb5507
 4. Cut every sentence that doesn't change a decision. Say what to do; explain why only when the rule is confusing without it. Prefer structure over prose (`encode-lessons-in-structure`): if a rule can be a script or a check, make it one.
 5. Validate: in agent-kit run `make gen validate claude-validate`. Elsewhere, check the frontmatter and that every referenced file exists.
 6. If the change alters behavior, test it with the Eval playbook before relying on it.
-7. Run **Opening a PR**.
+7. A breaking change to a generated artifact ships with its sweep. The kit writes phase specs, `verify-<app>` skills and `REVIEW.md` into other repos, and CI there only meets a new rule when something carries it over. A change is breaking when an artifact the last release wrote now fails a check or is read differently. For each kind it breaks, run the **qualitydirector** skill's `quality.py sweep BOOKS_DIR KIND` (`phase-spec`, `verify-skill` or `review-guide`) on the quality books, paste the output under the PR's `## Blast radius`, and beside each repo it lists put the upgrade PR you opened or the one that already exists. The output leaves private repos out and says how many: run it again with `--with-private`, upgrade those too, and keep that second output out of the PR. With no books to read, say in the PR that the sweep did not run.
+8. Run **Opening a PR**.
 
 **Reply:** what the skill does, the key design decisions, and the validation result.

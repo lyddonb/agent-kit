@@ -530,7 +530,7 @@ The work spans four repos. Each item has one full entry, in the repo where its c
 | Lint: a skill never names a command that doesn't exist | Done: `check_commands` in `tools/validate.py` | None |
 | Behavioral evals, deterministic half | agent-ledger M3 unit 1 | The criteria live here. R3 and R13 point at it |
 | Every skill loads in every target tool | agentfiles R16 | `verify-kit` (R27) calls it |
-| A breaking format change ships with its sweep | R40 | Reads the quality books' `watched.csv` |
+| A breaking format change ships with its sweep | R40. Done 2026-11-21: `quality.py sweep` | Reads the quality books' `watched.csv` |
 | The prune brief covers skills | R41 | The profile half: agentfiles R18. The brief section: quality phase 1c |
 | Cuts are proposed by ablation | R25 (edited in place) | The always-on block is agentfiles' |
 | Upstream skills pass the same lint | agentfiles R17 | Uses the lint above (was R39) |
@@ -548,7 +548,7 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 
 Order: R38 is done and booking rows since 2026-11-21. agentfiles R17 can start, since the lint
 it runs has shipped.
-agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
+agentfiles R16 with its R0 or R11. R40 is done. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
 
@@ -630,9 +630,12 @@ checklist file, tests.
 **Depends on:** R30.
 **Playbook:** Authoring a skill.
 **Done when:** replayed against the 0.12.0 spec change, it lists the product repos that broke.
-**Why not done:** 0.12.0's spec change was breaking for product repos, and no step lists the
-repos that hold an affected artifact.
-**Prioritize when:** R30 lands, or the next breaking format change.
+**Done 2026-11-21.** `quality.py sweep BOOKS_DIR KIND` lists the watched repos whose default branch holds a phase
+spec, a `verify-<app>` skill or a `REVIEW.md`, read from GitHub; step 7 of the Authoring a skill playbook and the
+`format-sweep` checklist item ask for it. The list names public repos only and counts the private ones. Replayed
+against the 0.12.0 spec change (`sweep phase-spec --at 2026-11-16`, the day before commit 088cd28 landed): none of the
+three public watched repos held a phase spec, so the public list is empty. The private watched repo is left out of
+that list by design; `--with-private` covers it, and its answer stays out of this repo.
 
 ## P2
 
