@@ -18,6 +18,33 @@ metadata:
 3. Change the hosted workflow's trigger to `workflow_dispatch:` only, so it stays as a manual fallback and stops spending minutes. Leave jobs that must not trust the branch they check (a `pull_request_target` check) and deploys on Actions, and say so in the PR.
 4. Add the repo to the agent: rerun `install` with every watched repo (it replaces the agent).
 
+## Test records for the quality books
+
+A repo whose tests the Quality Director watches keeps its per-test record under local CI. Each run gets two variables:
+
+- `$LOCAL_CI_RECORD`: a path in a scratch folder outside the worktree, emptied before and after the run.
+- `$QUALITY_PY`: the qualitydirector's `quality.py` next to this skill, so the repo pins nothing.
+
+`scripts/ci` writes the record when both are set and runs its tests plainly otherwise, so a run by hand is unchanged:
+
+```bash
+if [ -n "${LOCAL_CI_RECORD:-}" ] && [ -n "${QUALITY_PY:-}" ]; then
+  junit="$(mktemp -d)/junit.xml"
+  uv run python "$QUALITY_PY" record-junit --junit "$junit" --out "$LOCAL_CI_RECORD" --repo NAME --sha "$LOCAL_CI_SHA" -- pytest --junitxml="$junit"
+else
+  uv run pytest
+fi
+```
+
+After the run, local_ci.py writes its own `manifest.json`: `github`, `sha`, `event` (`pull_request` or `push`), `pr`, `head_branch`, `base`, `started`, `completed`, `exit_code` and `host`. It adds the manifest and a copy of the record to the repo's ref `refs/local-ci/records`, as `runs/<sha>/<started>/`, in one commit per tick, and pushes that ref. A ref outside `refs/heads` starts no workflow and lists no branch. The quality books' `fetch` reads the records from there.
+
+- A failed run keeps its record, and so does a run that timed out if it wrote one.
+- A push that fails prints `test records not published, retried next tick` and is retried on every tick. The status never waits on it.
+- The record is the repo's own code's output, so it is published only when it is a regular file (never a link), at most 8 MB, whose first line is a recorder header. Otherwise the run prints why and nothing is published. A repo that writes no record gets no ref and no extra output.
+- local-ci keeps its copy apart from the scratch folder and checks it again before pushing: folder names that are a sha and a stamp, a manifest that matches them, no links. A folder that fails is skipped with a line and never blocks the others. A run is deleted once the ref holds it.
+- Anything `scripts/ci` leaves running is killed when it exits, so nothing touches the record afterwards. The push skips the checkout's own hooks (`--no-verify`).
+- A problem with the records folder never changes the status: the run goes on without `$LOCAL_CI_RECORD`.
+
 ## The agent
 
 ```bash

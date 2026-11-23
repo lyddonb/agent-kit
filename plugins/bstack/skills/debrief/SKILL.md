@@ -4,7 +4,7 @@ description: Close out a piece of work for the human. Says what was done, what i
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.4.0"
+  version: "0.2.0"
 ---
 
 # Debrief
@@ -49,8 +49,6 @@ python3 <this skill's folder>/scripts/debrief.py check --base origin/main
 ```
 
 It fails when the pull request changes a file outside the bookkeeping files and adds no record, and when a record it added or edited has a problem. Before you open a PR in a repo that runs it, run the same command once the record is committed: it reads commits, so a record that is only staged does not count. Add `--observe` to print what would have failed and still pass: a repo starts there, and drops the flag once a week of pull requests shows no false failure. When it fails, write the record. Never add an empty one to get past it.
-
-A repo whose scheduled jobs commit data for a person to review, such as weekly briefs and their books, lists those paths in `.changes/exempt`, one per line with a `#` comment saying why. Each path matches from the repo root, and a directory covers everything under it. A path may be a git glob whose first folder is named outright, such as `briefs/[0-9]*.md` for dated briefs only: exempt the data files, so a template or README beside them still needs a record. The check reads the list from the base branch, so a pull request that adds or widens it is held to the old list until it merges. Exempt data, never code: a script, a workflow, a prompt or agent instructions belong in a record.
 
 ## When nothing shipped
 
