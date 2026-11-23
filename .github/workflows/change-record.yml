@@ -46,7 +46,7 @@ jobs:
         run: |
           merged="$(git -C checked rev-parse HEAD^2)"
           if [ "$merged" != "$HEAD_SHA" ]; then
-            echo "::error::refs/pull/$PR/merge holds $merged, not the head $HEAD_SHA; rerun this check"
+            echo "::error::refs/pull/$PR/merge holds $merged, not the head $HEAD_SHA; push again or edit the pull request to rerun (a rerun of this job keeps the old head)"
             exit 1
           fi
 
