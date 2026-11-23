@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "goal": "Enforce the change record check in agent-kit now, as Beau decided on H16 after two days of observe mode.",
+  "changed": [
+    "validate.yml runs debrief.py check --base without --observe, so a pull request that changes a file outside the bookkeeping files and adds no change record, or adds a bad one, fails validate, which main requires.",
+    "docs/ARCHITECTURE.md's gate audit row says the check is enforced and that a pull request can still edit the check itself (H13).",
+    "H16 records the answer. quality, finances and agent-ledger stay in observe until the exempt list is widened."
+  ],
+  "claims": [
+    {
+      "claim": "The enforced check fails exactly the agent-kit pull requests observe mode flagged for a missing record (#76, #78, #81, #85) and passes the other ten it ran on.",
+      "verdict": "VERIFIED",
+      "check": "debrief.py check --base <base> with no --observe, on a detached checkout of each PR head #74 to #88 except the closed #83; macOS, Python 3",
+      "commit": "f6c9579",
+      "record": ".changes/2026-11-22-enforce-change-record/replay.txt",
+      "remaining": "#88 passes locally but failed in CI: its record cites 58bc6e8, a commit that exists only on this Mac. CI's checkout lacks it, so CI is the stricter of the two."
+    },
+    {
+      "claim": "This pull request passes the enforced check in CI.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "The validate run on this pull request is the proof; read its step log before merging."
+    }
+  ],
+  "next": [
+    {
+      "item": "Widen the exempt list for briefs, books, ledger rows, questions.md and docs/notes, then enforce in quality, finances and agent-ledger",
+      "source": "HUMAN_TASKS.md H16 step 3",
+      "why_now": "The scheduled brief PRs in quality and finances touch only those paths, and quality requires change-record on main.",
+      "impact": "Enforced without it, every weekly brief PR in quality stops merging until someone writes a record by hand."
+    },
+    {
+      "item": "Make 58bc6e8 reachable or point the no-comments record's fourth claim at a commit on main",
+      "source": "HUMAN_TASKS.md H16 step 4",
+      "why_now": "Any pull request that edits that record now fails validate.",
+      "impact": "Until then the claim's evidence names a commit nobody but this Mac can read."
+    },
+    {
+      "item": "Stop a pull request from editing its own check",
+      "source": "HUMAN_TASKS.md H13",
+      "why_now": "Enforcement makes the check worth getting around.",
+      "impact": "Today an agent can drop the step or widen the exempt list in the same pull request; only review would notice."
+    }
+  ],
+  "release": {
+    "none": "agent-kit's CI only; no plugin or skill changes for users"
+  }
+}

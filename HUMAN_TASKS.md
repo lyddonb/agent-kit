@@ -21,7 +21,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
-| H16 | Decide where the change record check enforces | To do |
+| H16 | Decide where the change record check enforces | agent-kit **enforced**; the other three to do |
 
 ---
 
@@ -152,6 +152,9 @@ and counts per week?), agentfiles H13 (are cfo's skills counted?), and agent-led
 **Unblocks:** R38, and through it R41 and agent-ledger's M3 unit 1.
 
 ### H16. Decide where the change record check enforces
+**Answer (2026-11-22):** Enforce now. Beau's words: "i want to enforce now". agent-kit
+enforces from this pull request on. quality, finances and agent-ledger stay in observe until
+the exempt list is widened (step 3).
 **Why a human:** Enforcing turns a required check into a merge block. In agent-kit the step sits
 inside `validate`, and quality requires `change-record` directly. Which repos block, and when, is
 your call.
@@ -173,7 +176,7 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
 (CI moves to the Mac) to merge, since they rewrite the check's line.
 **Steps:**
 1. Choose: enforce in agent-kit now, widen the list first, or keep observing.
-2. To enforce in agent-kit, drop `--observe` from `.github/workflows/validate.yml` line 41.
+2. ~~To enforce in agent-kit, drop `--observe` from `.github/workflows/validate.yml` line 41.~~ Done.
 3. To enforce in the other three, drop `--observe` from the step's `run:` line in
    `.github/workflows/changes.yml`. After quality #39 and finances #31 merge, also drop it from
    the `debrief.py check` line in their `scripts/ci`.

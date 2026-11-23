@@ -1,0 +1,48 @@
+Enforced change record check (debrief.py check --base <PR base>, no --observe) replayed on the head of each agent-kit PR the observe step ran on, #74 to #88 (#83 closed, skipped). Script: plugins/bstack/skills/debrief/scripts/debrief.py as on origin/main 77fbd90, unchanged at f6c9579. Run on macOS, 2026-11-22.
+
+== PR #74 head fcc6ed4 base c8e39f4
+1 record(s) checked, 0 with problems
+exit 0
+== PR #75 head 6a0b46b base 951bae9
+0 record(s) checked, 0 with problems
+exit 0
+== PR #76 head c8b78a6 base 951bae9
+this pull request changes .claude-plugin/marketplace.json, changes.yaml, docs/CATALOG.md and 9 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it
+0 record(s) checked, 0 with problems
+exit 1
+== PR #77 head 7228be0 base 42e1ec5
+0 record(s) checked, 0 with problems
+exit 0
+== PR #78 head 06a1354 base 442331a
+this pull request changes .claude-plugin/marketplace.json, changes.yaml, docs/CHANGELOG.md and 10 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it
+0 record(s) checked, 0 with problems
+exit 1
+== PR #79 head f7fca89 base eddf41c
+1 record(s) checked, 0 with problems
+exit 0
+== PR #80 head 1efc163 base 932395c
+1 record(s) checked, 0 with problems
+exit 0
+== PR #81 head 126cb3c base eddf41c
+this pull request changes .claude-plugin/marketplace.json, changes.yaml, docs/CHANGELOG.md and 8 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it
+0 record(s) checked, 0 with problems
+exit 1
+== PR #82 head 77cbb26 base aa76661
+2 record(s) checked, 0 with problems
+exit 0
+== PR #84 head d64c177 base 6bd1272
+1 record(s) checked, 0 with problems
+exit 0
+== PR #85 head 000846b base 1e3f753
+this pull request changes .claude-plugin/marketplace.json, changes.yaml, docs/CATALOG.md and 9 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it
+0 record(s) checked, 0 with problems
+exit 1
+== PR #86 head b5d11ad base b22cc36
+1 record(s) checked, 0 with problems
+exit 0
+== PR #87 head 6c7fe2e base 0939a66
+1 record(s) checked, 0 with problems
+exit 0
+== PR #88 head 5ed69a4 base 16205a9
+1 record(s) checked, 0 with problems
+exit 0
