@@ -19,7 +19,7 @@
       "verdict": "VERIFIED",
       "check": "a prototype commit pushed to refs/local-ci/prototype in a private watched repo, read back with git/ref, git/trees and git/blobs, the runs listing checked 3 minutes 21 seconds later (0 runs), then the ref deleted",
       "commit": "1782b7c",
-      "record": "https://github.com/lyddonb/agent-kit/pull/new/feat/local-ci-records",
+      "record": "https://github.com/lyddonb/agent-kit/pull/105",
       "remaining": "The repo is private, so the prototype is not linked here. The first real record lands when that repo's scripts/ci writes one."
     }
   ],
