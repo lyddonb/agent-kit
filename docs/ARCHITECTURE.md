@@ -176,6 +176,12 @@ it checks that could steer it. Read for H13: `debrief.py` keeps its exempt list 
 them loads code, an allow list or an ignore list from the checked tree. A future checker that
 reads its settings from the repo would reopen the gap.
 
+**Under fix A, a checker change lands in two pull requests.** The base-branch run judges every
+pull request with `main`'s checker. Take a pull request that changes what the checker accepts,
+such as a new record key, a new books column or a pin bump that migrates a format, and that also
+uses the change: the old checker fails it. The first pull request changes the checker, or moves
+the pin, and nothing else. The second uses the change.
+
 **What H13 has to work with.** No repo has a `CODEOWNERS` file. Every ruleset, and
 agent-ledger's branch protection, asks for a pull request with zero approvals. Every ruleset's
 bypass list is empty, so nobody can merge past a failing required check without editing the
