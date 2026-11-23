@@ -22,7 +22,7 @@
       "verdict": "VERIFIED",
       "check": "make check, python3 tools/validate.py, make versions BASE=origin/main and make test (1316 tests, OK, 24 skipped) on macOS, Python from uv.",
       "commit": "c62797b2e9eba8703a4c74eb4ea762d7b9f3df34",
-      "record": "https://github.com/lyddonb/agent-kit/pull/105",
+      "record": "https://github.com/lyddonb/agent-kit/pull/107",
       "remaining": "CI's validate run on this pull request is the second check. change-record can't run on it, because main has no change-record.yml until this merges."
     }
   ],
