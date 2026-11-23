@@ -118,8 +118,8 @@ audit measured:
 |---|---|---|---|---|---|---|
 | `books` | finances | Yes (ruleset) | `books.py check` from agent-kit, at a commit SHA written in `books.yml` | `books.yml`: the SHA and the `--base origin/main` argument. Trigger is `pull_request` | **The PR** | H13, or fix A below |
 | `books` | quality | Yes (ruleset) | `quality.py check` from agent-kit, at a commit SHA written in `books.yml` | `books.yml`, same as above. Trigger is `pull_request` | **The PR** | H13, or fix A |
-| `ledger-verify` | finances, quality | Yes (ruleset) | The `lyddonb/agent-ledger` Action at a commit SHA. It runs its own copy of the CLI under `python -I` and checks out the pull request's merge commit as data (read at the pinned commit, v1.0.0, which is older than receipts) | `ledger.yml` on the base branch. Trigger is `pull_request_target`. The CLI reads no settings file from the tree it checks (read: `scan.py` and `repo_verify.py` have no allow or ignore list) | Not the PR. One gap: a pull request could add a second job with the same name (untested, see below) | H13 decides the name gap |
-| `ledger-verify` | agent-ledger | Yes (branch protection) | The Action as the base commit has it (`ref: base.sha`, checked out to `trusted/`), with the pull request's merge commit as data | `ledger.yml` on the base branch for the `pull_request_target` run | Not the PR for that run. The same file also triggers on `pull_request`, where the pull request's copy defines a job with the same name. Today it is skipped by an `if:`, and each pull request already shows two `ledger-verify` check runs (measured on PRs 29 to 31) | H13 decides the name gap |
+| `ledger-verify` | finances, quality | Yes (ruleset) | The `lyddonb/agent-ledger` Action at a commit SHA. It runs its own copy of the CLI under `python -I` and checks out the pull request's merge commit as data (read at the pinned commit, v1.0.0, which is older than receipts) | `ledger.yml` on the base branch. Trigger is `pull_request_target`. The CLI reads no settings file from the tree it checks (read: `scan.py` and `repo_verify.py` have no allow or ignore list) | Not the PR. A second job with the same name can't outvote it (measured, see below) | No change |
+| `ledger-verify` | agent-ledger | Yes (branch protection) | The Action as the base commit has it (`ref: base.sha`, checked out to `trusted/`), with the pull request's merge commit as data | `ledger.yml` on the base branch for the `pull_request_target` run | Not the PR for that run. The same file also triggers on `pull_request`, where the pull request's copy defines a job with the same name. Today it is skipped by an `if:`, and each pull request already shows two `ledger-verify` check runs (measured on PRs 29 to 31). Both must pass (measured, see below) | No change |
 | `ledger-verify-self` | agent-ledger | No | The pull request's own Action | The pull request's `ledger.yml` | **The PR**, by design: it exercises Action changes before they merge | Owner: Beau. Never add it to the required list |
 | `test (3.10)`, `test (3.12)`, `test (3.13)` | agent-ledger | Yes (branch protection) | The pull request's tests and source. The recorder is `quality.py record` from agent-kit, at a SHA written in `test.yml` | `test.yml`. Trigger is `pull_request` | **The PR** | H13 for `test.yml`. R29 unit 3 for a diff that weakens tests |
 | `test` | agentfiles | No. The ruleset requires no checks | The pull request's tests and source. Recorder pinned in `ci.yml` | `ci.yml`. Trigger is `pull_request` | **The PR**, and a red run doesn't block the merge | H13: require `test` first, then protect `ci.yml`. R29 unit 3 for the tests |
@@ -141,20 +141,84 @@ One pull request that swaps the trigger would get no run of the required check a
 the base's file lacks the new trigger and its own file lacks the old one. Fix A is also only as
 good as the name gap below.
 
-**The name gap is untested.** The agent-ledger rows show two check runs named `ledger-verify`
-on every pull request, one a success and one skipped, and the merges went through. Nobody has
-tried a pull request where the base-branch run fails and a second run of the same name passes.
-H13 should try that once on a scratch pull request before treating any `pull_request_target`
-check as out of reach.
+**The name gap is closed (measured 2026-11-22, H13).** When two check runs share a required
+check's name, every one of them must pass. A later run that passes doesn't replace an earlier
+one that failed.
 
-**What H13 has to work with.** No repo has a `CODEOWNERS` file. Every ruleset and
-agent-ledger's branch protection ask for a pull request with zero approvals. Every one of the
-most recent merged pull requests in each repo (up to 30 per repo) was opened by the owner's
-account, agents included, and GitHub doesn't let an author approve their own pull request. So "a change under
-`.github/workflows/**` needs your review" can't be met by a review rule alone while agents
-open pull requests as that account. The options are fix A where it fits, a second account for agents so that a
-code-owner review means something, or a ruleset that restricts who may change those paths
-(not checked: whether GitHub offers that rule for these repos).
+- On branch protection: scratch pull request lyddonb/agent-ledger#36. A bad run folder made
+  the base-branch `pull_request_target` run of `ledger-verify` fail at 02:33:46Z. The pull
+  request's own `ledger.yml` added a `pull_request` job with the same name, which passed at
+  02:36:39Z. GraphQL `isRequired` was true for both, every other required check passed, and
+  `mergeStateStatus` stayed `BLOCKED`.
+- On a ruleset: scratch pull request lyddonb/agent-kit#92. A stale generated file made
+  `validate` fail. A second workflow's job, also named `validate`, passed two minutes later.
+  The result was the same: both runs were required, and the pull request stayed `BLOCKED`.
+
+The raw GraphQL answers are in the quality repo, in
+`.audit/runs/2026-11-22-protect-gates/evidence/`. Both tests ran in one order, with the
+failure first. That is the order a pull request would need to outvote the base run.
+
+So a pull request can't get past a base-branch run by adding a job of the same name. The same
+rule makes fix A's first step safe: while a workflow has both triggers, the base-branch copy
+must pass whatever the pull request does to its own copy.
+
+**`pull_request_target` always runs the default branch's workflow** (GitHub's docs, "Events
+that trigger workflows"; observed when a pull request into a side branch got no
+`pull_request_target` run). This makes fix A stronger, because no branch can carry an older,
+weaker copy. It also means a new `pull_request_target` job can't run before it merges. Once a
+required job like that is on `main`, a broken one blocks every pull request, including the one
+that would fix it. The only way out then is to drop the check from the ruleset, merge the fix,
+and add the check back.
+
+**Fix A depends on the checker.** It holds only while the checker reads nothing from the tree
+it checks that could steer it. Read for H13: `debrief.py` keeps its exempt list in the script.
+`books.py` and `quality.py` read the books' data files, which are what they check. None of
+them loads code, an allow list or an ignore list from the checked tree. A future checker that
+reads its settings from the repo would reopen the gap.
+
+**On the Mac's self-hosted runner, fix A guards against mistakes, not hostile code.**
+quality and finances run `books`, `change-record` and `ledger-verify` on the `local-mac` runner.
+It isn't ephemeral, and it runs as the owner's macOS user (read 2026-11-22: three
+`Runner.Listener` processes as that user, with work folders that persist between jobs). A pull
+request's own `pull_request` job, or any workflow file it adds, runs its own code there. That
+code could plant a git hook in the reused checkout, edit `~/.gitconfig` or replace `uv`, and the
+next base-branch run would execute it (found in H13's security review, inferred end to end).
+A job that holds `actions: write` could also cancel or delete the base-branch run; whether a
+deleted run still counts toward the requirement is unmeasured. Neither is new with fix A, and
+`ledger-verify` was already exposed. Both need code written to attack the check. An agent that
+loosens a check in good faith, which is what fix A stops, doesn't write that. Agents on that Mac
+already run as that user with the owner's keys, so a pull request that did this would gain
+nothing an agent doesn't already have. Closing it needs trusted jobs on runners that pull
+request code can't reach, such as hosted runners or a separate ephemeral machine.
+
+**Under fix A, a checker change lands in two pull requests.** The base-branch run judges every
+pull request with `main`'s checker. Take a pull request that changes what the checker accepts,
+such as a new record key, a new books column or a pin bump that migrates a format, and that also
+uses the change: the old checker fails it. The first pull request changes the checker, or moves
+the pin, and nothing else. The second uses the change.
+
+**What H13 has to work with.** No repo has a `CODEOWNERS` file. Every ruleset, and
+agent-ledger's branch protection, asks for a pull request with zero approvals. Every ruleset's
+bypass list is empty, so nobody can merge past a failing required check without editing the
+ruleset first, not even the owner. Agents open pull requests as the owner's account, and GitHub
+doesn't let an author approve their own pull request. GitHub offers these repos the following
+(its docs, read 2026-11-22):
+
+- **Code owner review.** It needs an approval from someone other than the author. While agents
+  use the owner's account, nobody can give it.
+- **Required reviewers**, a rule that makes a team approve changes to given paths, isn't
+  available on user-owned repos, which have no teams.
+- **Restrict file paths** is a push ruleset rule. Push rulesets exist only for private and
+  internal repos, which here means quality and finances. Whether this account's plan offers
+  them is unchecked. The rule blocks the push itself for everyone not on its bypass list. With
+  an empty list the owner can't change workflows either. With "Repository admin" on the list,
+  agents bypass it too, because they are that admin.
+
+So fix A is the one fix that needs no admin rights, and only for checks that read files. Every
+other protection depends on agents having an identity of their own. That covers `validate` and
+`test`, which run the pull request's own code by design. It also covers a pull request that
+weakens a workflow for the *next* pull request: fix A judges that change with the old, strict
+copy, which passes it.
 
 **Other things the audit turned up.**
 

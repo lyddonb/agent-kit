@@ -18,7 +18,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H10 | Review and merge the bstack branch | **Done** |
 | H11 | Review and merge the verification and planning branch | **Done** |
 | H12 | Create a verification skill in one real app | Steps 1 and 2 **done** (R27); steps 3 and 4 to do |
-| H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
+| H13 | Protect workflow files and checker pins | Fix A in progress (run 2026-11-22-protect-gates); steps 1 to 6 are yours |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | agent-kit **enforced**; the other three to do |
@@ -119,12 +119,46 @@ schedule for each, is yours and was not confirmed when this was written. R18 no 
 this task: its own trigger is two apps with verification skills and local lanes colliding.
 
 ### H13. Protect workflow files and checker pins
-**Why a human:** Rulesets and CODEOWNERS need repo admin, and you choose who may approve.
+**Status (2026-11-22):** Run `2026-11-22-protect-gates` (its charter and ledger are in the quality
+repo, approved by you) is moving `books` and `change-record` to read their workflow and checker pin
+from `main`, through `pull_request_target`, in quality, finances and agent-ledger. It is also adding
+a base-branch `change-record` check to agent-kit. The name gap is closed: a pull request can't outvote
+a base-branch run with a job of the same name (`docs/ARCHITECTURE.md`, "The name gap is closed").
+That run fixes only checks that read files. Everything else here needs you.
+**Why a human:** Rulesets, collaborators and accounts need repo admin, and the choice of who may
+approve a workflow change is yours.
 **Steps:**
-1. Read R29's audit table once it merges (`docs/ARCHITECTURE.md`). It lists each gate a PR can
-   currently change for itself.
-2. For each repo it names, add a ruleset or CODEOWNERS entry so a change under
-   `.github/workflows/**` (and the pinned checker SHA in the books repos) needs your review.
+1. **Require agent-kit's `change-record`.** Wait for the agent-kit pull request that adds
+   `.github/workflows/change-record.yml` to merge, and for that check to pass on a later pull
+   request. Then add `change-record` (GitHub Actions) to the required checks of the "protect main"
+   ruleset. Until you do, it runs but blocks nothing. Afterwards an agent removes the duplicate
+   step from `validate.yml`.
+2. **Require agentfiles' `test`.** Its ruleset requires no checks today, so a red run doesn't
+   block a merge.
+3. **Decide whether agents get a GitHub identity of their own.** Nothing else in this task can
+   protect `validate`, `test` or the workflow files themselves, because agents act as you. With a
+   second account, a code owner review means something. The parts:
+   - a machine account (GitHub allows one per person), given Write, not Admin, on the five repos;
+   - agent sessions that use its SSH key and `gh` login and can't reach yours. They run as your
+     macOS user today and can read your keychain, so this needs a separate user or a sandbox;
+   - a `CODEOWNERS` file naming you for `.github/workflows/**` (an agent can open that pull request);
+   - in each ruleset, "Require review from Code Owners", plus "Repository admin" on the bypass list
+     set to "For pull requests only", so that you can still merge your own workflow changes.
+
+   Not checked on these repos: how code owner review behaves while required approvals stay at 0.
+4. **Only after step 3, and if you want it:** a push ruleset in quality and finances that
+   restricts `.github/workflows/**`, with Repository admin on the bypass list. Push rulesets exist
+   only for private repos. First check that Settings → Rules → Rulesets → New ruleset offers "New
+   push ruleset" on this account. Before step 3 it stops nothing, because agents are the admin.
+5. **Know the limit on the Mac runner.** quality and finances run their checks on `local-mac`,
+   which persists between jobs and runs as you. A pull request that *attacks* the check, instead
+   of loosening it by mistake, can tamper with the base-branch run there (`docs/ARCHITECTURE.md`,
+   "On the Mac's self-hosted runner"). Closing that needs trusted jobs off that runner, on hosted
+   runners once the spending limit allows, or on an ephemeral machine. Your call whether that's
+   worth it while agents already run as you.
+6. **If a base-branch check ever blocks every pull request:** `pull_request_target` runs only
+   `main`'s copy, so a broken one also blocks the pull request that fixes it. Remove that check
+   from the ruleset, merge the fix, and add the check back.
 
 ### H14. Allow hooks in agentfiles — 🚧 BLOCKER for R32
 **Why a human:** A hook runs code on every matching event in every session. Turning that on is
