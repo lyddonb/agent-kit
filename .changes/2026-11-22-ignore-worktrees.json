@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "goal": "Keep local git worktrees made under .worktrees/ out of git status on the main checkout.",
+  "changed": [
+    ".gitignore ignores .worktrees/."
+  ],
+  "claims": [
+    {
+      "claim": "A file under .worktrees/ is ignored and does not show in git status.",
+      "verdict": "VERIFIED",
+      "check": "Created .worktrees/probe/f in a worktree at the commit, then ran git check-ignore -v on it and git status --porcelain -- .worktrees.",
+      "commit": "922031f449568df3c7a9e05fcffd15376f5dc962",
+      "record": ".changes/2026-11-22-ignore-worktrees/check.txt",
+      "remaining": "none"
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "Repo hygiene only; nothing a user of this repo sees changes."
+  }
+}
