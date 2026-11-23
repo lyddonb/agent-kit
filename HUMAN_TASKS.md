@@ -181,7 +181,7 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
    `.github/workflows/changes.yml`. After quality #39 and finances #31 merge, also drop it from
    the `debrief.py check` line in their `scripts/ci`.
    - The exempt list is per repo, not a wider `BOOKKEEPING`: each repo names its data paths in
-     `.changes/exempt`, read from the base branch (bstack 0.38.0). `BOOKKEEPING` also decides when
+     `.changes/exempt`, read from the base branch (bstack 0.39.0). `BOOKKEEPING` also decides when
      a verify-work receipt goes stale, and `books/` and `ledger/` are data those checks must see.
      A replay of every PR since 2026-11-21 passed the brief and import PRs and still failed the
      code PRs with no record (`.changes/2026-11-22-exempt-list/replay.txt`). Still to do: pin the

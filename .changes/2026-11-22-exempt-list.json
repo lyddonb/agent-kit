@@ -46,5 +46,5 @@
       "impact": "The records say which commit each check ran on, and editing them no longer blocks a pull request"
     }
   ],
-  "release": {"see": "changes.yaml bstack@0.38.0"}
+  "release": {"see": "changes.yaml bstack@0.39.0"}
 }

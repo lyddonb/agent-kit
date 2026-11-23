@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "goal": "Answer R-G of the CI speed plan: is test code growing faster than the code it tests? Book test-file and source-file lines per watched repo per week, as a measurement only.",
+  "changed": [
+    "quality.py gains an optional book, books/volume.csv: one row per repo and complete ISO week with the commit counted, the classification rule (v1), test and source files and lines, and the push run that names the commit. Without the file every command behaves as before.",
+    "fetch, once the book exists, takes each week's newest push run of the watched workflow on the default branch, reads that commit's tarball in memory under caps, and writes volume/<week>.json; weeks without a row in the last 12 are asked again. ingest books each week once and never changes a row; summary adds repos.<repo>.volume with the change since the last booked week, integers only, and --public-only drops private rows."
+  ],
+  "claims": [
+    {
+      "claim": "Classification, line counting, the tarball caps (including a pax header claiming a huge payload), week selection, pagination, the unadopted books, ingest's strict reading and its refusal to change a row or book an unfinished week, check, summary and --public-only behave as the SKILL.md says.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_quality_volume.py, 24 tests; five mutants, four caught (the fifth, dropping the public-only volume filter, cannot leak because the repo is already removed); make test, 1267 tests",
+      "commit": "8726b07",
+      "record": ".changes/2026-11-22-test-volume/tests.txt",
+      "remaining": "Fake gh and tarballs built in the test, not GitHub."
+    },
+    {
+      "claim": "Against real GitHub, fetch counted agent-kit for six weeks into a scratch copy of the books, and the counts at e3d22bf and 0939a66 equal git ls-tree plus cat-file under the same rule; check passes and a second ingest books nothing.",
+      "verdict": "VERIFIED",
+      "check": "quality.py fetch --repo agent-kit --since 2026-10-12, ingest, check, summary --week 2026-W47; a git cross-count script",
+      "commit": "f7f6435",
+      "record": "https://github.com/lyddonb/agent-kit/pull/91",
+      "remaining": "Only agent-kit was counted live; the other watched repos are counted when the quality books adopt the file."
+    }
+  ],
+  "next": [
+    {
+      "item": "Adopt books/volume.csv in the quality books with a backfill and a brief template row",
+      "source": "stated",
+      "why_now": "Nothing is booked until the books have the file and the checker pin moves to this version.",
+      "impact": "The weekly brief has no test volume until then."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.38.0"
+  }
+}
