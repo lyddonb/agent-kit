@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.38.0 (2026-11-22)
+
+- A repo can now enforce the change record check without failing its scheduled data pull requests. List the paths a weekly job writes, such as `briefs/` or `books/`, in `.changes/exempt`, and `debrief.py check --base` (debrief 0.3.0) stops asking those pull requests for a record. The list is read from the base branch, so a pull request can't exempt its own changes, and a code change beside exempt data still needs a record.
+- Try: `Which paths in this repo's recent pull requests would belong in .changes/exempt?`
+
 ## bstack 0.37.0 (2026-11-22)
 
 - New `no-comments` skill deletes the comments a change adds and fixes the code that leaned on them. A `comment-sicko` subagent removes every comment outside a short keep-list (license headers, public API doc comments, constraints from things we cannot change, issue links) and flags the symbols a comment was covering for. You get the fixes, and an offer to turn each "do not remove" note into a type, a test or a check. Adapted from pstack.

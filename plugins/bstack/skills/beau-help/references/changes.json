@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.38.0",
+      "date": "2026-11-22",
+      "plugin": "bstack",
+      "version": "0.38.0",
+      "changes": [
+        "A repo can now enforce the change record check without failing its scheduled data pull requests. List the paths a weekly job writes, such as `briefs/` or `books/`, in `.changes/exempt`, and `debrief.py check --base` (debrief 0.3.0) stops asking those pull requests for a record. The list is read from the base branch, so a pull request can't exempt its own changes, and a code change beside exempt data still needs a record."
+      ],
+      "try": "Which paths in this repo's recent pull requests would belong in .changes/exempt?"
+    },
+    {
       "id": "bstack@0.37.0",
       "date": "2026-11-22",
       "plugin": "bstack",
