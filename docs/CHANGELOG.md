@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.37.0 (2026-11-22)
+
+- The Quality Director can now track test code against source code per repo per week. Once the quality books have `books/volume.csv` (header only to start), `fetch` counts the test and source lines of each watched repo at the head of each complete week's newest push run on the default branch, from the repo's tarball read in memory, and `ingest` books one row per repo and week. `summary` adds `volume`: the week's lines and files and the change since the last booked week. `fetch --since DATE` backfills earlier weeks. It downloads the full source of every watched repo, private ones included, and keeps only the counts.
+- Try: `Create books/volume.csv in the quality books, then fetch, ingest and summarize last week's test volume.`
+
 ## bstack 0.36.0 (2026-11-22)
 
 - A private repo's CI can now run on your Mac instead of GitHub-hosted runners. The new local-ci skill runs the repo's `scripts/ci` at each open PR head and the default branch head in a throwaway worktree, and posts the result as the `local-ci` commit status, which the PR's checks list shows. A red run also leaves one PR comment with the end of the log. `local_ci.py install --repo OWNER/NAME=CHECKOUT` sets up a launchd agent that checks every five minutes; `local_ci.py run --pr N` runs one PR now.
