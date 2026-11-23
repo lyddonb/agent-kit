@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "goal": "Leave the change record check only where a pull request can't edit it (H13). change-record.yml runs main's debrief.py on pull_request_target; the step inside validate ran the pull request's own copy.",
+  "changed": [
+    "validate no longer runs debrief.py check. The required change-record check does, from main."
+  ],
+  "claims": [
+    {
+      "claim": "agent-kit's change-record check runs from main on a real pull request.",
+      "verdict": "UNCHECKED",
+      "remaining": "Filled in from this pull request's own run. Merge only after Beau has added change-record to the protect main ruleset (H13 step 1); before that, this would leave no required change record check."
+    }
+  ],
+  "next": [],
+  "release": {"none": "CI only."}
+}
