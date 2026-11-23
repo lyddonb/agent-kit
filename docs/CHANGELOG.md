@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.40.0 (2026-11-22)
+
+- A `.changes/exempt` entry can now be a git glob, so a repo can exempt its dated weekly briefs (`briefs/[0-9]*.md`) and still ask for a change record when the brief template or a README beside them changes. A plain path matches as before. An entry has to name its top-level folder or file outright, so no pattern can exempt the whole repo (debrief 0.4.0).
+- Try: `Which files in briefs/ does this repo's .changes/exempt let through without a change record?`
+
 ## bstack 0.39.0 (2026-11-22)
 
 - A repo can now enforce the change record check without failing its scheduled data pull requests. List the paths a weekly job writes, such as `briefs/` or `books/`, in `.changes/exempt`, and `debrief.py check --base` (debrief 0.3.0) stops asking those pull requests for a record. The list is read from the base branch, so a pull request can't exempt its own changes, and a code change beside exempt data still needs a record.

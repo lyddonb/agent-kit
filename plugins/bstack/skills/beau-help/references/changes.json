@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.40.0",
+      "date": "2026-11-22",
+      "plugin": "bstack",
+      "version": "0.40.0",
+      "changes": [
+        "A `.changes/exempt` entry can now be a git glob, so a repo can exempt its dated weekly briefs (`briefs/[0-9]*.md`) and still ask for a change record when the brief template or a README beside them changes. A plain path matches as before. An entry has to name its top-level folder or file outright, so no pattern can exempt the whole repo (debrief 0.4.0)."
+      ],
+      "try": "Which files in briefs/ does this repo's .changes/exempt let through without a change record?"
+    },
+    {
       "id": "bstack@0.39.0",
       "date": "2026-11-22",
       "plugin": "bstack",
