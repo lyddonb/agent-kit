@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "goal": "Stop a pull request from dropping or loosening the change record check that judges it (H13). The check is a step of validate, and validate runs the pull request's own validate.yml and debrief.py.",
+  "changed": [
+    "New check change-record, from .github/workflows/change-record.yml on pull_request_target: it runs main's debrief.py against the pull request's merge commit, checked out as data. No code from the pull request runs.",
+    "A change to debrief.py is checked by the old debrief.py, and takes effect from the next pull request on.",
+    "Nothing requires it yet. Beau adds it to the ruleset once it has passed on a real pull request (H13 step 1); then the step leaves validate."
+  ],
+  "claims": [
+    {
+      "claim": "The new workflow runs and passes on pull requests to main.",
+      "verdict": "UNCHECKED",
+      "remaining": "GitHub runs pull_request_target only from the default branch, so it can't run before this merges. The first pull request after the merge shows it; the H13 run records that run before Beau requires the check."
+    },
+    {
+      "claim": "debrief.py runs under python -I and reads its exempt list from itself, not from the checked tree.",
+      "verdict": "UNCHECKED",
+      "remaining": "Read from debrief.py (BOOKKEEPING is a constant, imports are standard library only) and run locally under -I with --root on a checkout; not run in CI until merge."
+    }
+  ],
+  "next": [
+    {"item": "Require change-record in the protect main ruleset", "source": "HUMAN_TASKS.md H13 step 1", "why_now": "Until then a pull request can still drop the step from validate and merge", "impact": "The change record check is out of the pull request's reach"},
+    {"item": "Drop the change record step from validate.yml", "source": "run 2026-11-22-protect-gates unit 5", "why_now": "After the requirement, the step is a duplicate the pull request controls", "impact": "One change record check per pull request"}
+  ],
+  "release": {"none": "CI only; contributors see one more check on each pull request."}
+}
