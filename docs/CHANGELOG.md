@@ -3,9 +3,14 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
-## bstack 0.39.1 (2026-11-22)
+## bstack 0.40.1 (2026-11-22)
 
 - `debrief.py check` no longer passes a VERIFIED claim whose `record` is a pathspec pattern such as `*`, `:(glob)**` or `:/`, or a folder, symlink or submodule: the record must name one regular file git tracks or has staged, exactly as `git ls-files` prints it. It also refuses to read a change record that is a symlink, sits outside the repo, or that git holds with a mode other than 100644, so a pull request can't make the check print another file's keys into its log or hang on a link to `/dev/zero`. A repo that pins debrief.py at an older commit gets this when its pin moves.
+
+## bstack 0.40.0 (2026-11-22)
+
+- A `.changes/exempt` entry can now be a git glob, so a repo can exempt its dated weekly briefs (`briefs/[0-9]*.md`) and still ask for a change record when the brief template or a README beside them changes. A plain path matches as before. An entry has to name its top-level folder or file outright, so no pattern can exempt the whole repo (debrief 0.4.0).
+- Try: `Which files in briefs/ does this repo's .changes/exempt let through without a change record?`
 
 ## bstack 0.39.0 (2026-11-22)
 
