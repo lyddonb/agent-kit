@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "goal": "Make agent-kit's change record check trustworthy now that it is enforced and runs from the base branch: a VERIFIED claim must cite a real file, and a pull request must not be able to make the check read files outside the repo.",
+  "changed": [
+    "debrief.py check reads a claim's record as a literal path that must name one regular file git tracks or has staged; a pathspec pattern, a folder, a symlink or a submodule is refused.",
+    "debrief.py refuses to read a change record that is a symlink, resolves outside the repo, is not a regular file, or that git holds with a mode other than 100644."
+  ],
+  "claims": [
+    {
+      "claim": "The CLI rejects records of '*', ':(glob)**' and ':/', and refuses a symlinked record and a link to /dev/zero without reading them, where origin/main's script passed the patterns, printed the linked file's version and keys, and hung on /dev/zero",
+      "verdict": "VERIFIED",
+      "check": "repro.sh (in the record) runs origin/main's debrief.py and this branch's against the same scratch git repo on macOS, Python 3.9, with a 10 s alarm",
+      "commit": "d69a0625ec35edf67b97ba00d69fb448013748bf",
+      "record": ".changes/2026-11-22-debrief-literal-records/repro.txt",
+      "remaining": "Not run on the Linux GitHub runner itself; the unit tests cover the same cases there"
+    },
+    {
+      "claim": "The stricter rules change nothing for quality, finances and agent-ledger: old and new checker print identical output on their local checkouts",
+      "verdict": "VERIFIED",
+      "check": "debrief.py check --root <checkout> with origin/main's script and this branch's, outputs diffed",
+      "commit": "d69a0625ec35edf67b97ba00d69fb448013748bf",
+      "record": ".changes/2026-11-22-debrief-literal-records/downstream.txt",
+      "remaining": "Local checkouts, which may lag their remotes; quality and finances each have two records that fail on both versions"
+    },
+    {
+      "claim": "The full suite passes, including five new tests that fail on origin/main's script",
+      "verdict": "VERIFIED",
+      "check": "make test",
+      "commit": "d69a0625ec35edf67b97ba00d69fb448013748bf",
+      "record": ".changes/2026-11-22-debrief-literal-records/tests.txt",
+      "remaining": "Python 3.9 run only in CI"
+    }
+  ],
+  "next": [
+    {
+      "item": "Move the debrief.py pins in quality, finances and agent-ledger to this commit",
+      "source": "inferred",
+      "why_now": "They run the check from pinned older commits, so they keep both holes until the pin moves",
+      "impact": "Their change record checks stop accepting pattern records and stop reading symlinked records"
+    },
+    {
+      "item": "Fix the two failing records each in quality and finances (VERIFIED without commit or record)",
+      "source": "inferred",
+      "why_now": "Found while checking the downstream repos; they fail on old and new checkers alike",
+      "impact": "Those repos' full record check goes green"
+    },
+    {
+      "item": "Refuse a .changes folder that is a symlink to another folder in the repo, and stop debrief.py new writing through a dangling symlink",
+      "source": "inferred",
+      "why_now": "Review of this fix found both; neither is reachable from a pull request's added records",
+      "impact": "Closes the last ways a record path is not what it looks like"
+    }
+  ],
+  "release": {
+    "see": "bstack 0.39.1 in changes.yaml"
+  }
+}
