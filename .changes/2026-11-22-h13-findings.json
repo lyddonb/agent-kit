@@ -3,7 +3,7 @@
   "goal": "Record what H13 found about protecting CI gates, and hand Beau the steps only he can take. Goal of H13: stop a pull request from weakening the check that judges it.",
   "changed": [
     "docs/ARCHITECTURE.md: the name gap is measured and closed on branch protection and on a ruleset; pull_request_target always runs the default branch's workflow; fix A depends on the checker reading nothing that steers it; what rulesets offer user-owned repos.",
-    "HUMAN_TASKS.md: H13 rewritten as five steps for Beau, with the run that does the rest named."
+    "HUMAN_TASKS.md: H13 rewritten as six steps for Beau, with the run that does the rest named."
   ],
   "claims": [
     {

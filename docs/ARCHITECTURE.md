@@ -176,6 +176,21 @@ it checks that could steer it. Read for H13: `debrief.py` keeps its exempt list 
 them loads code, an allow list or an ignore list from the checked tree. A future checker that
 reads its settings from the repo would reopen the gap.
 
+**On the Mac's self-hosted runner, fix A guards against mistakes, not hostile code.**
+quality and finances run `books`, `change-record` and `ledger-verify` on the `local-mac` runner.
+It isn't ephemeral, and it runs as the owner's macOS user (read 2026-11-22: three
+`Runner.Listener` processes as that user, with work folders that persist between jobs). A pull
+request's own `pull_request` job, or any workflow file it adds, runs its own code there. That
+code could plant a git hook in the reused checkout, edit `~/.gitconfig` or replace `uv`, and the
+next base-branch run would execute it (found in H13's security review, inferred end to end).
+A job that holds `actions: write` could also cancel or delete the base-branch run; whether a
+deleted run still counts toward the requirement is unmeasured. Neither is new with fix A, and
+`ledger-verify` was already exposed. Both need code written to attack the check. An agent that
+loosens a check in good faith, which is what fix A stops, doesn't write that. Agents on that Mac
+already run as that user with the owner's keys, so a pull request that did this would gain
+nothing an agent doesn't already have. Closing it needs trusted jobs on runners that pull
+request code can't reach, such as hosted runners or a separate ephemeral machine.
+
 **Under fix A, a checker change lands in two pull requests.** The base-branch run judges every
 pull request with `main`'s checker. Take a pull request that changes what the checker accepts,
 such as a new record key, a new books column or a pin bump that migrates a format, and that also

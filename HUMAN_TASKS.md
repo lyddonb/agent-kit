@@ -18,7 +18,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H10 | Review and merge the bstack branch | **Done** |
 | H11 | Review and merge the verification and planning branch | **Done** |
 | H12 | Create a verification skill in one real app | Steps 1 and 2 **done** (R27); steps 3 and 4 to do |
-| H13 | Protect workflow files and checker pins | Fix A in progress (run 2026-11-22-protect-gates); steps 1 to 5 are yours |
+| H13 | Protect workflow files and checker pins | Fix A in progress (run 2026-11-22-protect-gates); steps 1 to 6 are yours |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | agent-kit **enforced**; the other three to do |
@@ -150,7 +150,13 @@ approve a workflow change is yours.
    restricts `.github/workflows/**`, with Repository admin on the bypass list. Push rulesets exist
    only for private repos. First check that Settings → Rules → Rulesets → New ruleset offers "New
    push ruleset" on this account. Before step 3 it stops nothing, because agents are the admin.
-5. **If a base-branch check ever blocks every pull request:** `pull_request_target` runs only
+5. **Know the limit on the Mac runner.** quality and finances run their checks on `local-mac`,
+   which persists between jobs and runs as you. A pull request that *attacks* the check, instead
+   of loosening it by mistake, can tamper with the base-branch run there (`docs/ARCHITECTURE.md`,
+   "On the Mac's self-hosted runner"). Closing that needs trusted jobs off that runner, on hosted
+   runners once the spending limit allows, or on an ephemeral machine. Your call whether that's
+   worth it while agents already run as you.
+6. **If a base-branch check ever blocks every pull request:** `pull_request_target` runs only
    `main`'s copy, so a broken one also blocks the pull request that fixes it. Remove that check
    from the ruleset, merge the fix, and add the check back.
 
