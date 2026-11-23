@@ -18,7 +18,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H10 | Review and merge the bstack branch | **Done** |
 | H11 | Review and merge the verification and planning branch | **Done** |
 | H12 | Create a verification skill in one real app | Steps 1 and 2 **done** (R27); steps 3 and 4 to do |
-| H13 | Protect workflow files and checker pins | Fix A in progress (run 2026-11-22-protect-gates); steps 1 to 6 are yours |
+| H13 | Protect workflow files and checker pins | Fix A **done**, step 1 **done**; steps 2 to 6 are yours |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
@@ -119,20 +119,17 @@ schedule for each, is yours and was not confirmed when this was written. R18 no 
 this task: its own trigger is two apps with verification skills and local lanes colliding.
 
 ### H13. Protect workflow files and checker pins
-**Status (2026-11-22):** Run `2026-11-22-protect-gates` (its charter and ledger are in the quality
-repo, approved by you) is moving `books` and `change-record` to read their workflow and checker pin
-from `main`, through `pull_request_target`, in quality, finances and agent-ledger. It is also adding
-a base-branch `change-record` check to agent-kit. The name gap is closed: a pull request can't outvote
-a base-branch run with a job of the same name (`docs/ARCHITECTURE.md`, "The name gap is closed").
-That run fixes only checks that read files. Everything else here needs you.
+**Status (2026-11-22):** Fix A is done. Run `2026-11-22-protect-gates` (its charter and ledger
+are in the quality repo) moved `books` (quality, finances) and `change-record` (quality, finances,
+agent-ledger, agent-kit) to run only `main`'s workflow and checker on a pull request, through
+`pull_request_target`. Two closed scratch PRs proved it: each gutted its own copy of the check,
+and `main`'s copy still blocked the merge. The name gap is closed (`docs/ARCHITECTURE.md`, "The
+name gap is closed"). Fix A covers only checks that read files. Steps 2 to 6 are yours.
 **Why a human:** Rulesets, collaborators and accounts need repo admin, and the choice of who may
 approve a workflow change is yours.
 **Steps:**
-1. **Require agent-kit's `change-record`.** Wait for the agent-kit pull request that adds
-   `.github/workflows/change-record.yml` to merge, and for that check to pass on a later pull
-   request. Then add `change-record` (GitHub Actions) to the required checks of the "protect main"
-   ruleset. Until you do, it runs but blocks nothing. Afterwards an agent removes the duplicate
-   step from `validate.yml`.
+1. ~~**Require agent-kit's `change-record`.**~~ Done 2026-11-22: it is required, and the duplicate
+   step left `validate.yml` (agent-kit PR 99).
 2. **Require agentfiles' `test`.** Its ruleset requires no checks today, so a red run doesn't
    block a merge.
 3. **Decide whether agents get a GitHub identity of their own.** Nothing else in this task can
