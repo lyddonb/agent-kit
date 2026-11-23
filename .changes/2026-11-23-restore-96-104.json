@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "goal": "Put back what #105 reverted by mistake, so the change record check runs from main again (H13) and the debrief.py exempt list, the test race fix and their records return, while keeping #105's local-ci feature.",
+  "changed": [
+    "change-record.yml is back and validate no longer runs the change record step, as after #96 and #99.",
+    "debrief.py reads .changes/exempt again, with git globs (#97, #103); its skill text and tests are back.",
+    "The local-ci stub race fix in tests/test_local_ci.py is back (#98); .worktrees/ is ignored again (#104).",
+    "The H13 text in HUMAN_TASKS.md and docs/ARCHITECTURE.md is back (#95, #101, #102), and so are nine change records #105 deleted.",
+    "bstack is 0.41.0, carrying #105's local-ci entry; the 0.40.0 and 0.39.0 entries are back in the changelog."
+  ],
+  "claims": [
+    {
+      "claim": "Apart from #105's local-ci feature, its change record and the version bump, this tree equals main before #105 (fefc644).",
+      "verdict": "VERIFIED",
+      "check": "git diff --stat fefc644 HEAD lists only plugins/bstack/skills/local-ci/**, tests/test_local_ci.py, #105's change record, and the version and changelog files kitgen writes. Each line #98 added to tests/test_local_ci.py is present.",
+      "commit": "c62797b2e9eba8703a4c74eb4ea762d7b9f3df34",
+      "record": ".changes/2026-11-23-restore-96-104/diff-vs-fefc644.txt",
+      "remaining": "Compared by file and by #98's added lines. Not checked line by line inside local_ci.py, which none of #96 to #104 touched."
+    },
+    {
+      "claim": "The unit tests, generated files, lint and version check pass.",
+      "verdict": "VERIFIED",
+      "check": "make check, python3 tools/validate.py, make versions BASE=origin/main and make test (1316 tests, OK, 24 skipped) on macOS, Python from uv.",
+      "commit": "c62797b2e9eba8703a4c74eb4ea762d7b9f3df34",
+      "record": "https://github.com/lyddonb/agent-kit/pull/105",
+      "remaining": "CI's validate run on this pull request is the second check. change-record can't run on it, because main has no change-record.yml until this merges."
+    }
+  ],
+  "next": [
+    {"item": "Beau takes change-record off the protect main ruleset, merges this, and adds it back", "source": "HUMAN_TASKS.md H13 step 7", "why_now": "main lacks the workflow that produces the required check, so no pull request can merge until this lands", "impact": "agent-kit pull requests can merge again"},
+    {"item": "Rebase #106 (debrief.py record paths) onto the fixed main", "source": "inferred", "why_now": "It is held until main is restored", "impact": "The checker hardening lands"}
+  ],
+  "release": {"see": "bstack 0.41.0 in docs/CHANGELOG.md"}
+}
