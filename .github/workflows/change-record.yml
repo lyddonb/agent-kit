@@ -10,7 +10,7 @@ name: change-record
 on:
   # edited: retargeting a pull request to another base reruns the check against the new base.
   pull_request_target:
-    branches: [main]
+    branches: [main, h13-proof-base]
     types: [opened, synchronize, reopened, edited]
 
 permissions:
