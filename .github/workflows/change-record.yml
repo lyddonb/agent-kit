@@ -1,0 +1,56 @@
+name: change-record
+
+# The change record check, run from the base branch. A pull request can edit validate.yml and
+# debrief.py, so a step inside validate can be dropped or loosened by the change it judges. This
+# workflow runs on pull_request_target: the file and debrief.py come from the base branch, and the
+# pull request's merge commit is checked out as data only. No code from it runs (agent-kit H13).
+# A change to debrief.py is therefore checked by the old debrief.py, and takes effect from the next
+# pull request on.
+
+on:
+  # edited: retargeting a pull request to another base reruns the check against the new base.
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  change-record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: The checker, from the base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          sparse-checkout: plugins/bstack/skills/debrief/scripts
+          persist-credentials: false
+
+      - name: The change to check (data only)
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          path: checked
+          fetch-depth: 0  # the check compares the pull request with where it left the base
+          persist-credentials: false
+
+      # GitHub rebuilds refs/pull/N/merge in the background, so right after a push it can still
+      # hold the previous head; a check of that would pass for the new one.
+      - name: The merge commit holds the pull request's current head
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          merged="$(git -C checked rev-parse HEAD^2)"
+          if [ "$merged" != "$HEAD_SHA" ]; then
+            echo "::error::refs/pull/$PR/merge holds $merged, not the head $HEAD_SHA; rerun this check"
+            exit 1
+          fi
+
+      - name: The pull request carries a change record
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: python3 -I trusted/plugins/bstack/skills/debrief/scripts/debrief.py check --base "origin/$BASE_REF" --root checked
