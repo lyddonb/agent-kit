@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "goal": "Get the test records of a repo whose CI runs on local-ci back into the quality books: local-ci publishes each run's record to a ref GitHub keeps, where the weekly fetch can read it.",
+  "changed": [
+    "local_ci.py gives scripts/ci LOCAL_CI_RECORD and QUALITY_PY. A record written there is read once without following links (a regular file, at most 8 MB, a recorder header first), copied, and published with a manifest local-ci writes (sha, pull_request or push, pr, head branch, base, started, completed, exit code, host) to refs/local-ci/records as runs/<sha>/<started>/, one commit per tick.",
+    "Publishing runs after every run and on every tick, re-reads each kept run without following links, checks its folder names against its manifest, skips a bad folder without blocking the others, pushes with --no-verify, and deletes a run once the ref holds it. scripts/ci writes only to a scratch folder, anything it leaves running is killed when it exits, and the commit status never waits on publishing."
+  ],
+  "claims": [
+    {
+      "claim": "A record is published with the manifest, each run adds a commit on top, a failed run keeps its record, the default branch head is a push, a repo with no record gets nothing, a link, FIFO, directory or non-record file is not published, a planted folder (a link to a secret, a FIFO, a mismatched manifest, a bad name, a missing record) is never published and never blocks a good run, a broken records folder never changes the status, the checkout's pre-push hook does not run, a background process is killed, a failed push is retried next tick, and a run already on the ref is not pushed twice.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_local_ci.py RecordsTest, 11 tests against a real bare origin and the stub gh; five mutants each turn one red; an Opus review's five findings each reproduced as a test before the fix; make test",
+      "commit": "1782b7c",
+      "record": ".changes/2026-11-23-local-ci-records/tests.txt",
+      "remaining": "A bare repo on disk, not GitHub."
+    },
+    {
+      "claim": "GitHub accepts a push to a ref under refs/local-ci, serves its tree and files through gh api, lists it under matching-refs and not as a branch, and starts no workflow for it.",
+      "verdict": "VERIFIED",
+      "check": "a prototype commit pushed to refs/local-ci/prototype in a private watched repo, read back with git/ref, git/trees and git/blobs, the runs listing checked 3 minutes 21 seconds later (0 runs), then the ref deleted",
+      "commit": "1782b7c",
+      "record": "https://github.com/lyddonb/agent-kit/pull/105",
+      "remaining": "The repo is private, so the prototype is not linked here. The first real record lands when that repo's scripts/ci writes one."
+    }
+  ],
+  "next": [
+    {
+      "item": "The watched repo's scripts/ci writes its record when local-ci asks",
+      "source": "stated",
+      "why_now": "Nothing is published until a scripts/ci writes LOCAL_CI_RECORD.",
+      "impact": "Until then the books get no test record from that repo."
+    },
+    {
+      "item": "quality.py fetch and ingest read refs/local-ci/records for a watch-list row whose workflow is local-ci",
+      "source": "stated",
+      "why_now": "Records on the ref reach the books only through fetch.",
+      "impact": "The weekly brief shows no test numbers for a local-ci repo until then."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.39.0"
+  }
+}

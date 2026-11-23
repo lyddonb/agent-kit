@@ -1,8 +1,0 @@
-== tests/test_debrief.py at 4f1772d (Python 3.9.6)
-Ran 43 tests in 44.628s
-
-OK
-== mutations
-:(exclude,literal) in place of :(exclude,glob): FAILED (failures=2) - glob_exempts_the_dated_briefs_but_not_the_template, glob_star_stays_within_one_folder
-first-folder guard removed: FAILED (failures=4) - leaves_a_bad_list for '*', '**/x.md', '*.md', '[a-z]*/x'
-== make check validate versions: kitgen up to date; validate 0 errors, 0 warnings; versions 0 changed without a bump; comments.py: the diff adds 0
