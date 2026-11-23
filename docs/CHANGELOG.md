@@ -3,10 +3,17 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
-## bstack 0.37.0 (2026-11-22)
+## bstack 0.38.0 (2026-11-22)
 
 - The Quality Director can now track test code against source code per repo per week. Once the quality books have `books/volume.csv` (header only to start), `fetch` counts the test and source lines of each watched repo at the head of each complete week's newest push run on the default branch, from the repo's tarball read in memory, and `ingest` books one row per repo and week. `summary` adds `volume`: the week's lines and files and the change since the last booked week. `fetch --since DATE` backfills earlier weeks. It downloads the full source of every watched repo, private ones included, and keeps only the counts.
 - Try: `Create books/volume.csv in the quality books, then fetch, ingest and summarize last week's test volume.`
+
+## bstack 0.37.0 (2026-11-22)
+
+- New `no-comments` skill deletes the comments a change adds and fixes the code that leaned on them. A `comment-sicko` subagent removes every comment outside a short keep-list (license headers, public API doc comments, constraints from things we cannot change, issue links) and flags the symbols a comment was covering for. You get the fixes, and an offer to turn each "do not remove" note into a type, a test or a check. Adapted from pstack.
+- A diff that adds a comment to a Python file can now fail a check. `comments.py --base origin/main` lists each added comment and exits 1. A moved comment adds nothing, and a shebang, a tool directive, a license header and a comment with a link always pass. agent-kit's own reliability checklist runs it on every change to a Python file.
+- beau-mode's rule on comments is stricter: a comment that explains a surprise in our own code is no longer allowed, because the fix is to reshape the code. Opening a PR runs `no-comments` when the diff adds comments.
+- Try: `Run /no-comments on this branch's diff.`
 
 ## bstack 0.36.0 (2026-11-22)
 

@@ -18,9 +18,9 @@ improvements on purpose instead of drifting apart silently.
 | Plan checker | `check-plan.mjs` (Node), fixed ten live lanes, Cursor cloud VMs, Bugbot, `/loop` audit ticks | `check-plan.py` (Python, unit-tested), 3 to 10 lanes through the project's verification skill, perf may be declared not perf-sensitive, plan deleted at close |
 | Workflow references | `why/references/**`, `architect/references/**`, the feature-map example | Copied from pstack @ 11713c6 with principle cross-links rewritten; they carry no frontmatter, so the generated table below lists only their parent skills |
 
-Not ported yet (see [ROADMAP.md](../ROADMAP.md)): `automate-me`, `blast-radius`, `tdd`, `no-comments`,
-`ketchup`, and the babysit, shipping, orchestrate, autopilot, hillclimb, forensics, visual-parity
-and worktree-cleanup playbooks. Upstream's prompt distillation (00b14f1) is adopted only in the
+Not ported yet (see [ROADMAP.md](../ROADMAP.md)): `automate-me`, `blast-radius`, `tdd`, `ketchup`,
+and the babysit, shipping, orchestrate, autopilot, hillclimb, forensics, visual-parity and
+worktree-cleanup playbooks. Upstream's prompt distillation (00b14f1) is adopted only in the
 skills ported at 11713c6; the files still marked `@ ccb5507` predate it.
 
 Last reviewed through `246bc50` (2026-11-10). Adopted: interrogate's run-proven adversaries, the
@@ -60,6 +60,7 @@ only what is still unreviewed.
 <!-- BEGIN GENERATED: upstream-files (tools/kitgen.py) -->
 | File | Adapted from |
 |---|---|
+| `plugins/bstack/agents/comment-sicko.md` | `pstack/agents/comment-sicko.md @ bf0c7cd` |
 | `plugins/bstack/skills/architect/SKILL.md` | `pstack architect @ 11713c6` |
 | `plugins/bstack/skills/arena/SKILL.md` | `pstack arena @ 11713c6` |
 | `plugins/bstack/skills/beau-mode/SKILL.md` | `pstack poteto-mode @ ccb5507, playbooks updated from 11713c6, goal handoff from 246bc50` |
@@ -86,6 +87,7 @@ only what is still unreviewed.
 | `plugins/bstack/skills/interrogate/SKILL.md` | `pstack interrogate @ 246bc50` |
 | `plugins/bstack/skills/maintain-formal-verification-skill/SKILL.md` | `pstack maintain-formal-verification-skill @ 246bc50` |
 | `plugins/bstack/skills/maintain-verification-skill/SKILL.md` | `pstack maintain-verification-skill @ 11713c6` |
+| `plugins/bstack/skills/no-comments/SKILL.md` | `pstack no-comments @ 2f87c85` |
 | `plugins/bstack/skills/recall/SKILL.md` | `pstack recall @ 11713c6` |
 | `plugins/bstack/skills/reflect/SKILL.md` | `pstack reflect @ ccb5507, plugin-cache rule from 246bc50` |
 | `plugins/bstack/skills/reflect/references/divergent-reviewer.md` | `pstack/skills/reflect/references/divergent-reviewer.md @ ccb5507` |

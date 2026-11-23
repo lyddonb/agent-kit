@@ -262,3 +262,12 @@ It never names a cause while two hypotheses fit the facts. When it stalls, it as
 | Needs | Nothing. |
 | Returns | The text with AI writing tells removed (filler, inflated words, em dashes, padding, vague metaphors). |
 | Example | `/unslop tighten this PR description` |
+
+### no-comments
+
+| | |
+|---|---|
+| Use for | The comments a change adds, before review of agent-written code. |
+| Needs | A diff or a list of files. One subagent (`code`), the `comment-sicko` agent where the tool has named agents. |
+| Returns | Comments deleted outside a short keep-list, the code that leaned on them fixed at the root, and an offer to turn each "do not remove" note into a type, a test or a check. `comments.py --base origin/main` fails when a diff adds a comment to a Python file. |
+| Example | `/no-comments` |
