@@ -104,6 +104,10 @@ the run's artifacts are still fetched. A run whose artifacts fail as a whole kee
 jobs it stored. Without books/jobs.csv none of this happens: the calls, files and
 output are the same as before. Names in jobs.json are text a pull request controls; ingest judges them.
 
+Volume. Once BOOKS_DIR/books/volume.csv exists, `fetch` also counts the test and source lines of each watched repo for every complete
+ISO week not yet booked, at the head of the week's newest push run of the watched workflow on the default branch, and writes
+OUT_DIR/<repo>/volume/<week>.json; `ingest` books it and `summary` adds `volume` per repo. See "fetch, volume" below.
+
 `check` validates the files (the four books, kinds.csv when it exists, and the two job books when they exist) and prints one `path:line: message` line per problem (path
 relative to BOOKS_DIR), then `ok, N rows, 0 problems` or `N problems`. Exit 0 when clean, 1 when
 there are problems, 2 on bad usage. With --base REF, runs.csv and failures.csv must be
@@ -237,6 +241,7 @@ if sys.version_info < (3, 10):
 import argparse
 import bisect
 import contextlib
+import gzip
 import csv
 import errno
 import hashlib
@@ -250,9 +255,12 @@ import shutil
 import signal
 import stat
 import subprocess
+import tarfile
 import time
+import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -277,6 +285,7 @@ STEPS = "books/steps.csv"
 KINDS = "books/kinds.csv"  # optional: a book without it is valid and every test is a unit test
 REPOS = "books/repos.csv"  # optional until created with its header: what GitHub said about each watched repo's visibility, append only
 SKILLS = "books/skill-uses.csv"  # optional until created with its header: one row per skill invocation, append only
+VOLUME = "books/volume.csv"  # optional until created with its header: test and source lines per repo per week, append only
 RUNS_SCHEMA = ("started", "repo", "sha", "event", "workflow", "python",
                "tests", "failed", "skipped", "wall_ms", "exit_code", "evidence")
 FAILURES_SCHEMA = ("started", "repo", "sha", "python", "test_id", "outcome", "evidence")
@@ -292,7 +301,9 @@ SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, 
 REPOS_SCHEMA = ("seen", "repo", "github", "visibility")
 VISIBILITIES = ("public", "private", "internal", "unknown")
 SKILLS_SCHEMA = ("week", "skill", "source", "version", "tool", "how", "calls", "searches", "errors", "verdict", "use")
-OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA, REPOS: REPOS_SCHEMA}
+VOLUME_SCHEMA = ("week", "repo", "sha", "rule", "test_files", "test_lines", "source_files", "source_lines", "evidence")
+OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA, REPOS: REPOS_SCHEMA,
+                    VOLUME: VOLUME_SCHEMA}
 SKILL_TOOLS = ("claude-code", "cursor")
 SKILL_HOWS = ("typed", "named", "auto", "subagent")
 SKILL_VERDICTS = ("unjudged",)  # no rule fills a verdict yet
@@ -1330,6 +1341,16 @@ def _visibility_rule(cells: dict) -> Iterator[str]:
 REPOS_RULES: dict[str, Rule] = {"seen": _seen_rule, "repo": _repo_rule, "github": _github_rule, "visibility": _visibility_rule}
 
 
+def _volume_rule_rule(cells: dict) -> Iterator[str]:
+    if cells["rule"] not in VOLUME_RULE_NAMES:
+        yield f"rule must be one of {', '.join(VOLUME_RULE_NAMES)}, got {_show(cells['rule'])}"
+
+
+VOLUME_COUNTS = ("test_files", "test_lines", "source_files", "source_lines")
+VOLUME_ROW_RULES: dict[str, Rule] = {"week": _week_rule, "repo": _repo_rule, "sha": _sha_rule, "rule": _volume_rule_rule,
+                                     "counts": _count_rule(VOLUME_COUNTS), "evidence": _evidence_rule}
+
+
 _SKILL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _SKILL_SOURCE = re.compile(r"([A-Za-z0-9][A-Za-z0-9._:@/-]{0,199})?")
 _SKILL_VERSION = re.compile(r"([0-9a-f]{40})?")
@@ -1552,6 +1573,12 @@ def check_skill_uses(books: Books) -> Iterator[Problem]:
     yield from _unique_rows(books, SKILLS, lambda c: (c["use"],), "use")
 
 
+def check_volume(books: Books) -> Iterator[Problem]:
+    """One row per repo and week; the rows need not be sorted, so a week booked later than a newer one is still appended."""
+    yield from _check_rows(books, VOLUME, VOLUME_ROW_RULES)
+    yield from _unique_rows(books, VOLUME, lambda c: (c["week"], c["repo"]), "week and repo")
+
+
 def check_repos(books: Books) -> Iterator[Problem]:
     """The form of books/repos.csv: sorted by (seen, repo), one row per repo and stamp. Whether each row is a change
     from the repo's row before it is ingest's rule, not a check: a hand-added row that repeats a value is harmless."""
@@ -1607,7 +1634,7 @@ def check_append_only(books: Books) -> Iterator[Problem]:
         yield Problem(RUNS, 1, f"cannot check against {ref}: the books folder must be the top level of its git "
                                f"work tree, but {where}")
         return
-    for rel in APPEND_ONLY + JOB_BOOKS + (SKILLS, REPOS):
+    for rel in APPEND_ONLY + JOB_BOOKS + (SKILLS, REPOS, VOLUME):
         yield from _append_only(books, rel)
 
 
@@ -1651,6 +1678,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("steps-match-jobs", check_steps_match_jobs),
     ("skill-uses", check_skill_uses),
     ("repos", check_repos),
+    ("volume", check_volume),
     ("append-only", check_append_only),
 )
 
@@ -1760,6 +1788,18 @@ class SkillUseRow(NamedTuple):
     errors: int | None
     verdict: str
     use: str
+
+
+class VolumeRow(NamedTuple):
+    week: str
+    repo: str
+    sha: str
+    rule: str
+    test_files: int
+    test_lines: int
+    source_files: int
+    source_lines: int
+    evidence: str
 
 
 class RepoRow(NamedTuple):
@@ -2507,7 +2547,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     visibility = scan_repo_files(args.fetch_dir, watch_list(books), books) if books.tables[REPOS].present and not only_jobs else None
     repo_files = plan_repos(books, visibility) if visibility is not None else {}
     plan.files.update(repo_files)
-    if new or job_files or repo_files:
+    volume = scan_volume_files(args.fetch_dir, watch_list(books), books) if books.tables[VOLUME].present and args.only is None else None
+    volume_files = plan_volume(books, volume) if volume is not None else {}
+    plan.files.update(volume_files)
+    if new or job_files or repo_files or volume_files:
         unchanged = {rel: books.tables[rel].data if books.tables[rel].present else None for rel in OPTIONAL_SCHEMAS}
         after = run_checks(books_from_bytes(args.books_dir, {**unchanged, **{rel: data if data is not None else books.tables[rel].data
                                                                               for rel, data in plan.files.items()}}))
@@ -2515,7 +2558,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             _print_problems(after)
             print(f"{len(after)} problems; nothing written")
             return 1
-    wrote = bool(new or job_files or repo_files) and not args.dry_run
+    wrote = bool(new or job_files or repo_files or volume_files) and not args.dry_run
     if wrote:
         try:
             commit_files(args.books_dir, plan.files)
@@ -2531,6 +2574,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if visibility is not None:
         totals.update(visibility_booked=sum(s.status == "booked" for s in visibility), visibility_unchanged=sum(s.status == "unchanged" for s in visibility),
                       visibility_rejected=sum(s.status == "rejected" for s in visibility))
+    if volume is not None:
+        totals.update(volume_booked=sum(s.status == "booked" for s in volume), volume_unchanged=sum(s.status == "unchanged" for s in volume),
+                      volume_rejected=sum(s.status == "rejected" for s in volume))
     if adopted(books) and not only_visibility:
         jobs_rejected = sum(s.status == "rejected" for s in found.jobs)
         booked_jobs = [s for s in found.jobs if s.status == "booked"]
@@ -2544,10 +2590,12 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             out["jobs"] = [_job_scan_json(s) for s in found.jobs]
         if visibility is not None:
             out["visibility"] = [_repo_scan_json(s) for s in visibility]
+        if volume is not None:
+            out["volume"] = [_volume_scan_json(s) for s in volume]
         print(json.dumps(out, sort_keys=True, indent=2))
     else:
-        _print_ingest(scans, totals, found, args.dry_run, only_jobs, visibility, only_visibility)
-    return 1 if totals["rejected"] or unread or jobs_rejected or totals.get("visibility_rejected") else 0
+        _print_ingest(scans, totals, found, args.dry_run, only_jobs, visibility, only_visibility, volume)
+    return 1 if totals["rejected"] or unread or jobs_rejected or totals.get("visibility_rejected") or totals.get("volume_rejected") else 0
 
 
 def _job_scan_json(scan: "JobScan") -> dict:
@@ -2570,7 +2618,8 @@ def _scan_json(scan: Scan) -> dict:
 
 
 def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool, only_jobs: bool = False,
-                  visibility: "list[RepoScan] | None" = None, only_visibility: bool = False) -> None:
+                  visibility: "list[RepoScan] | None" = None, only_visibility: bool = False,
+                  volume: "list[VolumeScan] | None" = None) -> None:
     for s in scans:
         name = _show(s.path, 200) if not s.path.isprintable() else s.path
         if s.status == "booked":
@@ -2601,6 +2650,8 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
         _print_visibility(visibility, dry_run)
         if only_visibility and not visibility:
             print("no repo.json files")
+    if volume is not None:
+        _print_volume(volume, dry_run)
     for folder, cap in found.unread:
         print(f"left unread, the {cap}: {printable(folder)}")
     if found.unread:
@@ -2620,7 +2671,10 @@ def _print_ingest(scans: list[Scan], totals: dict, found: Scanned, dry_run: bool
         print(f"{verb} {totals['booked']} runs, {totals['failures']} failures, "
               f"{totals['weekly_rows']} weekly rows touched; skipped {totals['already_booked']} already booked, "
               f"{totals['duplicates']} duplicates; rejected {totals['rejected']} of {totals['files']} files{jobs_part}")
-    if totals["rejected"] or totals["unread"] or totals.get("jobs_rejected") or totals.get("visibility_rejected"):
+    if "volume_booked" in totals:
+        print(f"{verb} volume of {totals['volume_booked']} weeks; {totals['volume_unchanged']} already booked, "
+              f"rejected {totals['volume_rejected']}")
+    if totals["rejected"] or totals["unread"] or totals.get("jobs_rejected") or totals.get("visibility_rejected") or totals.get("volume_rejected"):
         print("some files were rejected or not read: the others were booked and ingest exits 1 so it is not missed"
               if not dry_run else "some files were rejected or not read; ingest exits 1")
 
@@ -2854,6 +2908,22 @@ def _repo_summary(repo: str, week: str, runs: list[RunRow], failures: list[Failu
     return out
 
 
+def _volume(repo: str, week: str, rows: list[VolumeRow]) -> dict | None:
+    """The repo's row for the week and the change in lines since its latest earlier row of the same rule, or None
+    when the week has no row (no push run that week, or not fetched). Integers only: the brief divides."""
+    mine = [r for r in rows if r.repo == repo]
+    this = next((r for r in mine if r.week == week), None)
+    if this is None:
+        return None
+    prior = max((r for r in mine if r.week < week and r.rule == this.rule), key=lambda r: r.week, default=None)
+    return {"evidence": this.evidence, "rule": this.rule, "sha": this.sha,
+            "source_files": this.source_files, "source_lines": this.source_lines,
+            "test_files": this.test_files, "test_lines": this.test_lines,
+            "prior_week": prior.week if prior else None,
+            "source_lines_change": this.source_lines - prior.source_lines if prior else None,
+            "test_lines_change": this.test_lines - prior.test_lines if prior else None}
+
+
 def _unrecorded_summary(lifecycle: dict) -> dict:
     """A repo with CI runs in the week and no test records: only what the job books measured. Its suite time is not
     measured, so no test-side key exists here (an empty value is never a 0)."""
@@ -2863,13 +2933,14 @@ def _unrecorded_summary(lifecycle: dict) -> dict:
 def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[WeeklyRow], week: str,
               kinds: Iterable[KindRow] = (), jobs: list[JobRow] | None = None,
               steps: list[StepRow] | None = None, skill_uses: list[SkillUseRow] | None = None,
-              private: set[str] | None = None, public_only: bool = False) -> dict:
+              private: set[str] | None = None, public_only: bool = False, volume: list[VolumeRow] | None = None) -> dict:
     """The week's numbers as plain data: integers, strings, lists and dicts, nothing else. `jobs` and `steps` are
     given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle` and `recorded`, and a
     repo with runs in the job books and no `runs.csv` row that week is listed too, as an unrecorded one. `skill_uses` is
     given (possibly empty) only when books/skill-uses.csv exists; the result then has `skills`. `private` is given
     only when books/repos.csv exists; each listed repo then has a `visibility`. `public_only` marks a summary whose rows
-    the caller already limited to public repos."""
+    the caller already limited to public repos. `volume` is given (possibly empty) only when books/volume.csv exists;
+    each listed repo, recorded or not, then has a `volume` (None when the week has no row)."""
     recorded = sorted({r.repo for r in runs if week_of(r.started) == week})
     kinds = list(kinds)
     rules = {repo: {k.prefix: k.kind for k in kinds if k.repo == repo} for repo in recorded}
@@ -2879,6 +2950,9 @@ def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[Weekl
             lifecycle = _lifecycle(repo, week, runs, jobs, steps or [])
             if lifecycle is not None:
                 repos[repo] = _unrecorded_summary(lifecycle)
+    if volume is not None:
+        for repo, entry in repos.items():
+            entry["volume"] = _volume(repo, week, volume)
     if private is not None:
         for repo, entry in repos.items():
             entry["visibility"] = "private" if repo in private else "public"
@@ -2928,6 +3002,15 @@ def _render_lifecycle(lc: dict) -> list[str]:
     return lines
 
 
+def _render_volume(v: dict | None) -> list[str]:
+    if v is None:
+        return ["  volume: no row this week"]
+    change = (f"; since {v['prior_week']}: test {v['test_lines_change']:+d}, source {v['source_lines_change']:+d}"
+              if v["prior_week"] else "; no earlier week")
+    return [f"  volume: test {v['test_lines']} lines in {v['test_files']} files, source {v['source_lines']} lines in "
+            f"{v['source_files']} files{change}"]
+
+
 def render_summary(s: dict) -> str:
     lines = ["public repos only"] if s.get("public_only") else []
     lines.append(f"quality summary for {s['week']} (from {s['generated_from']['runs']} runs, "
@@ -2937,6 +3020,8 @@ def render_summary(s: dict) -> str:
         if r.get("recorded") is False:
             lines.append(f"{repo}: no test record started this week")
             lines.extend(_render_lifecycle(r["lifecycle"]))
+            if "volume" in r:
+                lines.extend(_render_volume(r["volume"]))
             continue
         change = r["suite_ms_change"]
         lines.append(f"{repo}: {r['runs']} runs ({r['red_runs']} red), {r['tests']} tests, suite median "
@@ -2952,6 +3037,8 @@ def render_summary(s: dict) -> str:
             lines.append(f"  slow: {printable(t['test_id'])} mean {t['mean_ms']} ms over {t['runs']} runs")
         if r.get("lifecycle"):
             lines.extend(_render_lifecycle(r["lifecycle"]))
+        if "volume" in r:
+            lines.extend(_render_volume(r["volume"]))
     if "skills" in s:
         lines.append(f"skills: {s['skills']['uses']} uses of {len(s['skills']['by_skill'])} skills")
     lines.append(f"threshold: suite median above {s['thresholds']['suite_median_ms']} ms")
@@ -2988,12 +3075,14 @@ def cmd_summary(args: argparse.Namespace) -> int:
     failures, weekly, kinds = _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), _typed_rows(books, KINDS, KindRow)
     skills = _typed_rows(books, SKILLS, SkillUseRow) if books.tables[SKILLS].present else None
     private = private_repos(books) if books.tables[REPOS].present else None
+    volume = _typed_rows(books, VOLUME, VolumeRow) if books.tables[VOLUME].present else None
     if args.public_only:  # drop the private repos' rows before any number is made, so none can leak; skill use is not per repo
         public = lambda rows: [r for r in rows if r.repo not in private]
         runs, failures, weekly, kinds = public(runs), public(failures), public(weekly), public(kinds)
         job_rows, step_rows = (public(job_rows), public(step_rows)) if job_rows is not None else (None, None)
         skills = None
-    result = summarize(runs, failures, weekly, week, kinds, job_rows, step_rows, skills, private, args.public_only)
+        volume = public(volume) if volume is not None else None
+    result = summarize(runs, failures, weekly, week, kinds, job_rows, step_rows, skills, private, args.public_only, volume)
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_summary(result))
     return 0
 
@@ -3231,6 +3320,9 @@ class FetchTally:
     jobs_adopted: bool = False  # books/jobs.csv exists: the totals line says what was stored
     jobs_runs: int = 0  # runs with a jobs.json written
     jobs: int = 0
+    volume_adopted: bool = False  # books/volume.csv exists: the totals line says what was counted
+    volume_weeks: int = 0  # volume.json files written
+    volume_none: int = 0  # weeks without a push run, so without a row
 
     def fail(self, where: str, why: str) -> None:
         self.failed += 1
@@ -3593,15 +3685,197 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print("nothing to fetch: books/watched.csv lists no repos")
         return 0
     os.makedirs(args.out_dir, exist_ok=True)
-    gh, tally, booked = Gh(exe), FetchTally(jobs_adopted=booked_jobs is not None), _booked_per_run(books)
+    volume = books.tables[VOLUME].present
+    gh, tally, booked = Gh(exe), FetchTally(jobs_adopted=booked_jobs is not None, volume_adopted=volume), _booked_per_run(books)
+    volume_booked: dict[str, set[str]] = {}
+    for r in books.tables[VOLUME].rows:
+        volume_booked.setdefault(r.cells["repo"], set()).add(r.cells["week"])
     for repo, github, workflow in watched:
         since = args.since or _latest_started(books, repo) or (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
         fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs, books.tables[REPOS].present, today)
+        if volume:
+            fetch_volume(gh, args.out_dir, repo, github, workflow, volume_weeks(today, args.since, volume_booked.get(repo, set())), tally)
     t = tally
     print(f"fetched {t.runs} runs ({t.artifacts} artifacts); listed {t.listed}; skipped {t.forks} forks, "
           f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts"
-          + (f"; {t.jobs_runs} runs with jobs ({t.jobs} jobs)" if t.jobs_adopted else "") + f"; {t.failed} failed")
+          + (f"; {t.jobs_runs} runs with jobs ({t.jobs} jobs)" if t.jobs_adopted else "")
+          + (f"; volume counted for {t.volume_weeks} weeks ({t.volume_none} without a push run)" if t.volume_adopted else "")
+          + f"; {t.failed} failed")
     return 1 if t.failed else 0
+
+
+# ---------------------------------------------------------------------------
+# fetch, volume: test and source lines of each watched repo, one commit per week
+# ---------------------------------------------------------------------------
+#
+# Only when books/volume.csv exists. For each complete ISO week (UTC) not yet booked for the repo, the commit counted is
+# the head of the newest push run of the watched workflow on the default branch created in that week: one call lists
+# them (`repos/O/N/actions/runs?branch=B&event=push&per_page=100&created=MON..SUN`), and the same week always answers
+# the same commit. A week with no such run has no row. The commit's tarball (`repos/O/N/tarball/SHA`) is read in
+# memory and never extracted: only regular files are opened, and each file is classified by its path alone
+# (classify_path, rule VOLUME_RULE). The source of a private repo is downloaded too, and only counts are kept.
+#   OUT_DIR/<repo>/volume/<week>.json   {v, repo, github, week, sha, evidence, rule, test_files, test_lines,
+#                                        source_files, source_lines}
+
+VOLUME_DIR = "volume"
+VOLUME_RULE = "v1"
+VOLUME_RULE_NAMES = (VOLUME_RULE,)  # a row's rule names how its paths were classified; rows of two rules are not compared
+MAX_VOLUME_WEEKS = 60  # weeks one fetch counts per repo, oldest first; the rest are counted by a later fetch
+VOLUME_RETRY_WEEKS = 12  # a week without a row this recent is asked about again on every fetch
+MAX_TARBALL_BYTES = 64 << 20  # one downloaded tarball
+MAX_TARBALL_UNPACKED = 256 << 20  # the whole decompressed stream (headers and skipped members too), counted as it is read
+MAX_TARBALL_MEMBERS = 100_000
+# v1: code by suffix; a test file is one under a test directory or named as a test; vendored and built folders are not counted
+CODE_SUFFIXES = (".py", ".pyi", ".sh", ".bash", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".go", ".rs",
+                 ".rb", ".java", ".kt", ".kts", ".swift", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".php", ".scala")
+TEST_DIRS = frozenset(("test", "tests", "__tests__", "spec", "e2e"))
+SKIPPED_DIRS = frozenset(("node_modules", "vendor", "third_party", "dist", "build", ".git"))
+_TEST_NAME = re.compile(r"test_[^/]*\.py|[^/]*_test\.(py|go)|conftest\.py|[^/]*\.(test|spec)\.[A-Za-z0-9]+|[^/]*_spec\.rb")
+
+
+def classify_path(path: str) -> str | None:
+    """`test`, `source` or None (not counted) for a path inside the repo, by rule VOLUME_RULE."""
+    *folders, name = path.split("/")
+    if not name.endswith(CODE_SUFFIXES) or SKIPPED_DIRS & set(folders):
+        return None
+    return "test" if TEST_DIRS & set(folders) or _TEST_NAME.fullmatch(name) else "source"
+
+
+class Volume(NamedTuple):
+    test_files: int
+    test_lines: int
+    source_files: int
+    source_lines: int
+
+
+class _CappedReader:
+    """A read-only stream that raises Rejected once more than `cap` bytes were asked of it: never more than cap + 1 bytes
+    are read in one call, so a header that claims a huge payload cannot make the decompressor allocate it."""
+
+    def __init__(self, inner, cap: int):
+        self.inner, self.left = inner, cap
+
+    def read(self, size: int = -1) -> bytes:
+        want = self.left + 1 if size is None or size < 0 or size > self.left + 1 else size
+        data = self.inner.read(want)
+        self.left -= len(data)
+        if self.left < 0:
+            raise Rejected(f"unpacks to more than {_size(MAX_TARBALL_UNPACKED)}")
+        return data
+
+
+def count_tarball(raw: bytes) -> Volume:
+    """Count the lines (newlines, plus a last line without one) of the code files in a gzip tarball as GitHub serves it:
+    every member under one top folder named for the commit. Raises Rejected for an archive that is not one, or over a cap."""
+    if len(raw) > MAX_TARBALL_BYTES:
+        raise Rejected(f"is larger than {_size(MAX_TARBALL_BYTES)}")
+    counts = {"test": [0, 0], "source": [0, 0]}
+    members = 0
+    stream = _CappedReader(gzip.GzipFile(fileobj=io.BytesIO(raw)), MAX_TARBALL_UNPACKED)
+    try:
+        with tarfile.open(fileobj=stream, mode="r|") as archive:
+            for member in archive:
+                members += 1
+                if members > MAX_TARBALL_MEMBERS:
+                    raise Rejected(f"has more than {MAX_TARBALL_MEMBERS} members")
+                if not member.isreg() or "/" not in member.name:
+                    continue
+                kind = classify_path(member.name.split("/", 1)[1])
+                if kind is None:
+                    continue
+                f = archive.extractfile(member)
+                lines, last = 0, b"\n"
+                while chunk := f.read(1 << 16):
+                    lines += chunk.count(b"\n")
+                    last = chunk[-1:]
+                counts[kind][0] += 1
+                counts[kind][1] += lines + (last != b"\n")
+    except (tarfile.TarError, EOFError, OSError, zlib.error) as e:
+        raise Rejected(f"is not a readable gzip tarball ({type(e).__name__})") from None
+    return Volume(counts["test"][0], counts["test"][1], counts["source"][0], counts["source"][1])
+
+
+def volume_weeks(today: date, since: str | None, booked: set[str]) -> list[str]:
+    """The complete weeks to count, oldest first, less the weeks already booked: from the week of `since`; else from the
+    week after the latest booked one, or VOLUME_RETRY_WEEKS back from last week when that is earlier (so a week that
+    failed or had no push run is asked again), but never before the earliest booked week; else last week alone."""
+    iso = today.isocalendar()
+    last = week_back(f"{iso[0]:04d}-W{iso[1]:02d}", 1)
+    if since is not None:
+        week = week_of(since + "T00:00:00Z")
+    elif booked:
+        week = max(min(week_back(max(booked), -1), week_back(last, VOLUME_RETRY_WEEKS - 1)), min(booked))
+    else:
+        week = last
+    weeks = []
+    while week <= last:
+        if week not in booked:
+            weeks.append(week)
+        week = week_back(week, -1)
+    return weeks
+
+
+def _week_days(week: str) -> tuple[date, date]:
+    monday = date.fromisocalendar(int(week[:4]), int(week[6:]), 1)
+    return monday, monday + timedelta(days=6)
+
+
+def week_push_run(gh: Gh, github: str, workflow: str, branch: str, week: str) -> dict | None:
+    """The newest push run of `workflow` on `branch` from the repo itself created in `week`, or None. Raises GhError."""
+    monday, sunday = _week_days(week)
+    pages = gh.pages(f"repos/{github}/actions/runs?branch={urllib.parse.quote(branch, safe='')}&event=push&per_page=100"
+                     f"&created={monday.isoformat()}..{sunday.isoformat()}")
+    if not pages or not all(isinstance(page.get("workflow_runs"), list) for page in pages):
+        raise GhError(f"gh api repos/{github}/actions/runs answered without a runs list")
+    runs = [r for page in pages for r in page["workflow_runs"]]
+    mine = [r for r in runs if isinstance(r, dict) and r.get("name") == workflow and r.get("event") == "push"
+            and r.get("head_branch") == branch and type(r.get("id")) is int and type(r.get("run_attempt")) is int
+            and isinstance(r.get("head_sha"), str) and _SHA.fullmatch(r["head_sha"]) and isinstance(r.get("created_at"), str)
+            and isinstance(r.get("head_repository"), dict)
+            and str(r["head_repository"].get("full_name") or "").lower() == github.lower()]
+    return max(mine, key=lambda r: (r["created_at"], r["id"]), default=None)
+
+
+def fetch_volume(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, weeks: list[str], tally: "FetchTally") -> None:
+    """Write OUT_DIR/<repo>/volume/<week>.json for each of `weeks` that had a push run, oldest first, up to MAX_VOLUME_WEEKS."""
+    if not weeks:
+        return
+    if len(weeks) > MAX_VOLUME_WEEKS:
+        print(f"  volume: {len(weeks)} weeks to count; counting the oldest {MAX_VOLUME_WEEKS}, the rest on a later fetch")
+        weeks = weeks[:MAX_VOLUME_WEEKS]
+    info, why = _repo_info(gh, github)
+    branch = info.get("default_branch") if isinstance(info, dict) else None
+    if why or not isinstance(branch, str) or not branch:
+        tally.fail("volume", why or f"gh api repos/{github} did not name a default branch")
+        return
+    counted: dict[str, Volume] = {}
+    for week in weeks:
+        try:
+            run = week_push_run(gh, github, workflow, branch, week)
+        except GhError as e:
+            tally.fail(f"volume {week}", str(e))
+            continue
+        if run is None:
+            tally.volume_none += 1
+            print(f"  volume {week}: no push run of {printable(workflow)} on {printable(branch)}; no row")
+            continue
+        sha = run["head_sha"]
+        if sha not in counted:
+            try:
+                counted[sha] = count_tarball(gh.api(f"repos/{github}/tarball/{sha}"))
+            except GhError as e:
+                tally.fail(f"volume {week}", str(e))
+                continue
+            except Rejected as e:
+                tally.fail(f"volume {week}", f"tarball of {sha[:12]} {e}")
+                continue
+        v = counted[sha]
+        _write_json(os.path.join(out_dir, repo, VOLUME_DIR, f"{week}.json"),
+                    {"v": RECORD_VERSION, "repo": repo, "github": github, "week": week, "sha": sha, "rule": VOLUME_RULE,
+                     "evidence": f"https://github.com/{github}/actions/runs/{run['id']}/attempts/{run['run_attempt']}", **v._asdict()})
+        tally.volume_weeks += 1
+        print(f"  volume {week}: {sha[:12]} test {v.test_lines} lines in {v.test_files} files, "
+              f"source {v.source_lines} lines in {v.source_files} files")
 
 
 # ---------------------------------------------------------------------------
@@ -3887,6 +4161,115 @@ def _repo_scan_json(scan: RepoScan) -> dict:
         out["visibility"] = scan.row.visibility
         if scan.status == "booked" and scan.previous is not None:
             out["previous"] = scan.previous
+    return out
+
+
+# ---------------------------------------------------------------------------
+# ingest, volume: volume/<week>.json into books/volume.csv
+# ---------------------------------------------------------------------------
+#
+# Only when books/volume.csv exists, and not with --only. Each <repo>/volume/<week>.json is read as strictly as a
+# manifest; its repo must be on the watch list with the same github, and the run link must be that repo's. A week already
+# booked with the same commit and counts is `unchanged`; with anything else it is rejected, because a row is never edited.
+
+VOLUME_FILE_KINDS = {"v": int, "repo": str, "github": str, "week": str, "sha": str, "rule": str, "evidence": str,
+                     "test_files": int, "test_lines": int, "source_files": int, "source_lines": int}
+
+
+@dataclass
+class VolumeScan:
+    path: str  # <repo>/volume/<week>.json
+    status: str  # booked, unchanged, rejected
+    row: VolumeRow | None = None
+    reason: str = ""
+
+
+def read_volume_file(path: str, folder_repo: str, file_week: str, watched: dict[str, tuple[str, str]]) -> VolumeRow:
+    obj = _check_fields(_load_json(_read_file(path, MAX_MANIFEST_BYTES), "volume.json"), VOLUME_FILE_KINDS, "volume.json")
+    if obj["v"] != RECORD_VERSION:
+        raise Rejected(f"volume.json v must be {RECORD_VERSION}, got {_show(obj['v'])}")
+    if obj["repo"] != folder_repo:
+        raise Rejected(f"repo {printable(obj['repo'])} is not in folder {printable(folder_repo)}")
+    if obj["week"] != file_week:
+        raise Rejected(f"week {printable(obj['week'])} is not the file's name")
+    if _is_iso_week(obj["week"]) and obj["week"] >= week_of(utc_stamp()):
+        raise Rejected(f"week {obj['week']} is not over yet")
+    if folder_repo not in watched:
+        raise Rejected(f"repo {printable(folder_repo)} is not on the watch list")
+    github = watched[folder_repo][0]
+    if obj["github"].lower() != github.lower():
+        raise Rejected(f"github {printable(obj['github'])} is not {printable(github)}, the watch list's")
+    found = _LINK_SLUG.match(obj["evidence"])
+    if not found or found[1].lower() != github.lower():
+        raise Rejected(f"evidence {_show(obj['evidence'])} is not a run of {printable(github)}")
+    cells = _cells(VOLUME_SCHEMA, **{k: obj[k] for k in VOLUME_SCHEMA if k != "repo"}, repo=folder_repo)
+    _fail_if(rule_messages(VOLUME_ROW_RULES, cells))
+    return VolumeRow(*(int(cells[k]) if k in VOLUME_COUNTS else cells[k] for k in VOLUME_SCHEMA))
+
+
+def scan_volume_files(root: str, watched: dict[str, tuple[str, str]], books: Books) -> list[VolumeScan]:
+    """One VolumeScan per <repo>/volume/*.json under root, in (repo, week) order. A linked folder is not entered."""
+    booked = {(r.week, r.repo): r for r in _typed_rows(books, VOLUME, VolumeRow)}
+    try:
+        names = sorted(os.listdir(root))
+    except OSError as e:
+        return [VolumeScan(".", "rejected", reason=f"cannot list the fetch folder ({e.strerror})")]
+    scans = []
+    for name in names:
+        folder = os.path.join(root, name, VOLUME_DIR)
+        if os.path.islink(os.path.join(root, name)) or os.path.islink(folder) or not os.path.isdir(folder):
+            continue
+        try:
+            files = sorted(os.listdir(folder))
+        except OSError as e:
+            scans.append(VolumeScan(f"{name}/{VOLUME_DIR}", "rejected", reason=f"cannot list the folder ({e.strerror})"))
+            continue
+        for file in files:
+            if not file.endswith(".json"):
+                continue
+            rel = f"{name}/{VOLUME_DIR}/{file}"
+            try:
+                row = read_volume_file(os.path.join(folder, file), name, file[:-len(".json")], watched)
+            except Rejected as e:
+                scans.append(VolumeScan(rel, "rejected", reason=str(e)))
+                continue
+            old = booked.get((row.week, row.repo))
+            if old is None:
+                scans.append(VolumeScan(rel, "booked", row))
+                booked[(row.week, row.repo)] = row
+            elif old == row:
+                scans.append(VolumeScan(rel, "unchanged", row))
+            else:
+                scans.append(VolumeScan(rel, "rejected", reason=f"{row.repo} {row.week} is booked already with "
+                                                                f"{old.sha[:12]} ({old.rule}); a row is never changed"))
+    return scans
+
+
+def plan_volume(books: Books, scans: list[VolumeScan]) -> dict[str, bytes | None]:
+    rows = [s.row for s in scans if s.status == "booked"]
+    if not rows:
+        return {}
+    return {VOLUME: _appended(books.tables[VOLUME].data, "".join(_csv_line(r) for r in rows))}
+
+
+def _print_volume(scans: list[VolumeScan], dry_run: bool) -> None:
+    for s in scans:
+        name = _show(s.path, 200) if not s.path.isprintable() else s.path
+        if s.status == "rejected":
+            print(f"rejected: {name}: {s.reason}")
+        elif s.status == "unchanged":
+            print(f"volume {s.row.repo} {s.row.week}: already booked")
+        else:
+            print(f"{'would book' if dry_run else 'booked'} volume {s.row.repo} {s.row.week}: test {s.row.test_lines} lines, "
+                  f"source {s.row.source_lines} lines")
+
+
+def _volume_scan_json(scan: VolumeScan) -> dict:
+    out = {"path": scan.path, "status": scan.status}
+    if scan.reason:
+        out["reason"] = scan.reason
+    if scan.row is not None:
+        out.update(week=scan.row.week, sha=scan.row.sha)
     return out
 
 

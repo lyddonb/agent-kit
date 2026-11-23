@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.38.0 (2026-11-22)
+
+- The Quality Director can now track test code against source code per repo per week. Once the quality books have `books/volume.csv` (header only to start), `fetch` counts the test and source lines of each watched repo at the head of each complete week's newest push run on the default branch, from the repo's tarball read in memory, and `ingest` books one row per repo and week. `summary` adds `volume`: the week's lines and files and the change since the last booked week. `fetch --since DATE` backfills earlier weeks. It downloads the full source of every watched repo, private ones included, and keeps only the counts.
+- Try: `Create books/volume.csv in the quality books, then fetch, ingest and summarize last week's test volume.`
+
 ## bstack 0.37.0 (2026-11-22)
 
 - New `no-comments` skill deletes the comments a change adds and fixes the code that leaned on them. A `comment-sicko` subagent removes every comment outside a short keep-list (license headers, public API doc comments, constraints from things we cannot change, issue links) and flags the symbols a comment was covering for. You get the fixes, and an offer to turn each "do not remove" note into a type, a test or a check. Adapted from pstack.
