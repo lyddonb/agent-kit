@@ -21,6 +21,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
+| H16 | Decide where the change record check enforces | To do |
 
 ---
 
@@ -149,3 +150,32 @@ once, at your request, and printed counts and names only (R38 has what it found)
 and counts per week?), agentfiles H13 (are cfo's skills counted?), and agent-ledger H8 and H9
 (when the evals that use these rows start, and whether they may spend model calls in CI).
 **Unblocks:** R38, and through it R41 and agent-ledger's M3 unit 1.
+
+### H16. Decide where the change record check enforces
+**Why a human:** Enforcing turns a required check into a merge block. In agent-kit the step sits
+inside `validate`, and quality requires `change-record` directly. Which repos block, and when, is
+your call.
+**What the observe run showed (review of 2026-11-22, PRs opened 2026-11-21 and 2026-11-22):**
+- agent-kit: 15 PRs checked. 8 had a good record, 2 were bookkeeping only, 5 would have failed.
+  All 5 were real: #76, #78, #81 and #85 change `quality.py` and its tests with no record, and #88's
+  record cites commit 58bc6e8, which was rewritten before the push and is on no branch.
+- agent-ledger: 3 would have failed. #32 and #33 touch only `docs/notes/` (noise). #35 was a
+  closed scratch PR.
+- finances: 1 would have failed, #29, which touches only `questions.md` (noise).
+- quality: none failed in CI. The weekly brief PRs never ran the check: some came before it, and
+  #38 hit the Actions spending limit. By their changed files they would fail every week: quality's
+  touch `books/`, `briefs/` and `questions.md`; finances' touch `ledger/`, `briefs/` and
+  `questions.md`.
+**Recommendation:** Enforce in agent-kit now. In quality, finances and agent-ledger, widen the
+exempt list first, then enforce. The list is `BOOKKEEPING` in
+`plugins/bstack/skills/debrief/scripts/debrief.py`, so widening is an agent-kit PR plus a bump of
+the pinned checker (951bae9) in each of the three repos. Wait for quality #39 and finances #31
+(CI moves to the Mac) to merge, since they rewrite the check's line.
+**Steps:**
+1. Choose: enforce in agent-kit now, widen the list first, or keep observing.
+2. To enforce in agent-kit, drop `--observe` from `.github/workflows/validate.yml` line 41.
+3. To enforce in the other three, drop `--observe` from the step's `run:` line in
+   `.github/workflows/changes.yml`. After quality #39 and finances #31 merge, also drop it from
+   the `debrief.py check` line in their `scripts/ci`.
+4. Separately: fix claim 4 in `.changes/2026-11-21-no-comments.json` so it cites a commit on main.
+
