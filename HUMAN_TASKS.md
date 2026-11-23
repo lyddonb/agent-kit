@@ -21,7 +21,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H13 | Protect workflow files and checker pins | Fix A in progress (run 2026-11-22-protect-gates); steps 1 to 6 are yours |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
-| H16 | Decide where the change record check enforces | agent-kit **enforced**; step 4 **done**; step 3: the exempt list ships, the three repos to do |
+| H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
 
 ---
 
@@ -185,7 +185,7 @@ and counts per week?), agentfiles H13 (are cfo's skills counted?), and agent-led
 (when the evals that use these rows start, and whether they may spend model calls in CI).
 **Unblocks:** R38, and through it R41 and agent-ledger's M3 unit 1.
 
-### H16. Decide where the change record check enforces
+### H16. Decide where the change record check enforces — Done
 **Answer (2026-11-22):** Enforce now. Beau's words: "i want to enforce now". agent-kit
 enforces from this pull request on. quality, finances and agent-ledger stay in observe until
 the exempt list is widened (step 3).
@@ -211,15 +211,18 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
 **Steps:**
 1. Choose: enforce in agent-kit now, widen the list first, or keep observing.
 2. ~~To enforce in agent-kit, drop `--observe` from `.github/workflows/validate.yml` line 41.~~ Done.
-3. To enforce in the other three, drop `--observe` from the step's `run:` line in
+3. ~~To enforce in the other three, drop `--observe` from the step's `run:` line in
    `.github/workflows/changes.yml`. After quality #39 and finances #31 merge, also drop it from
-   the `debrief.py check` line in their `scripts/ci`.
+   the `debrief.py check` line in their `scripts/ci`.~~ Done: quality #46, finances #34 and
+   agent-ledger #39 pin agent-kit 079eca5, add their `.changes/exempt` and enforce.
    - The exempt list is per repo, not a wider `BOOKKEEPING`: each repo names its data paths in
      `.changes/exempt`, read from the base branch (bstack 0.39.0). `BOOKKEEPING` also decides when
      a verify-work receipt goes stale, and `books/` and `ledger/` are data those checks must see.
      A replay of every PR since 2026-11-21 passed the brief and import PRs and still failed the
-     code PRs with no record (`.changes/2026-11-22-exempt-list/replay.txt`). Still to do: pin the
-     new checker, add each repo's list, drop `--observe` in quality, finances and agent-ledger.
+     code PRs with no record (`.changes/2026-11-22-exempt-list/replay.txt`).
+   - Left open: four records merged under observe are `VERIFIED` with no `commit` (quality and
+     finances `2026-11-22-local-ci.json` and `2026-11-22-drop-ledger-bootstrap.json`). A pull
+     request that edits one fails until it names the commit its check ran on.
 4. ~~Separately: fix claim 4 in `.changes/2026-11-21-no-comments.json` so it cites a commit on main.~~
    Done: the claim keeps 58bc6e8, the text the trial ran on, and the tag
    `trial/2026-11-21-no-comments` keeps that commit on GitHub. The claim now names the two changes
