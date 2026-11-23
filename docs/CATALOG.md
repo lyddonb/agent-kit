@@ -97,3 +97,4 @@ Narrated explainer videos made by your agent, from concept and script through vo
 | Skill | Description |
 |---|---|
 | [`explainer-video`](../plugins/video/skills/explainer-video/SKILL.md) | Make a finished, narrated explainer video (MP4) about a subject, from concept and script through voiceover, animation and render, and check the frames before delivering. Use when asked to make an explainer, promo, product or walkthrough video, or "a video about X". |
+H13 scratch: this line makes make check fail

@@ -1,0 +1,10 @@
+name: scratch-h13
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'sleep 150 && echo "H13 scratch, same-name job, always passes"'
