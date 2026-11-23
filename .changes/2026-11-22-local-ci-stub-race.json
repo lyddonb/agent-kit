@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "goal": "Stop test_run_waits_for_a_tick_holding_the_lock from failing at random. It turned agent-kit #97's validate red with a JSONDecodeError that had nothing to do with that PR.",
+  "changed": [
+    "The stub gh in tests/test_local_ci.py holds an flock across each call's read-modify-write of its state file, and swaps the file in with os.replace, so a concurrent reader or a second stub call never sees it half written or loses an update.",
+    "A new test, StubStateTest, runs eight stub loops in parallel while reading the file."
+  ],
+  "claims": [
+    {
+      "claim": "The race is the cause: concurrent stub calls and a polling reader see a truncated state file, and the fix removes it.",
+      "verdict": "VERIFIED",
+      "check": "StubStateTest run 10 times against the old stub (10 failed: stubs crashed on a torn file) and 20 times against the fixed one (0 failed); test_run_waits_for_a_tick_holding_the_lock 20 times after the fix (0 failed); the whole test_local_ci.py module passes",
+      "commit": "115a6c5",
+      "record": ".changes/2026-11-22-local-ci-stub-race/tests.txt",
+      "remaining": "Measured on this Mac only. The CI runner, where the flake showed up, is checked by this PR's own validate run."
+    }
+  ],
+  "next": [],
+  "release": {"none": "Test-only fix; nothing a user of the kit sees changes."}
+}

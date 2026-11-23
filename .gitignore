@@ -7,3 +7,5 @@ node_modules/
 # Local agentfiles install (marketplace and MCP snippets). Not the profile.
 .agentfiles/
 .verify/
+# Local git worktrees made by agents and people
+.worktrees/

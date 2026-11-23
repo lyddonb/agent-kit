@@ -18,10 +18,10 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H10 | Review and merge the bstack branch | **Done** |
 | H11 | Review and merge the verification and planning branch | **Done** |
 | H12 | Create a verification skill in one real app | Steps 1 and 2 **done** (R27); steps 3 and 4 to do |
-| H13 | Protect workflow files and checker pins | To do (after R29 unit 1) |
+| H13 | Protect workflow files and checker pins | Fix A **done**, step 1 **done**; steps 2 to 7 are yours |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
-| H16 | Decide where the change record check enforces | agent-kit **enforced**; the other three to do |
+| H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
 
 ---
 
@@ -119,12 +119,46 @@ schedule for each, is yours and was not confirmed when this was written. R18 no 
 this task: its own trigger is two apps with verification skills and local lanes colliding.
 
 ### H13. Protect workflow files and checker pins
-**Why a human:** Rulesets and CODEOWNERS need repo admin, and you choose who may approve.
+**Status (2026-11-22):** Fix A is done. Run `2026-11-22-protect-gates` (its charter and ledger
+are in the quality repo) moved `books` (quality, finances) and `change-record` (quality, finances,
+agent-ledger, agent-kit) to run only `main`'s workflow and checker on a pull request, through
+`pull_request_target`. Two closed scratch PRs proved it: each gutted its own copy of the check,
+and `main`'s copy still blocked the merge. The name gap is closed (`docs/ARCHITECTURE.md`, "The
+name gap is closed"). Fix A covers only checks that read files. Steps 2 to 7 are yours.
+**Why a human:** Rulesets, collaborators and accounts need repo admin, and the choice of who may
+approve a workflow change is yours.
 **Steps:**
-1. Read R29's audit table once it merges (`docs/ARCHITECTURE.md`). It lists each gate a PR can
-   currently change for itself.
-2. For each repo it names, add a ruleset or CODEOWNERS entry so a change under
-   `.github/workflows/**` (and the pinned checker SHA in the books repos) needs your review.
+1. ~~**Require agent-kit's `change-record`.**~~ Done 2026-11-22: it is required, and the duplicate
+   step left `validate.yml` (agent-kit PR 99).
+2. **Require `change-record` in finances and agent-ledger.** It runs only from `main` there now
+   and enforces (H16), but neither ruleset requires it, so a red run doesn't block a merge.
+   quality and agent-kit already require it.
+3. **Require agentfiles' `test`.** Its ruleset requires no checks today, so a red run doesn't
+   block a merge.
+4. **Decide whether agents get a GitHub identity of their own.** Nothing else in this task can
+   protect `validate`, `test` or the workflow files themselves, because agents act as you. With a
+   second account, a code owner review means something. The parts:
+   - a machine account (GitHub allows one per person), given Write, not Admin, on the five repos;
+   - agent sessions that use its SSH key and `gh` login and can't reach yours. They run as your
+     macOS user today and can read your keychain, so this needs a separate user or a sandbox;
+   - a `CODEOWNERS` file naming you for `.github/workflows/**` (an agent can open that pull request);
+   - in each ruleset, "Require review from Code Owners", plus "Repository admin" on the bypass list
+     set to "For pull requests only", so that you can still merge your own workflow changes.
+
+   Not checked on these repos: how code owner review behaves while required approvals stay at 0.
+5. **Only after step 4, and if you want it:** a push ruleset in quality and finances that
+   restricts `.github/workflows/**`, with Repository admin on the bypass list. Push rulesets exist
+   only for private repos. First check that Settings → Rules → Rulesets → New ruleset offers "New
+   push ruleset" on this account. Before step 4 it stops nothing, because agents are the admin.
+6. **Know the limit on the Mac runner.** quality and finances run their checks on `local-mac`,
+   which persists between jobs and runs as you. A pull request that *attacks* the check, instead
+   of loosening it by mistake, can tamper with the base-branch run there (`docs/ARCHITECTURE.md`,
+   "On the Mac's self-hosted runner"). Closing that needs trusted jobs off that runner, on hosted
+   runners once the spending limit allows, or on an ephemeral machine. Your call whether that's
+   worth it while agents already run as you.
+7. **If a base-branch check ever blocks every pull request:** `pull_request_target` runs only
+   `main`'s copy, so a broken one also blocks the pull request that fixes it. Remove that check
+   from the ruleset, merge the fix, and add the check back.
 
 ### H14. Allow hooks in agentfiles — 🚧 BLOCKER for R32
 **Why a human:** A hook runs code on every matching event in every session. Turning that on is
@@ -151,7 +185,7 @@ and counts per week?), agentfiles H13 (are cfo's skills counted?), and agent-led
 (when the evals that use these rows start, and whether they may spend model calls in CI).
 **Unblocks:** R38, and through it R41 and agent-ledger's M3 unit 1.
 
-### H16. Decide where the change record check enforces
+### H16. Decide where the change record check enforces — Done
 **Answer (2026-11-22):** Enforce now. Beau's words: "i want to enforce now". agent-kit
 enforces from this pull request on. quality, finances and agent-ledger stay in observe until
 the exempt list is widened (step 3).
@@ -177,8 +211,20 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
 **Steps:**
 1. Choose: enforce in agent-kit now, widen the list first, or keep observing.
 2. ~~To enforce in agent-kit, drop `--observe` from `.github/workflows/validate.yml` line 41.~~ Done.
-3. To enforce in the other three, drop `--observe` from the step's `run:` line in
+3. ~~To enforce in the other three, drop `--observe` from the step's `run:` line in
    `.github/workflows/changes.yml`. After quality #39 and finances #31 merge, also drop it from
-   the `debrief.py check` line in their `scripts/ci`.
-4. Separately: fix claim 4 in `.changes/2026-11-21-no-comments.json` so it cites a commit on main.
+   the `debrief.py check` line in their `scripts/ci`.~~ Done: quality #46, finances #34 and
+   agent-ledger #39 pin agent-kit 079eca5, add their `.changes/exempt` and enforce.
+   - The exempt list is per repo, not a wider `BOOKKEEPING`: each repo names its data paths in
+     `.changes/exempt`, read from the base branch (bstack 0.39.0). `BOOKKEEPING` also decides when
+     a verify-work receipt goes stale, and `books/` and `ledger/` are data those checks must see.
+     A replay of every PR since 2026-11-21 passed the brief and import PRs and still failed the
+     code PRs with no record (`.changes/2026-11-22-exempt-list/replay.txt`).
+   - Left open: four records merged under observe are `VERIFIED` with no `commit` (quality and
+     finances `2026-11-22-local-ci.json` and `2026-11-22-drop-ledger-bootstrap.json`). A pull
+     request that edits one fails until it names the commit its check ran on.
+4. ~~Separately: fix claim 4 in `.changes/2026-11-21-no-comments.json` so it cites a commit on main.~~
+   Done: the claim keeps 58bc6e8, the text the trial ran on, and the tag
+   `trial/2026-11-21-no-comments` keeps that commit on GitHub. The claim now names the two changes
+   in main's e548abb that were never tried.
 

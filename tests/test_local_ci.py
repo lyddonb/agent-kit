@@ -14,9 +14,11 @@ REPO = "owner/app"
 
 # GET answers from the state file; POST/PATCH with --input - change it. Unknown calls fail loudly.
 STUB_GH = r'''#!/usr/bin/env python3
-import datetime, json, os, re, sys
+import datetime, fcntl, json, os, re, sys
 args = sys.argv[1:]
 path = os.environ["STUB_STATE"]
+lock = open(path + ".lock", "w")
+fcntl.flock(lock, fcntl.LOCK_EX)
 st = json.load(open(path))
 assert args[0] == "api", args
 url, _, query = args[1].partition("?")
@@ -53,7 +55,9 @@ elif method == "PATCH" and url.startswith(R + "/issues/comments/"):
     c["body"] = body["body"]
 else:
     sys.exit(f"stub gh: unexpected call {args}")
-json.dump(st, open(path, "w"))
+with open(path + ".tmp", "w") as f:
+    json.dump(st, f)
+os.replace(path + ".tmp", path)
 if out is not None:
     print(json.dumps(out))
 '''
@@ -61,6 +65,29 @@ if out is not None:
 
 def sh(*args, cwd=None):
     return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+class StubStateTest(unittest.TestCase):
+    def test_concurrent_stub_calls_lose_no_update_and_a_reader_never_sees_a_torn_file(self):
+        tmp = Path(tempfile.mkdtemp())
+        gh = tmp / "gh"
+        gh.write_text(STUB_GH)
+        gh.chmod(0o755)
+        state = tmp / "state.json"
+        state.write_text(json.dumps({"statuses": {}}))
+        env = dict(os.environ, STUB_STATE=str(state))
+        workers, calls = 8, 15
+        script = f"for i in $(seq {calls}); do {gh} api repos/owner/app >/dev/null || exit 1; done"
+        procs = [subprocess.Popen(["sh", "-c", script], env=env) for _ in range(workers)]
+        torn = 0
+        while any(p.poll() is None for p in procs):
+            try:
+                json.loads(state.read_text())
+            except ValueError:
+                torn += 1
+        self.assertEqual([p.returncode for p in procs], [0] * workers)
+        self.assertEqual(torn, 0, "a reader saw a half-written state file")
+        self.assertEqual(len(json.loads(state.read_text())["calls"]), workers * calls, "a stub call's update was lost")
 
 
 class Harness(unittest.TestCase):
