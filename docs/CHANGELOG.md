@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.39.1 (2026-11-22)
+
+- `debrief.py check` no longer passes a VERIFIED claim whose `record` is a pathspec pattern such as `*`, `:(glob)**` or `:/`, or a folder, symlink or submodule: the record must name one regular file git tracks or has staged, exactly as `git ls-files` prints it. It also refuses to read a change record that is a symlink, sits outside the repo, or that git holds with a mode other than 100644, so a pull request can't make the check print another file's keys into its log or hang on a link to `/dev/zero`. A repo that pins debrief.py at an older commit gets this when its pin moves.
+
 ## bstack 0.39.0 (2026-11-22)
 
 - A repo can now enforce the change record check without failing its scheduled data pull requests. List the paths a weekly job writes, such as `briefs/` or `books/`, in `.changes/exempt`, and `debrief.py check --base` (debrief 0.3.0) stops asking those pull requests for a record. The list is read from the base branch, so a pull request can't exempt its own changes, and a code change beside exempt data still needs a record.

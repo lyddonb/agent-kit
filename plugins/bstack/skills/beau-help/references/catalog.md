@@ -30,7 +30,7 @@ Twenty-four named engineering principles (prove it works, fix root causes, subtr
 
 - `principles`: Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof.
 
-## bstack 0.39.0
+## bstack 0.39.1
 
 Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; skills for understanding (how, why, teach, recall), debugging (root-cause finds a bug's cause from facts, not from reading the code), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), closing out (debrief keeps a checked change record per PR and prints the brief and the release notes), improvement (reflect, correct, unslop, no-comments), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week; local-ci runs a repo's CI on this machine and posts it to the PR as a commit status) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
 

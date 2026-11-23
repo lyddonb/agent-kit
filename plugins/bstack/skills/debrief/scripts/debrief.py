@@ -23,8 +23,11 @@ Rules `check` holds:
     verdict    VERIFIED, NOT VERIFIED, INCONCLUSIVE or UNCHECKED
     VERIFIED   needs `check`, `commit` (a commit in this repo) and `record`
     the rest   need `remaining`: what still has to be checked
-    record     an https URL, or a path git tracks or has staged (an ignored or untracked file is
-               gone on the next clone)
+    record     an https URL, or the path of one file git tracks or has staged, as `git ls-files`
+               prints it (an ignored or untracked file is gone on the next clone; a pattern or a
+               folder names no one file)
+    the file   a record is a plain file inside the repo: not a symlink, and mode 100644 if git
+               holds it
     next       every item has `source` (where it comes from, or the word `inferred`), `why_now`
                and `impact`; an empty list is allowed
     release    exactly one of {"note": ...}, {"see": ...} (the repo keeps its notes elsewhere:
@@ -59,6 +62,7 @@ import datetime
 import json
 import posixpath
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -128,11 +132,43 @@ def _text(obj: Dict, key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _tracked(root: Path, path: str) -> List[Tuple[str, str]]:
+    """(mode, path) for each index entry `path` matches, read as a literal path, never a pattern."""
+    done = git(root, "--literal-pathspecs", "ls-files", "--stage", "-z", "--", path)
+    if done.returncode != 0:
+        return []
+    entries = []
+    for line in done.stdout.split("\0"):
+        if line:
+            meta, name = line.split("\t", 1)
+            entries.append((meta.split(" ", 1)[0], name))
+    return entries
+
+
 def _record_pointer_problem(root: Path, pointer: str) -> Optional[str]:
     if pointer.startswith("https://"):
         return None
-    if git(root, "ls-files", "--error-unmatch", "--", pointer).returncode != 0:
-        return f"record {pointer!r} is neither an https URL nor a path git tracks (git add it, or link the run)"
+    entries = _tracked(root, pointer)
+    if len(entries) != 1 or entries[0][1] != pointer or entries[0][0] not in ("100644", "100755"):
+        return (f"record {pointer!r} is neither an https URL nor a path git tracks: name one file, as git "
+                f"ls-files prints it (git add it, or link the run)")
+    return None
+
+
+def _unsafe_record_file(root: Path, path: Path) -> Optional[str]:
+    """Why `path` can't be read as a record: it must be a plain file inside `root`, not a link."""
+    if path.is_symlink():
+        return "is a symlink; a record must be a plain file in the repository"
+    real = path.resolve()
+    try:
+        rel = real.relative_to(root)
+    except ValueError:
+        return "is outside the repository"
+    if not stat.S_ISREG(real.stat().st_mode):
+        return "is not a regular file"
+    modes = [mode for mode, name in _tracked(root, rel.as_posix()) if name == rel.as_posix()]
+    if modes and modes[0] != "100644":
+        return f"git holds it as mode {modes[0]}; a record must be a plain file (100644)"
     return None
 
 
@@ -189,6 +225,9 @@ def parse(root: Path, path: Path) -> Tuple[Optional[Record], List[str]]:
     except ValueError:
         errors.append(f"{name.group(1)} is not a date")
     try:
+        unsafe = _unsafe_record_file(root, path)
+        if unsafe:
+            return None, [unsafe]
         raw = json.loads(path.read_text())
     except (OSError, ValueError) as e:
         return None, [f"cannot read it: {e}"]
