@@ -21,7 +21,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H13 | Protect workflow files and checker pins | Fix A in progress (run 2026-11-22-protect-gates); steps 1 to 6 are yours |
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
-| H16 | Decide where the change record check enforces | agent-kit **enforced**; the other three to do |
+| H16 | Decide where the change record check enforces | agent-kit **enforced**; step 4 **done**; step 3: the exempt list ships, the three repos to do |
 
 ---
 
@@ -214,5 +214,14 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
 3. To enforce in the other three, drop `--observe` from the step's `run:` line in
    `.github/workflows/changes.yml`. After quality #39 and finances #31 merge, also drop it from
    the `debrief.py check` line in their `scripts/ci`.
-4. Separately: fix claim 4 in `.changes/2026-11-21-no-comments.json` so it cites a commit on main.
+   - The exempt list is per repo, not a wider `BOOKKEEPING`: each repo names its data paths in
+     `.changes/exempt`, read from the base branch (bstack 0.39.0). `BOOKKEEPING` also decides when
+     a verify-work receipt goes stale, and `books/` and `ledger/` are data those checks must see.
+     A replay of every PR since 2026-11-21 passed the brief and import PRs and still failed the
+     code PRs with no record (`.changes/2026-11-22-exempt-list/replay.txt`). Still to do: pin the
+     new checker, add each repo's list, drop `--observe` in quality, finances and agent-ledger.
+4. ~~Separately: fix claim 4 in `.changes/2026-11-21-no-comments.json` so it cites a commit on main.~~
+   Done: the claim keeps 58bc6e8, the text the trial ran on, and the tag
+   `trial/2026-11-21-no-comments` keeps that commit on GitHub. The claim now names the two changes
+   in main's e548abb that were never tried.
 

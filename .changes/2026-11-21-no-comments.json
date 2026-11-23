@@ -35,10 +35,10 @@
     {
       "claim": "An agent following the skill deletes narration, dead code and unproven notes, keeps a license header and a proven external constraint, fixes the code a comment covered for, and leaves the check at exit 0.",
       "verdict": "INCONCLUSIVE",
-      "check": "Two runs on a scratch repo seeded with one comment of each kind, each an opus agent following SKILL.md with a sonnet hunter: one on the first draft, one on the rewritten text. Both did all of the above. I read each diff and reran the check",
+      "check": "Two runs on a scratch repo seeded with one comment of each kind, each an opus agent following SKILL.md with a sonnet hunter: one on the first draft, one on the rewritten text at commit 58bc6e8. Both did all of the above. I read each diff and reran the check. 58bc6e8 was rewritten before the push; the tag trial/2026-11-21-no-comments keeps it on GitHub.",
       "commit": "58bc6e8",
       "record": ".changes/2026-11-21-no-comments/trial.txt",
-      "remaining": "The second run deleted a module docstring, and the sentence that now forbids that has not been tried. Both runs were one model family on one seeded repo, and the agent knew it was reading a skill from disk. No Eval playbook comparison ran."
+      "remaining": "The trial ran on 58bc6e8, not on main's e548abb, which changes the skill text in two places that were never tried: the keep-list now says a Python docstring is not a comment (the second run deleted a module docstring), and step 5 now says an unattended run puts the offer to encode a constraint in the reply. Both runs were one model family on one seeded repo, and the agent knew it was reading a skill from disk. No Eval playbook comparison ran."
     },
     {
       "claim": "The skill loads when a user types one of the phrases in its description.",

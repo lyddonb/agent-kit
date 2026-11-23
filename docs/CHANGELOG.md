@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.39.0 (2026-11-22)
+
+- A repo can now enforce the change record check without failing its scheduled data pull requests. List the paths a weekly job writes, such as `briefs/` or `books/`, in `.changes/exempt`, and `debrief.py check --base` (debrief 0.3.0) stops asking those pull requests for a record. The list is read from the base branch, so a pull request can't exempt its own changes, and a code change beside exempt data still needs a record.
+- Try: `Which paths in this repo's recent pull requests would belong in .changes/exempt?`
+
 ## bstack 0.38.0 (2026-11-22)
 
 - The Quality Director can now track test code against source code per repo per week. Once the quality books have `books/volume.csv` (header only to start), `fetch` counts the test and source lines of each watched repo at the head of each complete week's newest push run on the default branch, from the repo's tarball read in memory, and `ingest` books one row per repo and week. `summary` adds `volume`: the week's lines and files and the change since the last booked week. `fetch --since DATE` backfills earlier weeks. It downloads the full source of every watched repo, private ones included, and keeps only the counts.
