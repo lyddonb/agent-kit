@@ -102,3 +102,4 @@ Adding a skill or plugin: [docs/AUTHORING.md](docs/AUTHORING.md).
 MIT. See [LICENSE](LICENSE). Parts of `bstack` and `principles` are adapted from pstack
 (MIT, Copyright (c) 2026 Lauren Tan); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 Other third-party content is not vendored here; agentfiles pulls it under its own licenses.
+
