@@ -1,0 +1,31 @@
+$ python3 -m unittest -v tests.test_local_ci
+test_refused_job_runs_the_base_branch_checker_on_the_merge_commit (tests.test_local_ci.FallbackTest) ... ok
+test_stale_merge_commit_is_refused (tests.test_local_ci.FallbackTest) ... ok
+test_checkout_working_tree_is_untouched (tests.test_local_ci.LocalCITest) ... ok
+test_failing_pr_gets_failure_and_one_comment_then_edited_on_pass (tests.test_local_ci.LocalCITest) ... ok
+test_finished_sha_is_not_rerun (tests.test_local_ci.LocalCITest) ... ok
+test_fork_pr_never_runs (tests.test_local_ci.LocalCITest) ... ok
+test_missing_scripts_ci_is_error (tests.test_local_ci.LocalCITest) ... ok
+test_moved_head_posts_nothing_for_the_old_sha (tests.test_local_ci.LocalCITest) ... ok
+test_old_finished_status_is_not_rerun (tests.test_local_ci.LocalCITest) ... ok
+test_passing_pr_gets_success_and_no_comment (tests.test_local_ci.LocalCITest) ... ok
+test_run_exit_code_follows_an_existing_verdict (tests.test_local_ci.LocalCITest) ... ok
+test_run_force_reruns_a_finished_sha (tests.test_local_ci.LocalCITest) ... ok
+test_run_reruns_a_fresh_pending_once_it_holds_the_lock (tests.test_local_ci.LocalCITest) ... ok
+test_run_waits_for_a_tick_holding_the_lock (tests.test_local_ci.LocalCITest) ... /Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/case.py:550: ResourceWarning: unclosed file <_io.BufferedReader name=4>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/case.py:550: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_stale_pending_is_rerun_and_fresh_pending_is_not (tests.test_local_ci.LocalCITest) ... ok
+test_tick_output_names_each_job (tests.test_local_ci.LocalCITest) ... ok
+test_timeout_is_failure (tests.test_local_ci.LocalCITest) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 26.721s
+
+OK
+
+Mutants, each against the suite, each turns one test red: skip logic; fork filter; moved-head check; run not waiting for the lock; refused ignoring 'started'; checker taken from the PR; explicit marker ignored; stale merge commit accepted.
