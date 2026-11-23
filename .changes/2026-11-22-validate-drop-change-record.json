@@ -7,10 +7,15 @@
   "claims": [
     {
       "claim": "agent-kit's change-record check runs from main on a real pull request.",
-      "verdict": "UNCHECKED",
-      "remaining": "Filled in from this pull request's own run. Merge only after Beau has added change-record to the protect main ruleset (H13 step 1); before that, this would leave no required change record check."
+      "verdict": "VERIFIED",
+      "check": "gh run list on this pull request's first head: change-record ran on pull_request_target from main's change-record.yml, success; its log prints '1 record(s) checked, 0 with problems'.",
+      "commit": "fc235c2c73fcb6c8837cfa61d264ea5a8e29773d",
+      "record": "https://github.com/lyddonb/agent-kit/actions/runs/45104858754",
+      "remaining": "Merge only after Beau has added change-record to the protect main ruleset (H13 step 1); before that, this would leave no required change record check."
     }
   ],
   "next": [],
-  "release": {"none": "CI only."}
+  "release": {
+    "none": "CI only."
+  }
 }
