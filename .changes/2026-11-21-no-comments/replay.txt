@@ -1,0 +1,3 @@
+Replay of comments.py over main: comments.py --base C^ --head C for each of the 156 non-merge commits with a parent, up to 0939a66.
+exit 1 (adds a comment): 60. exit 0: 96. exit 2 (could not run): 0.
+Example: 990c84f adds 70.

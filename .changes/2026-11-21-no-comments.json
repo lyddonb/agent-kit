@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "goal": "Give agent-kit pstack's comment discipline in two forms, as Beau asked on 2026-11-21: the /no-comments skill with its comment-sicko subagent, and a mechanical check that catches a comment a diff adds.",
+  "changed": [
+    "New no-comments skill and comment-sicko agent in bstack, adapted from pstack. The keep-list lives once, in a snippet both of them inline.",
+    "comments.py lists the comments a diff adds to Python files and exits 1 when there is one. A moved comment adds nothing; a shebang, a tool directive, a license header and a linked comment pass.",
+    "agent-kit's reliability checklist gains added-comment, which runs comments.py on every change to a Python file.",
+    "beau-mode's comment rule now points at the keep-list, which no longer allows a comment that explains a surprise in our own code. Opening a PR runs no-comments when the diff adds comments."
+  ],
+  "claims": [
+    {
+      "claim": "comments.py lists exactly the comments a diff adds to Python files, applies its four keeps, and exits 0, 1 or 2 as documented.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_comments.py, 28 tests on throwaway git repos, on Python 3.12 and 3.9.6; four mutations of the script each fail a test; make unit",
+      "commit": "e548abb",
+      "record": ".changes/2026-11-21-no-comments/tests.txt",
+      "remaining": "Python only. Files in other languages are not read."
+    },
+    {
+      "claim": "The check runs on real history without an error, and fails where comments were added.",
+      "verdict": "VERIFIED",
+      "check": "comments.py --base C^ --head C over the 156 non-merge commits on main: 60 exit 1, 96 exit 0, none exit 2",
+      "commit": "e548abb",
+      "record": ".changes/2026-11-21-no-comments/replay.txt",
+      "remaining": "Nobody read the 60 to count how many of their comments the keep-list would allow with a link added."
+    },
+    {
+      "claim": "bstack installs from this checkout and a Claude Code session lists the no-comments skill and the comment-sicko agent.",
+      "verdict": "VERIFIED",
+      "check": "verify-kit drive all, 4 of 4 features, with the real claude CLI in a throwaway profile, reading the agent and skill lists from the session's init line; make claude-validate",
+      "commit": "e548abb",
+      "record": ".changes/2026-11-21-no-comments/tests.txt",
+      "remaining": "Claude Code only: no other tool was tried."
+    },
+    {
+      "claim": "An agent following the skill deletes narration, dead code and unproven notes, keeps a license header and a proven external constraint, fixes the code a comment covered for, and leaves the check at exit 0.",
+      "verdict": "INCONCLUSIVE",
+      "check": "Two runs on a scratch repo seeded with one comment of each kind, each an opus agent following SKILL.md with a sonnet hunter: one on the first draft, one on the rewritten text. Both did all of the above. I read each diff and reran the check",
+      "commit": "58bc6e8",
+      "record": ".changes/2026-11-21-no-comments/trial.txt",
+      "remaining": "The second run deleted a module docstring, and the sentence that now forbids that has not been tried. Both runs were one model family on one seeded repo, and the agent knew it was reading a skill from disk. No Eval playbook comparison ran."
+    },
+    {
+      "claim": "The skill loads when a user types one of the phrases in its description.",
+      "verdict": "UNCHECKED",
+      "check": "",
+      "commit": "",
+      "record": "",
+      "remaining": "The skill-description checklist item asks for each phrase typed in a session with the plugin installed. None was typed."
+    }
+  ],
+  "next": [
+    {
+      "item": "Sweep the 385 comment lines already in the kit's Python with /no-comments",
+      "source": "inferred: the check only judges what a diff adds, and 60 of 156 past commits would fail it",
+      "why_now": "Any edit near an old comment now meets the rule, so the old ones cost a little on every change until they go.",
+      "impact": "Whoever next edits quality.py (128 comment lines) stops tripping the check on text they did not write."
+    },
+    {
+      "item": "Try the fixed skill text with the Eval playbook, on a second model family",
+      "source": "this record's INCONCLUSIVE claim",
+      "why_now": "Opening a PR now calls the skill, so every code change in a repo that uses beau-mode will run it.",
+      "impact": "Beau learns whether agents delete too much or too little before the rule runs on real PRs."
+    },
+    {
+      "item": "A rule for TypeScript, in the project's own linter",
+      "source": "inferred: comments.py reads Python only",
+      "why_now": "Not yet: wait for the first TypeScript repo that adopts the skill.",
+      "impact": "Until then the skill's judgment is the only check on comments outside Python."
+    }
+  ],
+  "release": {"see": "changes.yaml bstack@0.37.0"}
+}
