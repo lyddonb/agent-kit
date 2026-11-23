@@ -7,6 +7,7 @@ files and output as before the book existed.
 """
 import io
 import json
+import os
 import re
 import tarfile
 import unittest
@@ -74,9 +75,28 @@ class CountTarballTest(unittest.TestCase):
             with self.assertRaisesRegex(quality.Rejected, "not a readable gzip tarball"):
                 quality.count_tarball(raw)
         for cap, value, why in (("MAX_TARBALL_BYTES", 10, "larger than"), ("MAX_TARBALL_MEMBERS", 2, "more than 2 members"),
-                                ("MAX_TARBALL_UNPACKED", 8, "holds more than")):
+                                ("MAX_TARBALL_UNPACKED", 8, "unpacks to more than")):
             with unittest.mock.patch.object(quality, cap, value), self.assertRaisesRegex(quality.Rejected, why):
                 quality.count_tarball(tarball(CODE))
+
+
+class TarballBombTest(unittest.TestCase):
+    def test_a_header_that_claims_a_huge_payload_is_refused_without_reading_it(self):
+        out = io.BytesIO()
+        with tarfile.open(fileobj=out, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+            info = tarfile.TarInfo("top/src/app.py")
+            info.pax_headers = {"comment": "x" * (2 << 20)}
+            info.size = 2
+            archive.addfile(info, io.BytesIO(b"a\n"))
+        with unittest.mock.patch.object(quality, "MAX_TARBALL_UNPACKED", 1 << 20), self.assertRaisesRegex(quality.Rejected, "unpacks to more than"):
+            quality.count_tarball(out.getvalue())
+        reads = []
+        real = quality._CappedReader.read
+        with unittest.mock.patch.object(quality, "MAX_TARBALL_UNPACKED", 1 << 20), \
+                unittest.mock.patch.object(quality._CappedReader, "read", lambda self, size=-1: reads.append(size) or real(self, size)):
+            with self.assertRaises(quality.Rejected):
+                quality.count_tarball(out.getvalue())
+        self.assertTrue(all(0 <= n <= (1 << 20) + 1 or n < 0 for n in reads) and max(reads) > 0)
 
 
 class WeeksTest(unittest.TestCase):
@@ -85,6 +105,11 @@ class WeeksTest(unittest.TestCase):
         self.assertEqual(quality.volume_weeks(today, None, set()), [W45])
         self.assertEqual(quality.volume_weeks(today, None, {W45}), [])
         self.assertEqual(quality.volume_weeks(today, None, {"2026-W43"}), [W44, W45])
+        self.assertEqual(quality.volume_weeks(today, None, {"2026-W43", W45}), [W44], "a gap before the latest booked week is asked again")
+        self.assertEqual(quality.volume_weeks(today, None, {"2026-W30", W45}), [f"2026-W{n}" for n in range(34, 45)],
+                         "gaps are retried for the 12 weeks up to last week only")
+        self.assertEqual(quality.volume_weeks(today, None, {"2026-W20"})[:2], ["2026-W21", "2026-W22"],
+                         "every week after the latest booked one, however old")
         self.assertEqual(quality.volume_weeks(today, "2026-10-26", {W44}), [W45])
         self.assertEqual(quality.volume_weeks(today, "2026-10-27", set()), [W44, W45])
         self.assertEqual(quality.volume_weeks(quality.date(2026, 11, 16), None, set()), ["2026-W46"])
@@ -139,6 +164,17 @@ class FetchVolumeTest(FetchVolumeBase):
         self.assertEqual(self.endpoints().count(f"repos/acme/open-lib/tarball/{SHA_A}"), 1)
         self.assertIn("; volume counted for 2 weeks (1 without a push run); 0 failed\n", out)
 
+    def test_every_page_of_the_week_is_read(self):
+        monday, sunday = quality._week_days(W45)
+        query = re.sub(r"[^A-Za-z0-9._-]", "_", f"branch=main&event=push&per_page=100&created={monday}..{sunday}")
+        lint = [push_run(100 + i, "c" * 40, "2026-11-08T22:00:00Z", name="lint") for i in range(100)]
+        pages = [{"total_count": 101, "workflow_runs": lint}, {"total_count": 101, "workflow_runs": [push_run(7, SHA_A, "2026-11-05T20:00:00Z")]}]
+        self.put(f"repos/acme/open-lib/actions/runs__q__{query}", "".join(json.dumps(p) for p in pages))
+        self.serve_tarball(SHA_A, tarball(CODE))
+        code, out = self.fetch()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.volume_file(W45)["sha"], SHA_A)
+
     def test_booked_weeks_are_not_asked_for_again(self):
         tv.write_csv(self.books / quality.VOLUME, quality.VOLUME_SCHEMA,
                      [[W45, "open-lib", SHA_A, "v1", 1, 4, 2, 5, tv.link("acme/open-lib", 7)]])
@@ -154,7 +190,7 @@ class FetchVolumeTest(FetchVolumeBase):
         self.serve_tarball(SHA_B, tarball(CODE))
         code, out = self.fetch("--since", "2026-10-27")
         self.assertEqual(code, 1, out)
-        self.assertIn(f"  FAILED volume {W45}: tarball of {SHA_A[:12]} is not a readable gzip tarball (ReadError)\n", out)
+        self.assertIn(f"  FAILED volume {W45}: tarball of {SHA_A[:12]} is not a readable gzip tarball (BadGzipFile)\n", out)
         self.assertEqual([p.name for p in (self.out / "open-lib" / "volume").iterdir()], ["2026-W44.json"])
 
     def test_too_many_weeks_are_counted_oldest_first_and_the_rest_left_for_later(self):
@@ -255,6 +291,25 @@ class IngestVolumeTest(tv.TempCase):
         self.assertEqual(code, 1, out)
         self.assertIn("repo stray is not on the watch list", out)
         self.assertEqual(len(self.rows()), 1)
+
+    def test_a_week_that_is_not_over_is_rejected(self):
+        with unittest.mock.patch.object(ti.quality, "utc_stamp", return_value="2026-11-05T10:00:00Z"):
+            self.put(volume_body())
+            code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"week {W45} is not over yet", out)
+        self.assertEqual(self.rows(), [])
+
+    def test_an_unreadable_volume_folder_is_rejected_not_a_crash(self):
+        self.put(volume_body())
+        folder = self.art / "open-lib" / "volume"
+        folder.chmod(0)
+        self.addCleanup(folder.chmod, 0o755)
+        if os.access(folder, os.R_OK):
+            self.skipTest("running as a user who can read any folder")
+        code, out = self.ingest()
+        self.assertEqual(code, 1, out)
+        self.assertIn("rejected: open-lib/volume: cannot list the folder", out)
 
     def test_only_jobs_or_visibility_leaves_the_book_alone(self):
         self.put(volume_body())

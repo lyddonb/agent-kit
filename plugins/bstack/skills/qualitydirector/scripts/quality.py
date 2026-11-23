@@ -241,6 +241,7 @@ if sys.version_info < (3, 10):
 import argparse
 import bisect
 import contextlib
+import gzip
 import csv
 import errno
 import hashlib
@@ -3720,8 +3721,9 @@ VOLUME_DIR = "volume"
 VOLUME_RULE = "v1"
 VOLUME_RULE_NAMES = (VOLUME_RULE,)  # a row's rule names how its paths were classified; rows of two rules are not compared
 MAX_VOLUME_WEEKS = 60  # weeks one fetch counts per repo, oldest first; the rest are counted by a later fetch
+VOLUME_RETRY_WEEKS = 12  # a week without a row this recent is asked about again on every fetch
 MAX_TARBALL_BYTES = 64 << 20  # one downloaded tarball
-MAX_TARBALL_UNPACKED = 1 << 30  # what one tarball's files may hold, counted as they are read
+MAX_TARBALL_UNPACKED = 256 << 20  # the whole decompressed stream (headers and skipped members too), counted as it is read
 MAX_TARBALL_MEMBERS = 100_000
 # v1: code by suffix; a test file is one under a test directory or named as a test; vendored and built folders are not counted
 CODE_SUFFIXES = (".py", ".pyi", ".sh", ".bash", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".go", ".rs",
@@ -3746,15 +3748,32 @@ class Volume(NamedTuple):
     source_lines: int
 
 
+class _CappedReader:
+    """A read-only stream that raises Rejected once more than `cap` bytes were asked of it: never more than cap + 1 bytes
+    are read in one call, so a header that claims a huge payload cannot make the decompressor allocate it."""
+
+    def __init__(self, inner, cap: int):
+        self.inner, self.left = inner, cap
+
+    def read(self, size: int = -1) -> bytes:
+        want = self.left + 1 if size is None or size < 0 or size > self.left + 1 else size
+        data = self.inner.read(want)
+        self.left -= len(data)
+        if self.left < 0:
+            raise Rejected(f"unpacks to more than {_size(MAX_TARBALL_UNPACKED)}")
+        return data
+
+
 def count_tarball(raw: bytes) -> Volume:
     """Count the lines (newlines, plus a last line without one) of the code files in a gzip tarball as GitHub serves it:
     every member under one top folder named for the commit. Raises Rejected for an archive that is not one, or over a cap."""
     if len(raw) > MAX_TARBALL_BYTES:
         raise Rejected(f"is larger than {_size(MAX_TARBALL_BYTES)}")
     counts = {"test": [0, 0], "source": [0, 0]}
-    unpacked = members = 0
+    members = 0
+    stream = _CappedReader(gzip.GzipFile(fileobj=io.BytesIO(raw)), MAX_TARBALL_UNPACKED)
     try:
-        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+        with tarfile.open(fileobj=stream, mode="r|") as archive:
             for member in archive:
                 members += 1
                 if members > MAX_TARBALL_MEMBERS:
@@ -3767,9 +3786,6 @@ def count_tarball(raw: bytes) -> Volume:
                 f = archive.extractfile(member)
                 lines, last = 0, b"\n"
                 while chunk := f.read(1 << 16):
-                    unpacked += len(chunk)
-                    if unpacked > MAX_TARBALL_UNPACKED:
-                        raise Rejected(f"holds more than {_size(MAX_TARBALL_UNPACKED)} of code")
                     lines += chunk.count(b"\n")
                     last = chunk[-1:]
                 counts[kind][0] += 1
@@ -3780,14 +3796,15 @@ def count_tarball(raw: bytes) -> Volume:
 
 
 def volume_weeks(today: date, since: str | None, booked: set[str]) -> list[str]:
-    """The complete weeks to count, oldest first: from the week of `since` (else the week after the latest booked one,
-    else last week) through last week, less the weeks already booked."""
+    """The complete weeks to count, oldest first, less the weeks already booked: from the week of `since`; else from the
+    week after the latest booked one, or VOLUME_RETRY_WEEKS back from last week when that is earlier (so a week that
+    failed or had no push run is asked again), but never before the earliest booked week; else last week alone."""
     iso = today.isocalendar()
     last = week_back(f"{iso[0]:04d}-W{iso[1]:02d}", 1)
     if since is not None:
         week = week_of(since + "T00:00:00Z")
     elif booked:
-        week = week_back(max(booked), -1)
+        week = max(min(week_back(max(booked), -1), week_back(last, VOLUME_RETRY_WEEKS - 1)), min(booked))
     else:
         week = last
     weeks = []
@@ -3806,15 +3823,11 @@ def _week_days(week: str) -> tuple[date, date]:
 def week_push_run(gh: Gh, github: str, workflow: str, branch: str, week: str) -> dict | None:
     """The newest push run of `workflow` on `branch` from the repo itself created in `week`, or None. Raises GhError."""
     monday, sunday = _week_days(week)
-    raw = gh.api(f"repos/{github}/actions/runs?branch={urllib.parse.quote(branch, safe='')}&event=push&per_page=100"
-                 f"&created={monday.isoformat()}..{sunday.isoformat()}")
-    try:
-        page = json.loads(raw)
-    except ValueError:
-        raise GhError(f"gh api repos/{github}/actions/runs did not answer with JSON") from None
-    runs = page.get("workflow_runs") if isinstance(page, dict) else None
-    if not isinstance(runs, list):
+    pages = gh.pages(f"repos/{github}/actions/runs?branch={urllib.parse.quote(branch, safe='')}&event=push&per_page=100"
+                     f"&created={monday.isoformat()}..{sunday.isoformat()}")
+    if not pages or not all(isinstance(page.get("workflow_runs"), list) for page in pages):
         raise GhError(f"gh api repos/{github}/actions/runs answered without a runs list")
+    runs = [r for page in pages for r in page["workflow_runs"]]
     mine = [r for r in runs if isinstance(r, dict) and r.get("name") == workflow and r.get("event") == "push"
             and r.get("head_branch") == branch and type(r.get("id")) is int and type(r.get("run_attempt")) is int
             and isinstance(r.get("head_sha"), str) and _SHA.fullmatch(r["head_sha"]) and isinstance(r.get("created_at"), str)
@@ -4179,6 +4192,8 @@ def read_volume_file(path: str, folder_repo: str, file_week: str, watched: dict[
         raise Rejected(f"repo {printable(obj['repo'])} is not in folder {printable(folder_repo)}")
     if obj["week"] != file_week:
         raise Rejected(f"week {printable(obj['week'])} is not the file's name")
+    if _is_iso_week(obj["week"]) and obj["week"] >= week_of(utc_stamp()):
+        raise Rejected(f"week {obj['week']} is not over yet")
     if folder_repo not in watched:
         raise Rejected(f"repo {printable(folder_repo)} is not on the watch list")
     github = watched[folder_repo][0]
@@ -4204,7 +4219,12 @@ def scan_volume_files(root: str, watched: dict[str, tuple[str, str]], books: Boo
         folder = os.path.join(root, name, VOLUME_DIR)
         if os.path.islink(os.path.join(root, name)) or os.path.islink(folder) or not os.path.isdir(folder):
             continue
-        for file in sorted(os.listdir(folder)):
+        try:
+            files = sorted(os.listdir(folder))
+        except OSError as e:
+            scans.append(VolumeScan(f"{name}/{VOLUME_DIR}", "rejected", reason=f"cannot list the folder ({e.strerror})"))
+            continue
+        for file in files:
             if not file.endswith(".json"):
                 continue
             rel = f"{name}/{VOLUME_DIR}/{file}"
