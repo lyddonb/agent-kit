@@ -40,8 +40,10 @@ A pull request that touches only bookkeeping files (see BOOKKEEPING) needs no re
 `--observe` it prints what it would have failed and exits 0, for a repo trying the check out.
 
 A repo can name more paths that need no record in `.changes/exempt`: one path per line,
-relative to the repo root, matched literally (a directory covers everything under it), with
-`#` starting a comment. Use it for data a scheduled job writes and a person reviews in the
+relative to the repo root, with `#` starting a comment. A plain path covers that file or
+everything under that directory. A path can also be a git glob (`briefs/[0-9]*.md`: `*`
+stays within one folder, `**` crosses folders), but its first folder must be named outright,
+so no entry can cover the whole repo. Use it for data a scheduled job writes and a person reviews in the
 pull request, such as weekly briefs, not for code. The check reads the list from REF, not
 from the pull request, so a list a pull request adds or widens applies only after it merges.
 A pull request that edits the list fails when its new list has a bad line; a bad list on REF
@@ -77,6 +79,7 @@ INFERRED = "inferred"
 BOOKKEEPING = (".audit", ".changes", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
                "HUMAN_TASKS.md", "IDEAS.md")
 EXEMPT = f"{DIR}/exempt"
+WILDCARD = re.compile(r"[*?\[]")
 
 TEMPLATE = {
     "version": 1,
@@ -315,6 +318,8 @@ def parse_exempt(text: str) -> Tuple[Tuple[str, ...], List[str]]:
         path = posixpath.normpath(entry)
         if entry.startswith("/") or path == "." or path == ".." or path.startswith("../"):
             errors.append(f"{EXEMPT} line {n}: {entry!r} must name a path inside the repo, not the repo itself or a path outside it")
+        elif WILDCARD.search(path.split("/", 1)[0]):
+            errors.append(f"{EXEMPT} line {n}: {entry!r} starts with a pattern: name its top-level folder or file outright")
         else:
             paths.append(path)
     return tuple(paths), errors
@@ -351,7 +356,7 @@ def base_paths(root: Path, base: str) -> Tuple[Optional[List[Path]], int]:
     leaves a bad exempt list)."""
     exempt = base_exempt(root, base)
     source = _changed(root, base, "ACDMRT", ".", *(f":(exclude){p}" for p in BOOKKEEPING),
-                      *(f":(exclude,literal){p}" for p in exempt))
+                      *(f":(exclude,glob){p}" for p in exempt))
     added = _changed(root, base, "A", DIR)
     touched = _changed(root, base, "AM", DIR)
     if source is None or added is None or touched is None:

@@ -283,15 +283,37 @@ class BaseCheckTest(DebriefBase):
         self.assertIn("changes app.py and adds no change record", done.stderr)
         self.assertNotIn("books/runs.csv", done.stderr)
 
-    def test_an_exempt_path_matches_from_the_root_and_literally(self):
-        self.exempt_on_main("books\nq*.md\n")
+    def test_an_exempt_path_matches_from_the_root(self):
+        self.exempt_on_main("books\n")
         (self.repo / "src" / "books").mkdir(parents=True)
         (self.repo / "src" / "books" / "ledger.py").write_text("x = 1\n")
-        (self.repo / "qx.md").write_text("x\n")
         self.commit()
         done = self.check()
         self.assertEqual(done.returncode, 1)
-        self.assertIn("changes qx.md, src/books/ledger.py and adds no change record", done.stderr)
+        self.assertIn("changes src/books/ledger.py and adds no change record", done.stderr)
+
+    def test_a_glob_exempts_the_dated_briefs_but_not_the_template_beside_them(self):
+        self.exempt_on_main("briefs/[0-9]*.md  # dated weekly briefs\n")
+        (self.repo / "briefs").mkdir()
+        for name in ("2026-11-22.md", "2026-11-22-2.md"):
+            (self.repo / "briefs" / name).write_text("brief\n")
+        self.commit("briefs")
+        self.assertEqual(self.check().returncode, 0, "dated briefs need no record")
+        (self.repo / "briefs" / "TEMPLATE.md").write_text("## Sections\n")
+        self.commit("template")
+        done = self.check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("changes briefs/TEMPLATE.md and adds no change record", done.stderr)
+
+    def test_a_glob_star_stays_within_one_folder(self):
+        self.exempt_on_main("data/*.csv\n")
+        (self.repo / "data" / "raw").mkdir(parents=True)
+        (self.repo / "data" / "top.csv").write_text("a\n")
+        (self.repo / "data" / "raw" / "deep.csv").write_text("a\n")
+        self.commit()
+        done = self.check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("changes data/raw/deep.csv and adds no change record", done.stderr)
 
     def test_a_list_the_pull_request_adds_does_not_exempt_the_pull_request(self):
         (self.repo / ".changes").mkdir()
@@ -308,7 +330,7 @@ class BaseCheckTest(DebriefBase):
         self.assertEqual(self.check().returncode, 0)
 
     def test_a_pull_request_that_leaves_a_bad_list_fails(self):
-        for bad in (".", "/books", "../elsewhere", "books/.."):
+        for bad in (".", "/books", "../elsewhere", "books/..", "*", "**/x.md", "*.md", "[a-z]*/x"):
             with self.subTest(bad=bad):
                 (self.repo / ".changes").mkdir(exist_ok=True)
                 (self.repo / ".changes" / "exempt").write_text(f"briefs\n{bad}\n")
