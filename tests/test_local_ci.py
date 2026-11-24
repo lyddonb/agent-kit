@@ -424,5 +424,183 @@ class FallbackTest(Harness):
         self.assertIn("chain broken", st[-1]["description"])
 
 
+HEADER = '{"v":1,"repo":"app","tests":1}'
+WRITES_RECORD = f"""test -f "$QUALITY_PY" || exit 9
+printf '%s\\n{{"id":"t.a","ms":3,"outcome":"pass"}}\\n' '{HEADER}' > "$LOCAL_CI_RECORD"
+echo tested"""
+
+
+class RecordsTest(Harness):
+    """A scripts/ci that writes $LOCAL_CI_RECORD has it published to refs/local-ci/records of origin."""
+
+    def ref(self):
+        p = subprocess.run(["git", "-C", str(self.origin), "rev-parse", "-q", "--verify", "refs/local-ci/records"],
+                           capture_output=True, text=True)
+        return p.stdout.strip() or None
+
+    def files(self):
+        out = sh("git", "-C", str(self.origin), "ls-tree", "-r", "--name-only", "refs/local-ci/records")
+        return out.splitlines()
+
+    def show(self, path):
+        return sh("git", "-C", str(self.origin), "show", f"refs/local-ci/records:{path}")
+
+    def pr(self, number, body):
+        sha = self.add_pr(number, body)
+        st = self.read_state()
+        st["pulls"][-1]["head"]["ref"] = f"feat/{number}"
+        self.write_state(st)
+        return sha
+
+    def test_a_record_is_published_with_a_manifest_local_ci_wrote(self):
+        sha = self.pr(30, WRITES_RECORD)
+        p = self.run_ci("tick")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn(f"{REPO}: published 1 test record to refs/local-ci/records", p.stdout)
+        self.assertEqual([s["state"] for s in self.final(sha)], ["success"])
+        files = self.files()
+        self.assertEqual(len(files), 2, files)
+        prefix = files[0].rsplit("/", 1)[0]
+        self.assertRegex(prefix, rf"^runs/{sha}/\d{{4}}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        manifest = json.loads(self.show(f"{prefix}/manifest.json"))
+        started = prefix.rsplit("/", 1)[1]
+        self.assertEqual({k: v for k, v in manifest.items() if k != "completed"},
+                         {"v": 1, "github": REPO, "sha": sha, "event": "pull_request", "pr": 30, "head_branch": "feat/30",
+                          "base": "main", "started": started, "exit_code": 0, "host": "testhost"})
+        self.assertGreaterEqual(manifest["completed"], started)
+        self.assertEqual(self.show(f"{prefix}/test-results.jsonl").splitlines()[0], HEADER)
+        log = sh("git", "-C", str(self.origin), "log", "--format=%an %s", "refs/local-ci/records")
+        self.assertEqual(log, "local-ci local-ci: 1 test record from testhost")
+
+    def test_each_run_adds_a_commit_on_top_and_a_failed_run_keeps_its_record(self):
+        self.pr(31, WRITES_RECORD)
+        self.run_ci("tick")
+        first = self.ref()
+        red = self.pr(32, WRITES_RECORD + "\nexit 4")
+        self.run_ci("tick")
+        self.assertEqual(sh("git", "-C", str(self.origin), "rev-parse", "refs/local-ci/records^"), first)
+        self.assertEqual(len(self.files()), 4)
+        prefix = next(f for f in self.files() if f.startswith(f"runs/{red}/")).rsplit("/", 1)[0]
+        self.assertEqual(json.loads(self.show(f"{prefix}/manifest.json"))["exit_code"], 4)
+        self.assertEqual(self.final(red)[-1]["state"], "failure")
+
+    def test_the_default_branch_head_is_a_push(self):
+        main = self.commit(WRITES_RECORD, "main")
+        st = self.read_state()
+        st["branches"]["main"] = main
+        self.write_state(st)
+        self.run_ci("run", "--branch", "main")
+        manifest = json.loads(self.show(next(f for f in self.files() if f.endswith("manifest.json"))))
+        self.assertEqual((manifest["event"], manifest["pr"], manifest["head_branch"]), ("push", None, "main"))
+
+    def test_a_repo_that_records_nothing_gets_no_ref_and_no_output(self):
+        self.pr(33, "echo plain")
+        p = self.run_ci("tick")
+        self.assertIsNone(self.ref())
+        self.assertNotIn("record", p.stdout + p.stderr)
+
+    def test_a_link_or_a_file_that_is_not_a_record_is_not_published(self):
+        secret = self.tmp / "secret"
+        secret.write_text('{"v":1,"key":"do not publish"}\n')
+        self.pr(34, f'ln -s "{secret}" "$LOCAL_CI_RECORD"')
+        self.pr(35, 'echo "not a record" > "$LOCAL_CI_RECORD"')
+        self.pr(36, 'mkdir "$LOCAL_CI_RECORD"')
+        self.pr(39, 'mkfifo "$LOCAL_CI_RECORD"')
+        p = self.run_ci("tick")
+        self.assertIsNone(self.ref())
+        self.assertIn("cannot open the record", p.stderr)
+        self.assertIn("first line is not JSON", p.stderr)
+        self.assertIn("not a regular file", p.stderr)
+
+    def test_a_failed_push_is_retried_next_tick_and_never_changes_the_status(self):
+        sha = self.pr(37, WRITES_RECORD)
+        sh("git", "-C", str(self.checkout), "remote", "set-url", "--push", "origin", str(self.tmp / "nowhere.git"))
+        p = self.run_ci("tick")
+        self.assertEqual(self.final(sha)[-1]["state"], "success")
+        self.assertIn("test records not published, retried next tick", p.stderr)
+        self.assertIsNone(self.ref())
+        sh("git", "-C", str(self.checkout), "remote", "set-url", "--push", "origin", str(self.origin))
+        p = self.run_ci("tick")
+        self.assertIn("published 1 test record", p.stdout)
+        self.assertEqual(len(self.files()), 2)
+
+    def records(self):
+        return self.tmp / "ci-state" / "records" / REPO.replace("/", "__")
+
+    def plant(self, sha, started, manifest=None, record=None, link_to=None, fifo=False):
+        d = self.records() / sha / started
+        d.mkdir(parents=True)
+        body = manifest if manifest is not None else {"v": 1, "github": REPO, "sha": sha, "started": started}
+        (d / "manifest.json").write_text(json.dumps(body))
+        target = d / "test-results.jsonl"
+        if link_to:
+            target.symlink_to(link_to)
+        elif fifo:
+            os.mkfifo(target)
+        else:
+            target.write_text(record or HEADER + "\n")
+        return d
+
+    def test_a_published_run_is_deleted_and_a_run_already_on_the_ref_is_not_pushed_twice(self):
+        self.pr(38, WRITES_RECORD)
+        self.run_ci("tick")
+        tip = self.ref()
+        self.assertEqual(list(self.records().rglob("*")), [], "published runs are deleted")
+        prefix = self.files()[0].rsplit("/", 1)[0]
+        _, sha, started = prefix.split("/")
+        d = self.records() / sha / started
+        d.mkdir(parents=True)
+        for name in ("manifest.json", "test-results.jsonl"):
+            (d / name).write_text(self.show(f"{prefix}/{name}") + "\n")
+        p = self.run_ci("tick")
+        self.assertEqual(self.ref(), tip, "a run the ref holds already is not pushed again")
+        self.assertNotIn("published", p.stdout)
+        self.assertFalse(d.exists())
+
+    def test_a_planted_folder_is_never_published_and_never_blocks_a_good_run(self):
+        secret = self.tmp / "secret"
+        secret.write_text('{"v":1,"key":"do not publish"}\n')
+        good = self.pr(40, WRITES_RECORD)
+        self.plant("e" * 40, "2026-11-23T01:00:00Z", link_to=secret)
+        self.plant("d" * 40, "2026-11-23T01:00:00Z", fifo=True)
+        self.plant("c" * 40, "2026-11-23T01:00:00Z", manifest={"v": 1, "github": REPO, "sha": "f" * 40, "started": "x"})
+        self.plant("not-a-sha", "2026-11-23T01:00:00Z")
+        (self.records() / ("b" * 40) / "2026-11-23T01:00:00Z").mkdir(parents=True)
+        p = subprocess.run([sys.executable, str(SCRIPT), "tick", "--repo", f"{REPO}={self.checkout}"],
+                           env=self.env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(self.final(good)[-1]["state"], "success")
+        files = self.files()
+        self.assertEqual(sorted({f.split("/")[1] for f in files}), [good], files)
+        self.assertNotIn("do not publish", sh("git", "-C", str(self.origin), "log", "-p", "refs/local-ci/records"))
+        for why in ("cannot open the record", "not a regular file", "does not match its folder", "not a run folder", "no record"):
+            self.assertIn(why, p.stderr)
+
+    def test_a_broken_records_folder_never_changes_the_status(self):
+        (self.tmp / "ci-state").mkdir(exist_ok=True)
+        (self.tmp / "ci-state" / "scratch").write_text("a file where a folder goes")
+        sha = self.pr(41, WRITES_RECORD.replace('test -f "$QUALITY_PY" || exit 9', 'test -z "${LOCAL_CI_RECORD:-}" || exit 9'))
+        p = self.run_ci("tick")
+        self.assertEqual(self.final(sha)[-1]["state"], "success", p.stderr)
+        self.assertIn("no record this run", p.stderr)
+
+    def test_the_push_skips_the_checkouts_hooks(self):
+        hook = self.checkout / ".git" / "hooks" / "pre-push"
+        hook.write_text(f"#!/bin/sh\ntouch {self.tmp / 'hook-ran'}\nexit 1\n")
+        hook.chmod(0o755)
+        self.pr(42, WRITES_RECORD)
+        p = self.run_ci("tick")
+        self.assertIn("published 1 test record", p.stdout, p.stderr)
+        self.assertFalse((self.tmp / "hook-ran").exists())
+
+    def test_nothing_scripts_ci_leaves_running_outlives_the_run(self):
+        flag = self.tmp / "late"
+        sha = self.pr(43, f'(sleep 3; touch "{flag}") &\necho done')
+        self.run_ci("tick")
+        self.assertEqual(self.final(sha)[-1]["state"], "success")
+        import time
+        time.sleep(5)
+        self.assertFalse(flag.exists(), "the background process was killed with its group")
+
+
 if __name__ == "__main__":
     unittest.main()

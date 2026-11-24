@@ -3,9 +3,14 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
-## bstack 0.40.1 (2026-11-22)
+## bstack 0.41.1 (2026-11-23)
 
 - `debrief.py check` no longer passes a VERIFIED claim whose `record` is a pathspec pattern such as `*`, `:(glob)**` or `:/`, or a folder, symlink or submodule: the record must name one regular file git tracks or has staged, exactly as `git ls-files` prints it. It also refuses to read a change record that is a symlink, sits outside the repo, or that git holds with a mode other than 100644, so a pull request can't make the check print another file's keys into its log or hang on a link to `/dev/zero`. A repo that pins debrief.py at an older commit gets this when its pin moves.
+
+## bstack 0.41.0 (2026-11-23)
+
+- local-ci now keeps each run's test record for the quality books. A repo's `scripts/ci` that writes the record to `$LOCAL_CI_RECORD` (with `quality.py record-junit`, which `$QUALITY_PY` points at) has it published to the repo's `refs/local-ci/records` ref with a manifest local-ci writes itself: which commit, pull request or push, when, and the exit code. The ref is not a branch and starts no workflow. A failed push is retried on every tick and never changes the status.
+- Try: `Make this repo's scripts/ci record its tests for local-ci and check the record lands on refs/local-ci/records.`
 
 ## bstack 0.40.0 (2026-11-22)
 
