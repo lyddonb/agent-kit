@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "goal": "Put a local-ci repo's test records back in the quality books: fetch reads them from the repo's refs/local-ci/records, so the weekly brief has its test numbers again.",
+  "changed": [
+    "quality.py fetch: a watch-list row whose workflow is local-ci is read from refs/local-ci/records through the git API. local-ci's manifest gives the identity (it must match its folder and the watch list); the run is written as the layout an Actions run gets, with run_id the start in epoch seconds and attempt 1.",
+    "A local run's evidence is https://github.com/OWNER/NAME/commit/SHA#local-ci-STARTED. check takes it wherever a run link goes, leak-check and repo_slugs read its slug, and a local record's own evidence must be empty.",
+    "No job timings are booked for a local run, and the volume book takes the week's commit from the newest local push to the default branch.",
+    "check: a runs.csv row's evidence must be a local-ci link exactly when its workflow is local-ci, and a local link must name the row's own sha."
+  ],
+  "claims": [
+    {
+      "claim": "Local runs are fetched from the ref, booked with the local link, failures included, and pass check; a record naming an Actions run, a manifest that disagrees with its folder or the watch list, a bad event, a run before --since, a push to another branch, a truncated tree and a missing ref each behave as the SKILL.md says; the volume book takes the newest local push and ingests it; the local link passes check, ties the slug and is caught by leak-check. A run that cannot be read stops the volume book guessing the week's commit, two runs started the same second are fetched one per fetch, a manifest ingest would reject fails at fetch, and check refuses a local link on an Actions row or one naming another commit.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_quality_local_ci.py, 11 tests through the fake gh; six mutants each turn one red; an Opus review's four findings each became a test that fails before the fix; every test_quality* module passes",
+      "commit": "a01d925",
+      "record": ".changes/2026-11-23-quality-local-ci/tests.txt",
+      "remaining": "The fake gh, not GitHub."
+    },
+    {
+      "claim": "Against GitHub, fetch read a private watched repo's real local records (one push, one pull request), ingest booked both runs and their weekly rows into a scratch copy of the books, check passed, and a second ingest booked nothing.",
+      "verdict": "VERIFIED",
+      "check": "quality.py fetch --repo NAME --since 2026-11-22, ingest twice, check, summary --week 2026-W48, on a scratch copy of the books with that repo's workflow set to local-ci",
+      "commit": "a01d925",
+      "record": "https://github.com/lyddonb/agent-kit/pulls",
+      "remaining": "The repo is private, so its numbers stay out of this record. The cloud weekly task's access to the git API is proven only by its first run after the books adopt this."
+    }
+  ],
+  "next": [
+    {
+      "item": "The quality books point the local-ci repo's watch-list row at local-ci and move the checker pin",
+      "source": "stated",
+      "why_now": "Nothing reaches the books until the row says local-ci.",
+      "impact": "The weekly brief has no test numbers for that repo until then."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.42.0"
+  }
+}

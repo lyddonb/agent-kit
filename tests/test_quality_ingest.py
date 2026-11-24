@@ -1268,7 +1268,7 @@ RULE_CASES = {
 # a rule whose bad value is the same field as another rule's is reached by that rule's case
 RULE_SHARES = {"failures.started": "runs.started", "failures.repo": "runs.repo", "failures.sha": "runs.sha",
                "failures.python": "runs.python", "failures.evidence": "runs.evidence", "weekly.week": "runs.started",
-               "weekly.repo": "runs.repo"}
+               "weekly.repo": "runs.repo", "runs.link_kind": "runs.evidence"}
 
 
 class EveryRuleGatesTheFileTest(TempCase):
