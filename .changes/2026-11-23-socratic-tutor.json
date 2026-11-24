@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "goal": "Bring Jane Street's socratic-tutor skill into agent-kit so Beau can be tutored to mastery of a topic, without it competing with teach.",
+  "changed": [
+    "New essentials skill socratic-tutor, adapted from janestreet/agent_skills @ 7c6715c (MIT), with its license in THIRD_PARTY_NOTICES.md and a line in docs/UPSTREAM.md.",
+    "The adaptation rewrites the prose plainly, shows the bar characters instead of describing them, and gives save state a fixed block format that can be written to a file and resumed.",
+    "teach's description points quiz and drill requests at socratic-tutor; the tutor points code and change explanations at teach.",
+    "essentials is 0.3.0 and bstack is 0.41.2, each with a changelog entry."
+  ],
+  "claims": [
+    {
+      "claim": "Generated files, validation and the unit tests pass.",
+      "verdict": "VERIFIED",
+      "check": "make gen, make validate claude-validate (42 skills, 0 errors) and make test (1322 tests, OK, 24 skipped) on macOS.",
+      "commit": "9e1918236c5aca58aacb37fbcbcb11f3d5ce195b",
+      "record": "plugins/essentials/skills/socratic-tutor/SKILL.md",
+      "remaining": "CI's validate run on this pull request is the second check."
+    },
+    {
+      "claim": "An agent following the skill starts a session on 'tutor me on X' and answers a plain 'what is X' question directly.",
+      "verdict": "VERIFIED",
+      "check": "Two fresh subagents read the SKILL.md. On 'tutor me on TCP congestion control' one listed 8 subskills, announced the diagnostic and asked one question, then stopped. On 'what is TCP slow start?' the other answered it with no quiz.",
+      "commit": "9e1918236c5aca58aacb37fbcbcb11f3d5ce195b",
+      "record": "plugins/essentials/skills/socratic-tutor/SKILL.md",
+      "remaining": "One sample each on the same model. Not checked: routing between teach and socratic-tutor when both are installed, or a full multi-turn session through to the final assessment."
+    }
+  ],
+  "next": [
+    {"item": "Run one real tutoring session end to end and save and resume its state", "source": "inferred", "why_now": "Only the first turn was checked", "impact": "Confirms scoring and resume work before Beau relies on it"}
+  ],
+  "release": {"see": "essentials 0.3.0 in docs/CHANGELOG.md"}
+}
