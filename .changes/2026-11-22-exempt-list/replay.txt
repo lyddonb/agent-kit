@@ -1,0 +1,70 @@
+Replay of the enforced check (debrief.py at this branch, no --observe) on every PR opened since 2026-11-21 in quality, finances and agent-ledger, plus three pre-window finances PRs (16, 21, 22) as must-fail controls.
+Method (replay.sh beside this file): for each PR, commit the repo's planned .changes/exempt onto the PR's baseRefOid (B), merge the PR head into B with --no-ff, run 'debrief.py check --base B --root .'. The diff B...merge is the PR's own diff.
+
+== quality .changes/exempt
+# Written by the weekly quality brief job and reviewed in its pull request: data, not code.
+books/
+briefs/
+questions.md  # questions for Beau and his answers
+== finances .changes/exempt
+# Written by the weekly CFO brief and charge imports and reviewed in their pull requests: data, not code.
+ledger/
+briefs/
+questions.md  # questions for Beau and his answers
+budgets.yaml  # proposed and confirmed budgets
+projects.yaml  # which project each charge belongs to
+renewals.yaml  # renewal dates
+== agent-ledger .changes/exempt
+# Working notes from prototypes and research: prose, not code.
+docs/notes/
+
+Expected, written from each PR's changed files before the replay ran (exempt lists as in *.exempt):
+quality  PASS: 24 26 27 28 29 30 31 32 33 34 35 36 37 38 39 41 42 43   FAIL: 22 (AGENTS.md) 23 (AGENTS.md, research/) 25 (books.yml) 40 (probe.yml) 44 (workflows)
+finances PASS: 25 26 27 28 29 30 31 32 (and 23, pre-window brief)       FAIL: 16 21 22 (workflows, pre-window controls)
+agent-ledger PASS: 29 30 31 32 33 34                                    FAIL: 28 (src/, release) 35 36 (workflow scratch)
+
+== Output (quality, then finances, then agent-ledger; tmp paths trimmed)
+#22 (MERGED) FAIL(rc=1) :: this pull request changes AGENTS.md and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#23 (MERGED) FAIL(rc=1) :: this pull request changes AGENTS.md, README.md, docs/radar-prompt.md and 5 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#24 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#25 (MERGED) FAIL(rc=1) :: this pull request changes .agents/skills/verify-quality/fixtures/README.md, .github/workflows/books.yml, AGENTS.md and 2 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 re
+#26 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#27 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#28 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#29 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#30 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#31 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#32 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#33 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#34 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#35 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#36 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#37 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#38 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#39 (MERGED) FAIL(rc=1) :: .changes/2026-11-22-local-ci.json: claims[0] is VERIFIED without 'commit': say UNCHECKED, or name what proves it 1 record(s) checked, 1 with problems 
+#40 (CLOSED) FAIL(rc=1) :: this pull request changes .github/workflows/probe.yml and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#41 (MERGED) FAIL(rc=1) :: .changes/2026-11-22-drop-ledger-bootstrap.json: claims[0] is VERIFIED without 'commit': say UNCHECKED, or name what proves it /private/var/folders/xr/
+#42 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#43 (CLOSED) PASS :: 0 record(s) checked, 0 with problems 
+#44 (CLOSED) FAIL(rc=1) :: this pull request changes .github/workflows/books.yml, .github/workflows/changes.yml and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#16 (MERGED) FAIL(rc=1) :: this pull request changes .github/workflows/books.yml, AGENTS.md and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#21 (MERGED) FAIL(rc=1) :: this pull request changes .github/workflows/books.yml and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#22 (MERGED) FAIL(rc=1) :: this pull request changes .github/workflows/ledger.yml and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#23 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#25 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#26 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#27 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#28 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#29 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#30 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#31 (MERGED) FAIL(rc=1) :: .changes/2026-11-22-local-ci.json: claims[0] is VERIFIED without 'commit': say UNCHECKED, or name what proves it 1 record(s) checked, 1 with problems
+#32 (MERGED) FAIL(rc=1) :: .changes/2026-11-22-drop-ledger-bootstrap.json: claims[0] is VERIFIED without 'commit': say UNCHECKED, or name what proves it /private/var/folders/xr
+#28 (MERGED) FAIL(rc=1) :: this pull request changes README.md, pyproject.toml, src/agent_ledger/__init__.py and 1 more and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#29 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#30 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#31 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#32 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#33 (MERGED) PASS :: 0 record(s) checked, 0 with problems 
+#34 (MERGED) PASS :: 1 record(s) checked, 0 with problems 
+#35 (CLOSED) FAIL(rc=1) :: this pull request changes .github/workflows/ledger.yml and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 
+#36 (CLOSED) FAIL(rc=1) :: this pull request changes .github/workflows/ledger.yml and adds no change record: write one with the debrief skill (`debrief.py new <slug>`) and commit it 0 record(s) checked, 0 with problems 

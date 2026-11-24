@@ -1,0 +1,14 @@
+ .changes/2026-11-23-local-ci-records.json          |  43 +++++
+ .changes/2026-11-23-local-ci-records/tests.txt     |  13 ++
+ .claude-plugin/marketplace.json                    |   2 +-
+ changes.yaml                                       |   7 +
+ docs/CHANGELOG.md                                  |   5 +
+ kit.yaml                                           |   2 +-
+ plugins/bstack/.claude-plugin/plugin.json          |   2 +-
+ plugins/bstack/plugin.json                         |   2 +-
+ .../bstack/skills/beau-help/references/catalog.md  |   2 +-
+ .../skills/beau-help/references/changes.json       |  10 +
+ plugins/bstack/skills/local-ci/SKILL.md            |  27 +++
+ plugins/bstack/skills/local-ci/scripts/local_ci.py | 211 ++++++++++++++++++++-
+ tests/test_local_ci.py                             | 178 +++++++++++++++++
+ 13 files changed, 494 insertions(+), 10 deletions(-)

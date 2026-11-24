@@ -39,6 +39,16 @@ the base branch and full history, `fetch-depth: 0`). It compares HEAD with where
 A pull request that touches only bookkeeping files (see BOOKKEEPING) needs no record. With
 `--observe` it prints what it would have failed and exits 0, for a repo trying the check out.
 
+A repo can name more paths that need no record in `.changes/exempt`: one path per line,
+relative to the repo root, with `#` starting a comment. A plain path covers that file or
+everything under that directory. A path can also be a git glob (`briefs/[0-9]*.md`: `*`
+stays within one folder, `**` crosses folders), but its first folder must be named outright,
+so no entry can cover the whole repo. Use it for data a scheduled job writes and a person reviews in the
+pull request, such as weekly briefs, not for code. The check reads the list from REF, not
+from the pull request, so a list a pull request adds or widens applies only after it merges.
+A pull request that edits the list fails when its new list has a bad line; a bad list on REF
+is ignored with a warning, so every path then needs a record.
+
 Exit code: 0, or 1 when `check` finds a problem or a record can't be read, 2 on bad usage or a
 REF git doesn't know.
 Standard library only, Python 3.9+.
@@ -49,6 +59,7 @@ import argparse
 import dataclasses
 import datetime
 import json
+import posixpath
 import re
 import subprocess
 import sys
@@ -67,6 +78,8 @@ INFERRED = "inferred"
 # verify-work's receipt.py and scaffold-product's check-product.py have the same list.
 BOOKKEEPING = (".audit", ".changes", ".evidence", "docs/phases", "docs/plans", "docs/DECISIONS.md", "ROADMAP.md",
                "HUMAN_TASKS.md", "IDEAS.md")
+EXEMPT = f"{DIR}/exempt"
+WILDCARD = re.compile(r"[*?\[]")
 
 TEMPLATE = {
     "version": 1,
@@ -294,9 +307,56 @@ def _changed(root: Path, base: str, diff_filter: str, *pathspec: str) -> Optiona
     return done.stdout.splitlines() if done.returncode == 0 else None
 
 
+def parse_exempt(text: str) -> Tuple[Tuple[str, ...], List[str]]:
+    """The paths a `.changes/exempt` file names, and a problem for each line that can't be one."""
+    paths: List[str] = []
+    errors: List[str] = []
+    for n, line in enumerate(text.splitlines(), 1):
+        entry = line.split("#", 1)[0].strip()
+        if not entry:
+            continue
+        path = posixpath.normpath(entry)
+        if entry.startswith("/") or path == "." or path == ".." or path.startswith("../"):
+            errors.append(f"{EXEMPT} line {n}: {entry!r} must name a path inside the repo, not the repo itself or a path outside it")
+        elif WILDCARD.search(path.split("/", 1)[0]):
+            errors.append(f"{EXEMPT} line {n}: {entry!r} starts with a pattern: name its top-level folder or file outright")
+        else:
+            paths.append(path)
+    return tuple(paths), errors
+
+
+def base_exempt(root: Path, base: str) -> Tuple[str, ...]:
+    """The exempt paths on `base`. A missing list is empty; a bad one is ignored, loudly."""
+    shown = git(root, "show", f"{base}:{EXEMPT}")
+    if shown.returncode != 0:
+        return ()
+    paths, errors = parse_exempt(shown.stdout)
+    if errors:
+        for e in errors:
+            print(f"{base}: {e}", file=sys.stderr)
+        print(f"{base}: ignoring {EXEMPT}, so every path outside the bookkeeping files needs a record",
+              file=sys.stderr)
+        return ()
+    if paths:
+        print(f"exempt on {base} ({EXEMPT}): {', '.join(paths)}")
+    return paths
+
+
+def head_exempt_problems(root: Path, base: str) -> List[str]:
+    """Problems in the exempt list this pull request leaves, when it edited the list."""
+    edited = _changed(root, base, "AM", EXEMPT)
+    if not edited:
+        return []
+    shown = git(root, "show", f"HEAD:{EXEMPT}")
+    return parse_exempt(shown.stdout)[1] if shown.returncode == 0 else []
+
+
 def base_paths(root: Path, base: str) -> Tuple[Optional[List[Path]], int]:
-    """The records a pull request added or edited, and the exit code so far (1: it owes a record)."""
-    source = _changed(root, base, "ACDMRT", ".", *(f":(exclude){p}" for p in BOOKKEEPING))
+    """The records a pull request added or edited, and the exit code so far (1: it owes a record or
+    leaves a bad exempt list)."""
+    exempt = base_exempt(root, base)
+    source = _changed(root, base, "ACDMRT", ".", *(f":(exclude){p}" for p in BOOKKEEPING),
+                      *(f":(exclude,glob){p}" for p in exempt))
     added = _changed(root, base, "A", DIR)
     touched = _changed(root, base, "AM", DIR)
     if source is None or added is None or touched is None:
@@ -309,6 +369,9 @@ def base_paths(root: Path, base: str) -> Tuple[Optional[List[Path]], int]:
         more = f" and {len(source) - 3} more" if len(source) > 3 else ""
         print(f"this pull request changes {', '.join(source[:3])}{more} and adds no change record: "
               f"write one with the debrief skill (`debrief.py new <slug>`) and commit it", file=sys.stderr)
+        rc = 1
+    for e in head_exempt_problems(root, base):
+        print(f"this pull request leaves a bad {EXEMPT}: {e}", file=sys.stderr)
         rc = 1
     return [root / p for p in touched if is_record(p)], rc
 

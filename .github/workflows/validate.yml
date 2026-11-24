@@ -35,10 +35,6 @@ jobs:
         if: github.event_name == 'pull_request'
         run: make versions BASE=origin/${{ github.base_ref }}
 
-      - name: The pull request carries a change record
-        if: github.event_name == 'pull_request'
-        run: python3 plugins/bstack/skills/debrief/scripts/debrief.py check --base origin/${{ github.base_ref }}
-
       - name: Script unit tests, recorded
         env:
           # the two heaviest property tests check 5 seeds on a pull request or push, all 40 weekly

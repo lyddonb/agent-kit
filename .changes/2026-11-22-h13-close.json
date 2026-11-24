@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "goal": "Close H13's fix A: record that books and change-record now run only from main on a pull request, with the proof, and leave Beau the steps that remain.",
+  "changed": [
+    "docs/ARCHITECTURE.md: the books and change-record rows say who can change them now (not the PR), with the scratch PRs that proved it.",
+    "HUMAN_TASKS.md: H13 status says fix A is done; step 1 (require agent-kit's change-record) is done.",
+    "HUMAN_TASKS.md: a new H13 step 2, require change-record in finances and agent-ledger, where it runs from main and enforces but isn't required (found by the run's decision review). Later steps renumbered."
+  ],
+  "claims": [
+    {
+      "claim": "On main in quality, finances, agent-ledger and agent-kit, books and change-record run only on pull_request_target (books also on push), and agent-kit's validate no longer runs debrief.py.",
+      "verdict": "VERIFIED",
+      "check": "Read each repo's origin/main workflow file and parsed its triggers with PyYAML; grep for debrief in agent-kit's validate.yml found none; read each ruleset's required checks with gh api.",
+      "commit": "775ba307bb10539bae53b2ff6c1d25f93baf67ee",
+      "record": "https://github.com/lyddonb/agent-kit/pull/100",
+      "remaining": "On the local-mac runner (quality, finances) it guards against mistakes, not hostile code. validate, test and the workflow files themselves are still the PR's to change (H13 step 4)."
+    }
+  ],
+  "next": [
+    {
+      "item": "Decide on a separate agent identity",
+      "source": "HUMAN_TASKS.md H13 step 4",
+      "why_now": "It is the only protection left for validate, test and workflow files",
+      "impact": "Workflow changes need Beau's review"
+    }
+  ],
+  "release": {
+    "none": "Docs only."
+  }
+}
