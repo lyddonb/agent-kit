@@ -158,3 +158,16 @@ how many get written and how many we keep. Investigate before changing any rule.
   It proposes and never acts.
 - **Reading.** In the KB: "Spec-Driven PBT" (saved 2026-11-14) on agents deriving property tests
   from specs, and "Skeleton Coding" (saved 2026-11-08) on types and signatures as the spec.
+
+## From "The context layer has a clutter problem" (2026-11-23)
+
+Jennifer Smith's [article](https://x.com/scribeceo/status/2123460060299030733) and Matt
+Stockton's [take](https://x.com/mstockton/status/2124282857401000353). What we committed to is in
+the roadmap's Context loading section (R42, R43, and R23's `misled_by`). Not committed to:
+
+- **Shadow-to-skill.** A person does a task while an agent reads the transcript and asks
+  questions as it goes (`grilling` turned around), then drafts a skill with the session as its
+  evidence. Stockton's cheap way to turn tacit SOPs into skills. Fits writing team SOPs at work
+  better than the kit itself.
+- **Screen recordings as agent context.** Scribe's product. Coding agents already leave better
+  traces: ledger trails, receipts and `.changes/` records.
