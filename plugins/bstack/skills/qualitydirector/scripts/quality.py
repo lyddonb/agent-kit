@@ -104,6 +104,9 @@ the run's artifacts are still fetched. A run whose artifacts fail as a whole kee
 jobs it stored. Without books/jobs.csv none of this happens: the calls, files and
 output are the same as before. Names in jobs.json are text a pull request controls; ingest judges them.
 
+Local runs. A watch-list row whose workflow is `local-ci` is read from the repo's refs/local-ci/records, where local-ci
+publishes each run's record; see "fetch, local-ci" below.
+
 Volume. Once BOOKS_DIR/books/volume.csv exists, `fetch` also counts the test and source lines of each watched repo for every complete
 ISO week not yet booked, at the head of the week's newest push run of the watched workflow on the default branch, and writes
 OUT_DIR/<repo>/volume/<week>.json; `ingest` books it and `summary` adds `volume` per repo. See "fetch, volume" below.
@@ -239,6 +242,7 @@ if sys.version_info < (3, 10):
     raise SystemExit(2)
 
 import argparse
+import base64
 import bisect
 import contextlib
 import gzip
@@ -1059,7 +1063,8 @@ _STAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")  
 _SHA = re.compile(r"[0-9a-f]{40}")
 _PYTHON = re.compile(r"3\.(0|[1-9][0-9]?)")
 _WEEK = re.compile(r"([0-9]{4})-W([0-9]{2})")
-_RUN_LINK = re.compile(r"https://[^/\s]+/[^/\s]+/[^/\s]+/actions/runs/[0-9]+/attempts/[0-9]+")
+_RUN_LINK = re.compile(r"https://[^/\s]+/[^/\s]+/[^/\s]+/actions/runs/[0-9]+/attempts/[0-9]+"
+                       r"|https://github\.com/[^/\s]+/[^/\s]+/commit/[0-9a-f]{40}#local-ci-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 _COUNT = re.compile(r"0|[1-9][0-9]*")
 _GITHUB = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9._-]{0,99}")
 # C0 controls (ESC among them), DEL and the C1 controls (NEL, 8-bit CSI), but not newline or tab; the line and
@@ -1158,7 +1163,7 @@ def _python_rule(cells: dict) -> Iterator[str]:
 
 def _evidence_rule(cells: dict) -> Iterator[str]:
     if not _RUN_LINK.fullmatch(cells["evidence"]):
-        yield ("evidence must look like https://HOST/OWNER/REPO/actions/runs/N/attempts/N, "
+        yield ("evidence must look like https://HOST/OWNER/REPO/actions/runs/N/attempts/N or https://github.com/OWNER/REPO/commit/SHA#local-ci-STARTED, "
                f"got {_show(cells['evidence'])}")
 
 
@@ -1240,10 +1245,22 @@ def _workflow_rule(cells: dict) -> Iterator[str]:
         yield "workflow is empty"
 
 
+_LOCAL_LINK_SHA = re.compile(r"https://github\.com/[^/\s]+/[^/\s]+/commit/([0-9a-f]{40})#local-ci-")
+
+
+def _run_link_kind_rule(cells: dict) -> Iterator[str]:
+    """A local run's link names its own commit, and only a local-ci run has one."""
+    local = _LOCAL_LINK_SHA.match(cells["evidence"])
+    if (cells["workflow"] == "local-ci") != bool(local):
+        yield "evidence must be a local-ci commit link exactly when workflow is local-ci"
+    elif local and local[1] != cells["sha"]:
+        yield f"evidence names commit {local[1][:12]}, not the row's sha"
+
+
 RUN_RULES: dict[str, Rule] = {
     "started": _stamp_rule, "repo": _repo_rule, "sha": _sha_rule, "event": _event_rule, "python": _python_rule,
     "counts": _count_rule(("tests", "failed", "skipped", "wall_ms", "exit_code")), "totals": _run_totals_rule,
-    "evidence": _evidence_rule, "text": _text_rule("event", "workflow", "evidence"),
+    "evidence": _evidence_rule, "link_kind": _run_link_kind_rule, "text": _text_rule("event", "workflow", "evidence"),
 }
 FAILURE_RULES: dict[str, Rule] = {
     "started": _stamp_rule, "repo": _repo_rule, "sha": _sha_rule, "python": _python_rule, "test_id": _test_id_rule,
@@ -1968,6 +1985,8 @@ class Manifest(NamedTuple):
     fork: bool
 
     def evidence(self, attempt: int) -> str:
+        if self.workflow == LOCAL_CI:
+            return f"https://github.com/{self.github}/commit/{self.head_sha}#local-ci-{self.started}"
         return f"https://github.com/{self.github}/actions/runs/{self.run_id}/attempts/{attempt}"
 
 
@@ -2174,7 +2193,12 @@ def read_manifest(path: str, folder_repo: str, folder_run: str, watched: dict[st
 
 
 def _attempt_of(evidence: str, m: Manifest) -> int:
-    """The attempt a file's evidence names, when it names this run in canonical form and the attempt exists."""
+    """The attempt a file's evidence names, when it names this run in canonical form and the attempt exists. A local run's
+    recorder has no run to name, so its evidence is empty and its one attempt is 1."""
+    if m.workflow == LOCAL_CI:
+        if evidence == "":
+            return 1
+        raise Rejected(f"header evidence of a local run must be empty, got {_show(evidence)}")
     found = _EVIDENCE.fullmatch(evidence)
     if found and found[1].lower() == m.github.lower() and found[2] == str(m.run_id) and 1 <= int(found[3]) <= m.run_attempt:
         return int(found[3])
@@ -3692,9 +3716,17 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         volume_booked.setdefault(r.cells["repo"], set()).add(r.cells["week"])
     for repo, github, workflow in watched:
         since = args.since or _latest_started(books, repo) or (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
-        fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs, books.tables[REPOS].present, today)
+        local = None
+        if workflow == LOCAL_CI:
+            local = fetch_local(gh, args.out_dir, repo, github, since, tally, booked, books.tables[REPOS].present)
+            if local is None and volume:
+                print("  volume: not counted this time, a local run could not be read; the next fetch asks again")
+                continue
+        else:
+            fetch_repo(gh, args.out_dir, repo, github, workflow, since, tally, booked, booked_jobs, books.tables[REPOS].present, today)
         if volume:
-            fetch_volume(gh, args.out_dir, repo, github, workflow, volume_weeks(today, args.since, volume_booked.get(repo, set())), tally)
+            fetch_volume(gh, args.out_dir, repo, github, workflow, volume_weeks(today, args.since, volume_booked.get(repo, set())), tally,
+                         local)
     t = tally
     print(f"fetched {t.runs} runs ({t.artifacts} artifacts); listed {t.listed}; skipped {t.forks} forks, "
           f"{t.pushes} pushes to a non-default branch, {t.booked} already booked, {t.empty} without test-results artifacts"
@@ -3702,6 +3734,158 @@ def cmd_fetch(args: argparse.Namespace) -> int:
           + (f"; volume counted for {t.volume_weeks} weeks ({t.volume_none} without a push run)" if t.volume_adopted else "")
           + f"; {t.failed} failed")
     return 1 if t.failed else 0
+
+
+# ---------------------------------------------------------------------------
+# fetch, local-ci: runs recorded on a machine, read from the repo's refs/local-ci/records
+# ---------------------------------------------------------------------------
+#
+# A watch-list row whose workflow is `local-ci` has no Actions runs: local-ci (agent-kit bstack) runs the repo's
+# scripts/ci on a machine and publishes each run's record to the ref refs/local-ci/records of the repo, as
+# runs/<sha>/<started>/manifest.json (written by local-ci) and test-results.jsonl (written by the repo's code). `fetch`
+# reads that ref through the git API and writes the same layout an Actions run gets: OUT_DIR/<repo>/<run_id>/manifest.json
+# and artifacts/test-results-local/test-results.jsonl, where run_id is the run's start in epoch seconds and the evidence is
+# https://github.com/OWNER/NAME/commit/SHA#local-ci-STARTED. No jobs are booked: a local run has no queue time.
+# The identity is local-ci's word, not GitHub's: anyone who can push to the repo can write that ref.
+
+LOCAL_CI = "local-ci"
+LOCAL_RECORDS_REF = "refs/local-ci/records"
+LOCAL_ARTIFACT = "test-results-local"
+MAX_LOCAL_RUNS = 2000  # runs listed on the ref; more is refused
+LOCAL_MANIFEST_KINDS = {"v": int, "github": str, "sha": str, "event": str, "head_branch": str, "base": str, "started": str,
+                        "completed": str, "host": str}
+_LOCAL_PATH = re.compile(r"runs/([0-9a-f]{40})/([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)/(manifest\.json|test-results\.jsonl)")
+
+
+class LocalRun(NamedTuple):
+    sha: str
+    started: str
+    manifest_blob: str
+    record_blob: str
+    record_size: int
+
+
+def list_local_runs(gh: Gh, github: str) -> list[LocalRun]:
+    """Every run on the repo's records ref, oldest first; [] when the ref does not exist. Raises GhError."""
+    refs = json.loads(gh.api(f"repos/{github}/git/matching-refs/{LOCAL_RECORDS_REF[len('refs/'):]}"))
+    tip = next((r.get("object", {}).get("sha") for r in refs if isinstance(r, dict) and r.get("ref") == LOCAL_RECORDS_REF), None) \
+        if isinstance(refs, list) else None
+    if not isinstance(tip, str) or not _SHA.fullmatch(tip):
+        return []
+    commit = json.loads(gh.api(f"repos/{github}/git/commits/{tip}"))
+    tree_sha = commit.get("tree", {}).get("sha") if isinstance(commit, dict) else None
+    if not isinstance(tree_sha, str) or not _SHA.fullmatch(tree_sha):
+        raise GhError(f"gh api repos/{github}/git/commits/{tip[:12]} named no tree")
+    tree = json.loads(gh.api(f"repos/{github}/git/trees/{tree_sha}?recursive=1"))
+    if not isinstance(tree, dict) or not isinstance(tree.get("tree"), list) or tree.get("truncated") is not False:
+        raise GhError(f"{LOCAL_RECORDS_REF} of {github} came back truncated or without a tree")
+    files: dict[tuple[str, str], dict[str, tuple[str, int]]] = {}
+    for entry in tree["tree"]:
+        found = _LOCAL_PATH.fullmatch(str(entry.get("path"))) if isinstance(entry, dict) and entry.get("type") == "blob" else None
+        if found and isinstance(entry.get("sha"), str) and type(entry.get("size")) is int:
+            files.setdefault((found[1], found[2]), {})[found[3]] = (entry["sha"], entry["size"])
+    runs = [LocalRun(sha, started, f["manifest.json"][0], f["test-results.jsonl"][0], f["test-results.jsonl"][1])
+            for (sha, started), f in files.items() if len(f) == 2]
+    if len(runs) > MAX_LOCAL_RUNS:
+        raise GhError(f"{LOCAL_RECORDS_REF} of {github} holds {len(runs)} runs, more than {MAX_LOCAL_RUNS}")
+    return sorted(runs, key=lambda r: (r.started, r.sha))
+
+
+def _blob(gh: Gh, github: str, sha: str, cap: int) -> bytes:
+    obj = json.loads(gh.api(f"repos/{github}/git/blobs/{sha}"))
+    if not isinstance(obj, dict) or obj.get("encoding") != "base64" or not isinstance(obj.get("content"), str):
+        raise Rejected("blob came back without base64 content")
+    data = base64.b64decode(obj["content"])
+    if len(data) > cap:
+        raise Rejected(f"is larger than {_size(cap)}")
+    return data
+
+
+def local_manifest(raw: bytes, run: LocalRun, repo: str, github: str, default_branch: str) -> Manifest:
+    """The Manifest of one local run from local-ci's manifest.json, which must agree with where it was found."""
+    obj = _load_json(raw, "local manifest")
+    if not isinstance(obj, dict):
+        raise Rejected("local manifest is not a JSON object")
+    _check_fields({k: obj.get(k) for k in LOCAL_MANIFEST_KINDS}, LOCAL_MANIFEST_KINDS, "local manifest")
+    if obj["v"] != RECORD_VERSION:
+        raise Rejected(f"local manifest v must be {RECORD_VERSION}, got {_show(obj['v'])}")
+    if obj["github"].lower() != github.lower() or obj["sha"] != run.sha or obj["started"] != run.started:
+        raise Rejected("local manifest does not match its folder or the watch list")
+    pr, code = obj.get("pr"), obj.get("exit_code")
+    if obj["event"] not in ("push", "pull_request") or (pr is not None and type(pr) is not int) \
+            or (code is not None and type(code) is not int) or not _is_stamp(obj["completed"]):
+        raise Rejected("local manifest has a bad event, pr, exit_code or completed")
+    head_branch = obj["head_branch"] or (f"pull/{pr}" if pr else "")
+    if not head_branch or obj["completed"] < run.started:
+        raise Rejected("local manifest has no head branch, or completed before it started")
+    conclusion = "timed_out" if code is None else "success" if code == 0 else "failure"
+    epoch = int(datetime.strptime(run.started, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+    return Manifest(RECORD_VERSION, repo, github, epoch, 1, LOCAL_CI, obj["event"], run.sha, head_branch, default_branch,
+                    run.started, obj["completed"], conclusion, False)
+
+
+def fetch_local(gh: Gh, out_dir: str, repo: str, github: str, since: str, tally: "FetchTally", booked: dict[str, int],
+                visibility: bool = False) -> list[Manifest] | None:
+    """Fetch the local runs started on or after `since` that are not booked. Returns every push to the default branch on
+    the ref (booked or not), for the volume book, or None when the ref could not be read whole: a week's newest push is
+    then unknown, and the volume book must not guess it."""
+    print(f"{repo} ({github}, {LOCAL_CI}): local runs started since {since}")
+    info, why = _repo_info(gh, github)
+    if visibility:
+        store_visibility(out_dir, repo, github, info)
+    branch = info.get("default_branch") if isinstance(info, dict) else None
+    if why or not isinstance(branch, str) or not branch:
+        tally.fail("default branch", why or f"gh api repos/{github} did not name one")
+        return None
+    try:
+        runs = list_local_runs(gh, github)
+    except (GhError, ValueError) as e:
+        tally.fail("listing", f"{LOCAL_RECORDS_REF}: {e}")
+        return None
+    pushes: list[Manifest] | None = []
+    taken: set[int] = set()
+    for run in runs:
+        where = f"{run.sha[:12]} {run.started}"
+        try:
+            m = local_manifest(_blob(gh, github, run.manifest_blob, MAX_MANIFEST_BYTES), run, repo, github, branch)
+        except (GhError, Rejected, ValueError) as e:
+            tally.fail(where, f"manifest {e}")
+            pushes = None
+            continue
+        if m.event == "push" and m.head_branch == branch and pushes is not None:
+            pushes.append(m)
+        if run.started < since:
+            continue
+        tally.listed += 1
+        if m.event == "push" and m.head_branch != branch:
+            tally.pushes += 1
+            print(f"  skipped {where}: push to {printable(m.head_branch)}, not the default branch {printable(branch)}")
+            continue
+        if booked.get(m.evidence(1), 0):
+            tally.booked += 1
+            continue
+        if m.run_id in taken:  # two runs started in the same second share a run_id; the next fetch takes this one
+            print(f"  deferred {where}: another run started the same second; fetched next time")
+            continue
+        taken.add(m.run_id)
+        if run.record_size > MAX_ARTIFACT_BYTES:
+            tally.fail(where, f"record is larger than {_size(MAX_ARTIFACT_BYTES)}")
+            continue
+        try:
+            record = _blob(gh, github, run.record_blob, MAX_ARTIFACT_BYTES)
+        except (GhError, Rejected, ValueError) as e:
+            tally.fail(where, f"record {e}")
+            continue
+        folder = os.path.join(out_dir, repo, str(m.run_id))
+        _write_json(os.path.join(folder, MANIFEST), m._asdict())
+        target = os.path.join(folder, ARTIFACTS, LOCAL_ARTIFACT, "test-results.jsonl")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as f:
+            f.write(record)
+        tally.runs += 1
+        tally.artifacts += 1
+        print(f"  fetched {where}: {m.event} {printable(m.head_branch)}, {m.conclusion}")
+    return pushes
 
 
 # ---------------------------------------------------------------------------
@@ -3836,8 +4020,10 @@ def week_push_run(gh: Gh, github: str, workflow: str, branch: str, week: str) ->
     return max(mine, key=lambda r: (r["created_at"], r["id"]), default=None)
 
 
-def fetch_volume(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, weeks: list[str], tally: "FetchTally") -> None:
-    """Write OUT_DIR/<repo>/volume/<week>.json for each of `weeks` that had a push run, oldest first, up to MAX_VOLUME_WEEKS."""
+def fetch_volume(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, weeks: list[str], tally: "FetchTally",
+                 local: list[Manifest] | None = None) -> None:
+    """Write OUT_DIR/<repo>/volume/<week>.json for each of `weeks` that had a push run, oldest first, up to MAX_VOLUME_WEEKS.
+    `local` (a local-ci repo): the week's push is the newest local run of a push to the default branch, not an Actions run."""
     if not weeks:
         return
     if len(weeks) > MAX_VOLUME_WEEKS:
@@ -3850,11 +4036,15 @@ def fetch_volume(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, we
         return
     counted: dict[str, Volume] = {}
     for week in weeks:
-        try:
-            run = week_push_run(gh, github, workflow, branch, week)
-        except GhError as e:
-            tally.fail(f"volume {week}", str(e))
-            continue
+        if local is not None:
+            newest = max((m for m in local if week_of(m.started) == week), key=lambda m: m.started, default=None)
+            run = None if newest is None else {"head_sha": newest.head_sha, "evidence": newest.evidence(1)}
+        else:
+            try:
+                run = week_push_run(gh, github, workflow, branch, week)
+            except GhError as e:
+                tally.fail(f"volume {week}", str(e))
+                continue
         if run is None:
             tally.volume_none += 1
             print(f"  volume {week}: no push run of {printable(workflow)} on {printable(branch)}; no row")
@@ -3872,7 +4062,8 @@ def fetch_volume(gh: Gh, out_dir: str, repo: str, github: str, workflow: str, we
         v = counted[sha]
         _write_json(os.path.join(out_dir, repo, VOLUME_DIR, f"{week}.json"),
                     {"v": RECORD_VERSION, "repo": repo, "github": github, "week": week, "sha": sha, "rule": VOLUME_RULE,
-                     "evidence": f"https://github.com/{github}/actions/runs/{run['id']}/attempts/{run['run_attempt']}", **v._asdict()})
+                     "evidence": run.get("evidence") or f"https://github.com/{github}/actions/runs/{run['id']}/attempts/{run['run_attempt']}",
+                     **v._asdict()})
         tally.volume_weeks += 1
         print(f"  volume {week}: {sha[:12]} test {v.test_lines} lines in {v.test_files} files, "
               f"source {v.source_lines} lines in {v.source_files} files")
@@ -4942,7 +5133,7 @@ MIN_LEAK_TEST_ID = 12
 MIN_LEAK_NAME = 16  # a job or step name: `lint` and `Run tests` are in every repo
 MIN_LEAK_REPO_NAME = 4  # a private repo's own name, matched as a whole word
 MAX_GRAM = 20
-_LINK_SLUG = re.compile(r"https://[^/\s]+/([^/\s]+/[^/\s]+)/actions/runs/")
+_LINK_SLUG = re.compile(r"https://[^/\s]+/([^/\s]+/[^/\s]+)/(?:actions/runs/|commit/[0-9a-f]{40}#local-ci-)")
 _OWNER, _NAME = r"([A-Za-z0-9][A-Za-z0-9-]{0,38})", r"([A-Za-z0-9_][A-Za-z0-9._-]{0,99})"
 _BARE_SLUG = re.compile(rf"(?<![A-Za-z0-9_./-]){_OWNER}/{_NAME}")
 _URL_SLUG = re.compile(rf"(?:api\.github\.com/repos/|raw\.githubusercontent\.com/|github\.com[/:]){_OWNER}/{_NAME}", re.I)

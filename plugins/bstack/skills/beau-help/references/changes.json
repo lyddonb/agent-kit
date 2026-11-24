@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.42.0",
+      "date": "2026-11-23",
+      "plugin": "bstack",
+      "version": "0.42.0",
+      "changes": [
+        "The Quality Director books a repo whose CI runs on local-ci. Set its `workflow` in `books/watched.csv` to `local-ci` and `fetch` reads the records local-ci publishes to the repo's `refs/local-ci/records` instead of Actions artifacts; `ingest` books them like any run, with `https://github.com/OWNER/NAME/commit/SHA#local-ci-STARTED` as the evidence. No job timings are booked for a local run, and the test volume book takes the week's commit from its newest local push."
+      ],
+      "try": "Point a local-ci repo's watch-list row at local-ci, then fetch, ingest and summarize its last week."
+    },
+    {
       "id": "bstack@0.41.1",
       "date": "2026-11-23",
       "plugin": "bstack",

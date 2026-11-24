@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.42.0 (2026-11-23)
+
+- The Quality Director books a repo whose CI runs on local-ci. Set its `workflow` in `books/watched.csv` to `local-ci` and `fetch` reads the records local-ci publishes to the repo's `refs/local-ci/records` instead of Actions artifacts; `ingest` books them like any run, with `https://github.com/OWNER/NAME/commit/SHA#local-ci-STARTED` as the evidence. No job timings are booked for a local run, and the test volume book takes the week's commit from its newest local push.
+- Try: `Point a local-ci repo's watch-list row at local-ci, then fetch, ingest and summarize its last week.`
+
 ## bstack 0.41.1 (2026-11-23)
 
 - `debrief.py check` no longer passes a VERIFIED claim whose `record` is a pathspec pattern such as `*`, `:(glob)**` or `:/`, or a folder, symlink or submodule: the record must name one regular file git tracks or has staged, exactly as `git ls-files` prints it. It also refuses to read a change record that is a symlink, sits outside the repo, or that git holds with a mode other than 100644, so a pull request can't make the check print another file's keys into its log or hang on a link to `/dev/zero`. A repo that pins debrief.py at an older commit gets this when its pin moves.
