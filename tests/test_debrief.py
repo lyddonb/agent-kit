@@ -102,6 +102,25 @@ class CheckTest(DebriefBase):
             self.write(self.edited(record=pointer))
             self.assertEqual(self.debrief("check").returncode, 0, pointer)
 
+    def test_a_pattern_folder_link_or_submodule_is_not_a_record(self):
+        (self.repo / "dir").mkdir()
+        (self.repo / "dir" / "a.txt").write_text("x")
+        (self.repo / "link.txt").symlink_to("proof.txt")
+        sh(self.repo, "git", "add", "dir", "link.txt")
+        sh(self.repo, "git", "update-index", "--add", "--cacheinfo", f"160000,{self.head},sub")
+        for pointer in ("link.txt", "sub", "*", "*.txt", ":(glob)**", ":/", ":/proof.txt", "dir", "dir/", "./proof.txt"):
+            self.write(self.edited(record=pointer))
+            done = self.debrief("check")
+            self.assertEqual(done.returncode, 1, f"{pointer!r} names no single tracked file but passed")
+            self.assertIn("neither an https URL nor a path git tracks", done.stderr, pointer)
+
+    def test_a_file_whose_name_is_a_glob_character_is_a_record(self):
+        (self.repo / "*").write_text("x")
+        sh(self.repo, "git", "add", "--", ":(literal)*")
+        self.write(self.edited(record="*"))
+        done = self.debrief("check")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
     def test_an_unproven_claim_must_say_what_remains(self):
         self.assertRejected(self.edited(verdict="INCONCLUSIVE", remaining=""), "INCONCLUSIVE without 'remaining'")
 
@@ -351,6 +370,50 @@ class BaseCheckTest(DebriefBase):
 
     def test_base_and_files_together_are_refused(self):
         self.assertEqual(self.debrief("check", "--base", "main", "x.json").returncode, 2)
+
+    def test_a_record_that_links_outside_the_repo_is_not_read(self):
+        outside = Path(tempfile.mkdtemp()) / "runner-secrets.json"
+        outside.write_text(json.dumps({"version": "s3cr3t-value", "api_token_name": 1}))
+        self.change_source()
+        (self.repo / ".changes").mkdir()
+        (self.repo / ".changes" / "2026-11-21-leak.json").symlink_to(outside)
+        self.commit()
+        done = self.check()
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("is a symlink", done.stderr)
+        self.assertNotIn("s3cr3t-value", done.stderr, "the linked file's contents reached the log")
+        self.assertNotIn("api_token_name", done.stderr, "the linked file's keys reached the log")
+
+    def test_a_record_that_links_to_an_endless_device_does_not_hang(self):
+        self.change_source()
+        (self.repo / ".changes").mkdir()
+        (self.repo / ".changes" / "2026-11-21-zero.json").symlink_to("/dev/zero")
+        self.commit()
+        done = subprocess.run([sys.executable, str(SCRIPT), "check", "--base", "main"], cwd=self.repo,
+                              capture_output=True, text=True, timeout=30)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("is a symlink", done.stderr)
+
+    def test_a_record_git_holds_as_a_link_or_executable_is_rejected(self):
+        self.change_source()
+        for mode, name in (("120000", "2026-11-21-link.json"), ("100755", "2026-11-21-exec.json")):
+            path = self.write(self.good, name)
+            blob = sh(self.repo, "git", "hash-object", "-w", str(path)).stdout.strip()
+            sh(self.repo, "git", "update-index", "--add", "--cacheinfo", f"{mode},{blob},.changes/{name}")
+        sh(self.repo, "git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "modes")
+        done = self.check()
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("2026-11-21-link.json: git holds it as mode 120000", done.stderr)
+        self.assertIn("2026-11-21-exec.json: git holds it as mode 100755", done.stderr)
+
+    def test_a_changes_folder_that_links_outside_the_repo_is_not_read(self):
+        outside = Path(tempfile.mkdtemp())
+        (outside / "2026-11-21-import-dedupe.json").write_text(json.dumps({"version": "s3cr3t-value"}))
+        (self.repo / ".changes").symlink_to(outside, target_is_directory=True)
+        done = self.debrief("check")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("is outside the repository", done.stderr)
+        self.assertNotIn("s3cr3t-value", done.stderr, "the linked file's contents reached the log")
 
 
 class RenderTest(DebriefBase):

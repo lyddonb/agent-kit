@@ -4,7 +4,7 @@ description: Close out a piece of work for the human. Says what was done, what i
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.4.0"
+  version: "0.4.1"
 ---
 
 # Debrief
@@ -35,7 +35,7 @@ python3 <this skill's folder>/scripts/debrief.py show
 
 - A claim's `commit` is the commit its check ran on, not the record's own commit.
 - `git add .changes` before `check`, which must pass before the record is committed. Fix the record, never the claim's verdict, to get there: a claim with nothing kept is `UNCHECKED`.
-- Output worth keeping goes in a file git tracks, in a folder named as the record is without `.json` (`.changes/<date>-<slug>/`), or is a link to the CI run, the PR or the ledger run in `.audit/runs/`. A path git ignores (`.evidence/` in some repos) is refused.
+- Output worth keeping goes in a file git tracks, in a folder named as the record is without `.json` (`.changes/<date>-<slug>/`), or is a link to the CI run, the PR or the ledger run in `.audit/runs/`. A path git ignores (`.evidence/` in some repos) is refused, and so is a pattern or a folder: `record` names one file, as `git ls-files` prints it.
 - A repo that already keeps release notes somewhere it enforces (agent-kit's `changes.yaml`) uses `{"see": "<that entry>"}` and writes the line there.
 - Commit the record with the PR: `docs(changes): record <slug>`, with `--trailer 'Verified: none record only'`.
 - Paste what `show` prints as the brief in your reply.

@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "id": "bstack@0.41.1",
+      "date": "2026-11-23",
+      "plugin": "bstack",
+      "version": "0.41.1",
+      "changes": [
+        "`debrief.py check` no longer passes a VERIFIED claim whose `record` is a pathspec pattern such as `*`, `:(glob)**` or `:/`, or a folder, symlink or submodule: the record must name one regular file git tracks or has staged, exactly as `git ls-files` prints it. It also refuses to read a change record that is a symlink, sits outside the repo, or that git holds with a mode other than 100644, so a pull request can't make the check print another file's keys into its log or hang on a link to `/dev/zero`. A repo that pins debrief.py at an older commit gets this when its pin moves."
+      ]
+    },
+    {
       "id": "bstack@0.41.0",
       "date": "2026-11-23",
       "plugin": "bstack",

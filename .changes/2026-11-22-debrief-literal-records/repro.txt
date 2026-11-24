@@ -1,0 +1,25 @@
+# repro.sh: debrief.py check in a scratch repo, origin/main (OLD, 775ba30) vs this branch (NEW, d69a062). rc=142: killed by a 10 s alarm.
+record=* OLD  rc=0 | 1 record(s) checked, 0 with problems 
+record=* NEW  rc=1 | /private.changes/2026-11-22-p.json: claims[0] record '*' is neither an https URL nor a path git tracks: name one file, as git ls-files prints it (git 
+record=:(glob)** OLD  rc=0 | 1 record(s) checked, 0 with problems 
+record=:(glob)** NEW  rc=1 | /private.changes/2026-11-22-p.json: claims[0] record ':(glob)**' is neither an https URL nor a path git tracks: name one file, as git ls-files prints 
+record=:/ OLD  rc=0 | 1 record(s) checked, 0 with problems 
+record=:/ NEW  rc=1 | /private.changes/2026-11-22-p.json: claims[0] record ':/' is neither an https URL nor a path git tracks: name one file, as git ls-files prints it (git
+symlink-out OLD  rc=1 | /private.changes/2026-11-22-leak.json: version must be 1, got 'RUNNER-SECRET' /private.changes/2026-11-22-leak.json: unknown keys: aws_key_name 
+symlink-out NEW  rc=1 | /private.changes/2026-11-22-leak.json: is a symlink; a record must be a plain file in the repository 1 record(s) checked, 1 with problems 
+dev-zero   OLD  rc=142 |  
+dev-zero   NEW  rc=1 | /private.changes/2026-11-22-zero.json: is a symlink; a record must be a plain file in the repository 1 record(s) checked, 1 with problems 
+
+# repro.sh
+#!/bin/bash
+set -u
+OLD=$1; NEW=$2
+R=$(mktemp -d); cd "$R"
+git init -q; echo proof > proof.txt; git add .; git -c user.name=t -c user.email=t@e commit -qm init
+H=$(git rev-parse HEAD)
+rec() { printf '{"version":1,"goal":"g","changed":["c"],"claims":[{"claim":"x","verdict":"VERIFIED","check":"k","commit":"%s","record":"%s","remaining":""}],"next":[],"release":{"none":"n"}}' "$H" "$1"; }
+mkdir .changes
+run() { for v in OLD NEW; do s=${!v}; printf '%s %-4s ' "$1" "$v"; out=$(perl -e 'alarm 10; exec @ARGV' python3 "$s" check 2>&1); rc=$?; echo "rc=$rc | $(echo "$out" | head -2 | tr '\n' ' ' | sed "s#$R/##g" | cut -c1-150)"; done; }
+for p in '*' ':(glob)**' ':/'; do rm -f .changes/*; rec "$p" > .changes/2026-11-22-p.json; run "record=$p"; done
+rm -f .changes/*; echo '{"version":"RUNNER-SECRET","aws_key_name":1}' > "$R.secret"; ln -s "$R.secret" .changes/2026-11-22-leak.json; run "symlink-out"
+rm -f .changes/*; ln -s /dev/zero .changes/2026-11-22-zero.json; run "dev-zero  "

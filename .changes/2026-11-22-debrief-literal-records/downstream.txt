@@ -1,0 +1,7 @@
+# debrief.py check --root <checkout>, old (origin/main 775ba30) and new (d69a062); diff of the two outputs
+== quality at c6d7425
+identical: 11 record(s) checked, 2 with problems
+== finances at a77a1a1
+identical: 6 record(s) checked, 2 with problems
+== agent-ledger at 6b48d61
+identical: 5 record(s) checked, 0 with problems

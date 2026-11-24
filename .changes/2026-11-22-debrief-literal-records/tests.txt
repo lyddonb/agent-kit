@@ -1,0 +1,6 @@
+# make test at d69a062
+  if method() is not None:
+----------------------------------------------------------------------
+Ran 1309 tests in 724.203s
+
+OK (skipped=24)
