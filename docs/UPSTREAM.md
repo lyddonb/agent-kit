@@ -102,6 +102,7 @@ only what is still unreviewed.
 | `plugins/bstack/skills/why/SKILL.md` | `pstack why @ 11713c6` |
 | `plugins/essentials/skills/grilling/SKILL.md` | `mattpocock/skills skills/productivity/grilling/SKILL.md @ 95249b0` |
 | `plugins/essentials/skills/sharpen/SKILL.md` | `pstack sharpen @ 246bc50` |
+| `plugins/essentials/skills/socratic-tutor/SKILL.md` | `janestreet/agent_skills socratic-tutor/SKILL.md @ 7c6715c` |
 | `plugins/principles/skills/principles/SKILL.md` | `pstack @ ccb5507` |
 | `plugins/principles/skills/principles/references/attack-the-premise.md` | `pstack/skills/principle-attack-the-premise @ 246bc50` |
 | `plugins/principles/skills/principles/references/boundary-discipline.md` | `pstack/skills/principle-boundary-discipline @ ccb5507` |
