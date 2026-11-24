@@ -22,6 +22,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
+| H17 | Decide whether a judge model may score the context-loading evals | 🚧 **BLOCKER** for ROADMAP R42, R43 |
 
 ---
 
@@ -228,3 +229,12 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
    `trial/2026-11-21-no-comments` keeps that commit on GitHub. The claim now names the two changes
    in main's e548abb that were never tried.
 
+### H17. Decide whether a judge model may score the context-loading evals — 🚧 BLOCKER for R42, R43
+**Why a human:** Skill ops says verdicts come from rules and exit codes, with no judge model
+until you say so. R42 and R43 compare outputs on judgment tasks, which no exit code can score.
+Allowing a judge for these two evals, and on which model, is your call. It also costs model calls.
+**Decide:**
+1. Allow a judge model for R42 and R43 only, for all Eval playbook runs, or not at all.
+2. If allowed, which model judges. It should differ from the candidates' model, since Scribe's
+   weak point was grading with the same model.
+3. If not, R43 falls back to R25's rule: no cut without an agent-ledger M3 eval covering the text.

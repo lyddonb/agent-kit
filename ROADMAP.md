@@ -176,6 +176,9 @@ the current transcript, and a fix counts only when the new probe fails on the re
 and passes on the fix. This is the persistent complaint log (ERRATA in the source thread).
 **Why not done:** The Product phase playbook now does this inside one spec; a cross-session
 log needs the `rejection` entry type in agent-ledger.
+The entry also names what the agent read that turned out not to matter (`misled_by`: a
+skill, reference or file id, never transcript text), so rejections list the distractors per
+skill over time (R42, R43). Knowledge factory flags carry the same field.
 **Prioritize when:** the same kind of rejection happens twice.
 
 ### R26. The round cap and the two-fix trigger, checked against a real case
@@ -210,7 +213,7 @@ and it should follow once beau-mode has settled.
 conventions, and give agents a KB MCP server to query while they work. Design notes and the
 seams that already exist: [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
 **Why not done:** Planned as its own follow-up project.
-**Prioritize when:** the KB has an MCP interface.
+**Prioritize when:** the KB has an MCP interface. R42 lands first: no KB reaches beau-mode without its eval.
 
 ### R17. The remaining pstack playbooks
 **What:** Babysit and Shipping (drive PRs to merged), Hillclimb (loop on one metric),
@@ -254,7 +257,8 @@ Text that no eval covers is not cut.
 still hit the gates. Cutting needs evidence from runs in more than one tool (R10, R13).
 **Prioritize when:** agent-ledger's M3 unit 1 has an eval covering the text to cut (R13's cases
 add to them), so a cut can be shown not to lose a gate. R35's monthly prune brief supplies the
-size numbers, and R41 adds uses per skill.
+size numbers, and R41 adds uses per skill. R43 can propose the first cut to beau-mode's
+always-on text.
 
 ---
 
@@ -654,3 +658,56 @@ more than three, proposes none marked `rare`, and every number matches `summary 
 **Why not done:** R35 unit 3 prunes rules and checklist items. No skill has ever been retired
 on evidence, since there is none.
 **Prioritize when:** R38 has 60 days of rows.
+
+# Context loading
+
+From Jennifer Smith's "[The context layer has a clutter problem](https://x.com/scribeceo/status/2123460060299030733)"
+(Scribe, read 2026-11-23) and Matt Stockton's take on it. The claim: retrieval gives agents text
+that looks relevant but isn't, and even one such distractor lowers model output. A record of how
+the work was actually done beats docs, because a person already filtered it. In Scribe's test (30
+tasks, one model, graded by that same model), adding the wiki on top of workflow recordings made
+output worse. That evidence is weak, so these items test the claim on the kit's own tasks before
+anything changes. Full analysis: the Agent Kit project's `plans/context-clutter.md`.
+
+| Item | Entry | Other repos |
+|---|---|---|
+| Knowledge base lookup only behind a passing eval, by id not similarity | R42 | R16 depends on it |
+| Ablate beau-mode's always-on load | R43 | Feeds R25's cuts |
+| The curator learns from PR trails, not docs | A line here until lyddonb/curator is in the workspace | curator's roadmap (knowledge factory K2) |
+| Rejections and flags name what misled the agent | R23 (edited in place) | agent-ledger's `rejection` type |
+
+Both evals need a judge model, and Skill ops says none until Beau agrees (H17).
+
+## P1
+
+### R42. Knowledge base lookup only behind a passing eval
+**What:** beau-mode step 4 ("Check for team knowledge") reads a knowledge base before design.
+[docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) says it starts returning entries as soon as a KB MCP
+server is installed, with no skill edit. Before that happens, run the Eval playbook with four
+arms on 8 to 10 past tasks taken from ledger runs and merged PRs: no KB, the KB, the decision
+trails of past PRs on similar work, and both. Keep step 4 only if the KB arm beats no KB and the
+both arm is not worse than trails alone. When step 4 reads a KB, it loads entries by id, named
+by the chosen playbook or by the files the change touches, never by similarity to the task text.
+Change KNOWLEDGE.md's "no skill edit needed" to "needs a passing R42 eval".
+**Where:** `plugins/bstack/skills/beau-mode/SKILL.md` step 4, `docs/KNOWLEDGE.md`.
+**Depends on:** a KB with an MCP interface (R16's trigger), H17.
+**Playbook:** Eval.
+**Done when:** the eval's reply is in the PR with every arm's scores, and step 4 either loads by
+id or is removed.
+**Why not done:** there is no KB to test yet.
+**Prioritize when:** R16 is picked up. R16 does not ship before this.
+
+### R43. Ablate beau-mode's always-on load
+**What:** beau-mode's `SKILL.md` is about 3,000 words, and beau-agent loads it and the
+principles index before any work. Nothing has tested whether that much text helps or distracts.
+Run the Eval playbook on 8 past tasks with two arms: beau-mode as it is, and a slim router that
+restates the task, picks a playbook and loads only that playbook and the principles it names.
+Judge on a different model from the candidates. If the slim arm holds on every rubric item,
+propose moving playbook-only text out of `SKILL.md`, through R25's cut rules.
+**Where:** `plugins/bstack/skills/beau-mode/**`. Changes nothing until the eval passes.
+**Depends on:** H17.
+**Playbook:** Eval.
+**Done when:** the eval's reply is in a PR with a keep or slim recommendation and the token
+count of each arm.
+**Why not done:** found 2026-11-23. It is the cheapest test of the claim above and needs no KB.
+**Prioritize when:** H17 is answered. Before R13's beau-mode comparison, which can reuse its tasks.
