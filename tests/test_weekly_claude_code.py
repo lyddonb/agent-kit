@@ -589,9 +589,10 @@ class WeeklyJob(unittest.TestCase):
         with_flag = plistlib.loads(self.quality_run("--print-plist").stdout.encode())
         self.assertEqual(with_flag["ProgramArguments"],
                          ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO])
-        without = self.run_job("--print-plist").stdout
-        self.assertNotIn("quality", without)
-        self.assertEqual(plistlib.loads(without.encode())["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
+        without = plistlib.loads(self.run_job("--print-plist").stdout.encode())
+        self.assertEqual(without["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
+        self.assertEqual([k for k in without.get("EnvironmentVariables", {}) if "QUALITY" in k], [],
+                         "no quality setting reaches the job's environment either")
 
     def make_lock(self) -> Path:
         lock = self.tmp / "profiles" / "agentfiles.lock"

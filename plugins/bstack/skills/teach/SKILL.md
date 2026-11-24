@@ -1,6 +1,6 @@
 ---
 name: teach
-description: Explain a body of work plainly so a person actually understands it, by running the how and why skills and weaving what they find into one clear, layered explanation with diagrams that build up step by step. Use for "teach me this", "help me really understand X", "explain this change or subsystem to me", or "prove to me this approach is better".
+description: Explain a body of work plainly so a person actually understands it, by running the how and why skills and weaving what they find into one clear, layered explanation with diagrams that build up step by step. Use for "teach me this", "help me really understand X", "explain this change or subsystem to me", or "prove to me this approach is better". To be quizzed or drilled to mastery of a topic, use socratic-tutor.
 license: MIT
 metadata:
   author: lyddonb

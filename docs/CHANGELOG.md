@@ -3,6 +3,15 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## essentials 0.3.0 (2026-11-23)
+
+- New socratic-tutor skill, adapted from Jane Street's agent_skills, teaches a topic to mastery by asking questions instead of lecturing. It places you with a short diagnostic, scores each subskill from 0 to 5 on a skill map, re-tests earlier subskills without warning, and ends with a final assessment. `save state` prints a block, or writes a file, that a new session can resume from.
+- Try: `Tutor me on Postgres MVCC until I can explain it.`
+
+## bstack 0.41.2 (2026-11-23)
+
+- teach now points requests to be quizzed or drilled to mastery at socratic-tutor, so "teach me" about a codebase still explains it and "tutor me" on a topic starts a session.
+
 ## bstack 0.42.0 (2026-11-23)
 
 - The Quality Director books a repo whose CI runs on local-ci. Set its `workflow` in `books/watched.csv` to `local-ci` and `fetch` reads the records local-ci publishes to the repo's `refs/local-ci/records` instead of Actions artifacts; `ingest` books them like any run, with `https://github.com/OWNER/NAME/commit/SHA#local-ci-STARTED` as the evidence. No job timings are booked for a local run, and the test volume book takes the week's commit from its newest local push.

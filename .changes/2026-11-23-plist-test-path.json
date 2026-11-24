@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "goal": "A test that fails only because of where the checkout lives is a bug: make the cfo plist test check what it means to check.",
+  "changed": [
+    "tests/test_weekly_claude_code.py: the plist test checks the program arguments exactly and that no QUALITY environment variable is set, instead of that the word quality appears nowhere (the plist embeds the checkout path)."
+  ],
+  "claims": [
+    {
+      "claim": "The test passes in a checkout whose path contains quality, where the old assertion failed.",
+      "verdict": "VERIFIED",
+      "check": "python -m unittest tests.test_weekly_claude_code in this worktree and in a worktree under a folder named quality-path-check; the old version failed in a worktree named quality-local-ci",
+      "commit": "9140801",
+      "record": "https://github.com/lyddonb/agent-kit/pulls",
+      "remaining": "None."
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "A test fix; nothing a user sees changes."
+  }
+}
