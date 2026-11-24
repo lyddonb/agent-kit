@@ -11,7 +11,7 @@
     {
       "name": "essentials",
       "source": "plugins/essentials",
-      "description": "Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, grilling a plan before you act on it, and sharpening a task to be deeper instead of bigger."
+      "description": "Everyday engineering skills that work in any agent, for commit messages, cross-tool session handoffs, grilling a plan before you act on it, sharpening a task to be deeper instead of bigger, and being tutored to mastery of a topic."
     },
     {
       "name": "eng-leadership",

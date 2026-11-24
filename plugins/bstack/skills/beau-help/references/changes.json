@@ -1,6 +1,25 @@
 {
   "entries": [
     {
+      "id": "essentials@0.3.0",
+      "date": "2026-11-23",
+      "plugin": "essentials",
+      "version": "0.3.0",
+      "changes": [
+        "New socratic-tutor skill, adapted from Jane Street's agent_skills, teaches a topic to mastery by asking questions instead of lecturing. It places you with a short diagnostic, scores each subskill from 0 to 5 on a skill map, re-tests earlier subskills without warning, and ends with a final assessment. `save state` prints a block, or writes a file, that a new session can resume from."
+      ],
+      "try": "Tutor me on Postgres MVCC until I can explain it."
+    },
+    {
+      "id": "bstack@0.41.2",
+      "date": "2026-11-23",
+      "plugin": "bstack",
+      "version": "0.41.2",
+      "changes": [
+        "teach now points requests to be quizzed or drilled to mastery at socratic-tutor, so \"teach me\" about a codebase still explains it and \"tutor me\" on a topic starts a session."
+      ]
+    },
+    {
       "id": "bstack@0.41.1",
       "date": "2026-11-23",
       "plugin": "bstack",

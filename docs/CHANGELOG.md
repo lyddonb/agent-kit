@@ -3,6 +3,15 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## essentials 0.3.0 (2026-11-23)
+
+- New socratic-tutor skill, adapted from Jane Street's agent_skills, teaches a topic to mastery by asking questions instead of lecturing. It places you with a short diagnostic, scores each subskill from 0 to 5 on a skill map, re-tests earlier subskills without warning, and ends with a final assessment. `save state` prints a block, or writes a file, that a new session can resume from.
+- Try: `Tutor me on Postgres MVCC until I can explain it.`
+
+## bstack 0.41.2 (2026-11-23)
+
+- teach now points requests to be quizzed or drilled to mastery at socratic-tutor, so "teach me" about a codebase still explains it and "tutor me" on a topic starts a session.
+
 ## bstack 0.41.1 (2026-11-23)
 
 - `debrief.py check` no longer passes a VERIFIED claim whose `record` is a pathspec pattern such as `*`, `:(glob)**` or `:/`, or a folder, symlink or submodule: the record must name one regular file git tracks or has staged, exactly as `git ls-files` prints it. It also refuses to read a change record that is a symlink, sits outside the repo, or that git holds with a mode other than 100644, so a pull request can't make the check print another file's keys into its log or hang on a link to `/dev/zero`. A repo that pins debrief.py at an older commit gets this when its pin moves.
