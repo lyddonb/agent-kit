@@ -1,0 +1,12 @@
+make test at c5c837a (check, validate, unit):
+kitgen: 26 generated files and 27 files with GENERATED blocks up to date
+validate: 42 skills in 7 plugins, 82 script commands, 0 errors, 0 warnings
+Ran 1378 tests in 253.954s
+OK (skipped=24)
+exit 0
+
+tests/test_quality_pulls.py: 45 tests, all in the run above. Without the c5c837a change to quality.py, the new test for a check after the merge fails.
+Prototype comparison (R44 done-when): fetch at c5c837a's check-runs call (filter=all) read all 59 pull requests merged in lyddonb/agent-kit since 2026-11-17; an independent prototype script over the same window gave the same ci and wait, to the second, for all 59. No row had head CI finishing after its merge.
+
+Live: fetch of a public repo over its last three days read 28 merged pull requests, ingest booked them, a second ingest booked none, check passed; three rows recomputed by hand from the raw API answers matched to the second.
+No-file identity: check, summary (text, json, public-only), ingest and leak-check on books without books/pulls.csv printed the same 361 lines under the script at origin/main and this commit.
