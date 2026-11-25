@@ -58,6 +58,16 @@ class PullCycleTest(unittest.TestCase):
         runs = [{"started_at": at("11:00"), "completed_at": None}, {"started_at": None, "completed_at": None}]
         self.assertEqual(quality.check_intervals(runs, sec("12:00")), [(sec("11:00"), sec("12:00"))])
 
+    def test_a_check_or_status_that_starts_after_the_merge_is_not_an_interval_so_the_wait_stands(self):
+        runs = [{"started_at": at("10:05"), "completed_at": at("10:20")},
+                {"started_at": at("12:10"), "completed_at": at("12:15")}]
+        statuses = [{"context": "ci", "state": "pending", "created_at": at("12:20"), "id": 1},
+                    {"context": "ci", "state": "success", "created_at": at("12:30"), "id": 2}]
+        intervals = quality.check_intervals(runs, sec("12:00")) + quality.status_intervals(statuses, sec("12:00"))
+        self.assertEqual(intervals, [(sec("10:05"), sec("10:20"))], "a re-run after the merge must not move head_done past it")
+        got = quality.pull_cycle(sec("10:00"), sec("12:00"), [], intervals, intervals)
+        self.assertEqual((got["ci"], got["wait"], got["head_done"]), (minutes(15), minutes(100), sec("10:20")))
+
     def test_a_trailing_pending_status_runs_to_the_merge(self):
         statuses = [{"context": "ci", "state": "pending", "created_at": at("11:00"), "id": 1}]
         intervals = quality.status_intervals(statuses, sec("12:00"))
@@ -141,7 +151,7 @@ class FetchPullsBase(tv.FetchBase):
                    timeline: list[dict] | None = None) -> None:
         self.put(f"repos/{SLUG}/pulls/{number}/commits{q('per_page=100')}", [{"sha": sha} for sha in commits])
         for sha in commits:
-            self.put(f"repos/{SLUG}/commits/{sha}/check-runs{q('per_page=100')}",
+            self.put(f"repos/{SLUG}/commits/{sha}/check-runs{q('filter=all&per_page=100')}",
                      {"total_count": len(checks.get(sha, [])), "check_runs": checks.get(sha, [])})
             self.put(f"repos/{SLUG}/commits/{sha}/statuses{q('per_page=100')}", (statuses or {}).get(sha, []))
         self.put(f"repos/{SLUG}/issues/{number}/timeline{q('per_page=100')}", timeline or [])
@@ -256,7 +266,7 @@ class FetchPullsTest(FetchPullsBase):
         self.pulls_page(1, [pull_obj(7, at("10:00"), at("12:00"))])
         self.serve_pull(7, [SHA_B], {})
         self.put(f"repos/{SLUG}/pulls/7/commits{q('per_page=100')}", json.dumps([{"sha": SHA_A}]) + json.dumps([{"sha": SHA_B}]))
-        self.put(f"repos/{SLUG}/commits/{SHA_A}/check-runs{q('per_page=100')}", {"check_runs": []})
+        self.put(f"repos/{SLUG}/commits/{SHA_A}/check-runs{q('filter=all&per_page=100')}", {"check_runs": []})
         self.put(f"repos/{SLUG}/commits/{SHA_A}/statuses{q('per_page=100')}", [])
         code, out = self.fetch()
         self.assertEqual(code, 0, out)
@@ -270,7 +280,7 @@ class FetchLocalPullsTest(tl.LocalBase):
         day = "2026-11-14"
         self.put(f"repos/{tl.SLUG}/pulls{q(LIST_QUERY + '1')}", [pull_obj(7, at("10:00", day), at("12:00", day))])
         self.put(f"repos/{tl.SLUG}/pulls/7/commits{q('per_page=100')}", [{"sha": SHA_B}])
-        self.put(f"repos/{tl.SLUG}/commits/{SHA_B}/check-runs{q('per_page=100')}", {"check_runs": []})
+        self.put(f"repos/{tl.SLUG}/commits/{SHA_B}/check-runs{q('filter=all&per_page=100')}", {"check_runs": []})
         self.put(f"repos/{tl.SLUG}/commits/{SHA_B}/statuses{q('per_page=100')}",
                  [{"context": "local-ci", "state": "success", "created_at": at("10:20", day), "id": 2},
                   {"context": "local-ci", "state": "pending", "created_at": at("10:10", day), "id": 1}])

@@ -4263,19 +4263,22 @@ def list_merged_pulls(gh: Gh, github: str, since: str) -> list[dict]:
 
 
 def check_intervals(runs: list[dict], merged: int) -> list[tuple[int, int]]:
-    """One interval per check run that started: to its completion, or to the merge when it has none."""
+    """One interval per check run that started by the merge: to its completion, or to the merge when it has none."""
     found = []
     for run in runs:
         if run.get("started_at") is None:
             continue
         start = _api_stamp(run["started_at"], "a check run's started_at")
+        if start > merged:
+            continue
         end = merged if run.get("completed_at") is None else _api_stamp(run["completed_at"], "a check run's completed_at")
         found.append((start, max(start, end)))
     return found
 
 
 def status_intervals(statuses: list[dict], merged: int) -> list[tuple[int, int]]:
-    """One interval per pending of a commit status context to the context's next state; a pending still open runs to the merge."""
+    """One interval per pending by the merge of a commit status context to the context's next state; a pending still open runs to the
+    merge."""
     by_context: dict[str, list[tuple[int, int, str]]] = {}
     for status in statuses:
         context, state = status.get("context"), status.get("state")
@@ -4294,7 +4297,7 @@ def status_intervals(statuses: list[dict], merged: int) -> list[tuple[int, int]]
                 open_since = None
         if open_since is not None:
             found.append((open_since, max(open_since, merged)))
-    return found
+    return [(start, end) for start, end in found if start <= merged]
 
 
 def _union(intervals: list[tuple[int, int]], low: int, high: int) -> list[tuple[int, int]]:
@@ -4343,7 +4346,7 @@ def read_pull(gh: Gh, repo: str, github: str, pull: dict) -> PullRow:
     intervals: dict[str, list[tuple[int, int]]] = {}
     for sha in dict.fromkeys(shas + [head_sha]):
         runs = []
-        for page in gh.pages(f"repos/{github}/commits/{sha}/check-runs?per_page=100"):
+        for page in gh.pages(f"repos/{github}/commits/{sha}/check-runs?filter=all&per_page=100"):
             if not isinstance(page.get("check_runs"), list) or not all(isinstance(r, dict) for r in page["check_runs"]):
                 raise GhError(f"gh api repos/{github}/commits/{sha}/check-runs answered without a check_runs list")
             runs.extend(page["check_runs"])
