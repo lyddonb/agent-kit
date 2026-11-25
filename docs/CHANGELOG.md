@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.43.0 (2026-11-24)
+
+- The Quality Director's books can now say how long each merged pull request was open and where the time went. Create `books/pulls.csv` and `fetch` reads every pull request merged since the last one booked, `ingest` books one row each, and `summary --json` gives each repo `pulls`: the count and the p50 and p95 of open time, CI running, rework and waiting for a person to merge, so the weekly brief can say whether CI or people hold pull requests. Without the file nothing changes.
+- Try: `Create books/pulls.csv with its header in a scratch copy of the books, then fetch, ingest and summarize one repo's last week.`
+
 ## essentials 0.3.0 (2026-11-23)
 
 - New socratic-tutor skill, adapted from Jane Street's agent_skills, teaches a topic to mastery by asking questions instead of lecturing. It places you with a short diagnostic, scores each subskill from 0 to 5 on a skill map, re-tests earlier subskills without warning, and ends with a final assessment. `save state` prints a block, or writes a file, that a new session can resume from.

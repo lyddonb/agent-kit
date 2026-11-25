@@ -472,6 +472,30 @@ from the default branch by `interrogate`, review rounds that build on the last o
 `REVIEW.md` from `scaffold-product`. R11 (cross-model CLI reviewers) still waits on R34: add a
 reviewer only when a replay shows it finds what the first one misses.
 
+### R44. Pull request cycle time in the quality books
+**What:** the books say how long a merged pull request was open and where that time went, in
+three measured parts: CI running, time between CI runs (an agent or a person reworking the
+change), and the head commit's last CI finishing to the merge (waiting on a person to merge).
+`fetch` lists the pull requests merged in the window and reads each one's commits, its
+check runs and its commit statuses (local-ci reports through statuses). `ingest` books one
+row per merged pull request in an optional, append-only `books/pulls.csv`. `summary --json`
+gains `pulls` per repo: the count, and p50 and p95 for open time and each part. Never one
+summed share: a few pull requests left open overnight would set it.
+**Units:** (1) the book, `fetch`, `ingest`, `check` and `summary` in one change, with the
+bucket rule in `SKILL.md`. (2) in the books repo: move the pin, backfill, add the table to
+`briefs/TEMPLATE.md` (the quality roadmap, phase 1f).
+**Where:** `plugins/bstack/skills/qualitydirector/**`, `tests/test_quality*.py`, `kit.yaml`,
+`changes.yaml`, generated files.
+**Depends on:** nothing. It comes from `plans/ci-speed.md` in the agent-runtime workspace, the
+second half of its first recommendation; the first half is the job books (R-A, phase 1d).
+**Playbook:** Feature.
+**Done when:** a prototype's per pull request numbers for one public watched repo match the
+booked rows to the second; `check` passes books written before the change; `summary` stays the
+same bytes on books without the file.
+**Prioritize when:** now. A prototype on 2026-11-24 over agent-kit's 56 pull requests merged in
+the previous seven days found medians of 7.4 minutes open, 1.9 in CI, 0.1 reworking and 2.1
+waiting to merge, with no pull request where the parts summed past its open time.
+
 ## P2
 
 ### R34. Grade the checks on bugs that mattered
