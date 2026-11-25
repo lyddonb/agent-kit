@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "goal": "Let the quality books say how long each merged pull request was open and where the time went (CI running, rework, waiting for a person to merge), so the weekly brief can say whether CI or people hold pull requests (roadmap R44, unit 1).",
+  "changed": [
+    "quality.py gains an optional, append-only book, books/pulls.csv: one row per merged pull request with its opened, ready and head-CI-finished times, CI time, wait-to-merge time, commit, check and force-push counts, and its pull request link. Without the file every command behaves as before.",
+    "fetch, once the book exists, lists each watched repo's merged pull requests since the last one booked (a local-ci repo too), reads their commits, check runs, commit statuses and timeline, and writes pulls/<number>.json; a pull request that cannot be read fails only itself. ingest books each once and never changes a row; summary adds repos.<repo>.pulls with p50 and p95 of open, CI, rework and wait time, never a summed share.",
+    "SKILL.md gains The pulls book, with the bucket rule and where it is blind."
+  ],
+  "claims": [
+    {
+      "claim": "The bucket arithmetic (overlap, clipping at the merge, a check that ends after the merge, a check or status that starts after it, every attempt of a re-run check, a trailing pending, no checks, draft then ready, a superseded run still running), fetch, ingest (book, unchanged, reject), check, summary p50 and p95 and null, append-only, and a local-ci repo behave as the SKILL.md says; a pull request link is refused in every other book.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_quality_pulls.py, 45 tests through the fake gh; make test, 1378 tests, 24 skipped, OK",
+      "commit": "c5c837a",
+      "record": ".changes/2026-11-24-pr-cycle-time/tests.txt",
+      "remaining": "The fake gh, not GitHub, for the tests."
+    },
+    {
+      "claim": "Against GitHub, fetch read 28 merged pull requests of a public repo, ingest booked them, a second ingest booked none, check passed, and three rows (one simple, one draft that turned ready after its CI, one with seven commits and a four-hour wait) match a hand recomputation from the raw API answers to the second.",
+      "verdict": "VERIFIED",
+      "check": "quality.py fetch, ingest twice, check and summary on a scratch copy of the books; gh api calls for the three pull requests",
+      "commit": "c5c837a",
+      "record": ".changes/2026-11-24-pr-cycle-time/tests.txt",
+      "remaining": "Commits dropped by a force push are not listed, so their checks are missed (force_pushes says when)."
+    },
+    {
+      "claim": "Booked rows match an independent prototype's per pull request numbers: for all 59 pull requests merged in lyddonb/agent-kit since 2026-11-17, ci and wait agree to the second.",
+      "verdict": "VERIFIED",
+      "check": "quality.py fetch --since 2026-11-17 on a scratch copy of the books watching agent-kit only, compared with a separate prototype script reading the same API",
+      "commit": "c5c837a",
+      "record": ".changes/2026-11-24-pr-cycle-time/tests.txt",
+      "remaining": "One public repo; a local-ci repo's statuses are covered by tests only."
+    },
+    {
+      "claim": "Books without books/pulls.csv give the same bytes from check, summary (text, json, public-only), ingest and leak-check as the script at origin/main.",
+      "verdict": "VERIFIED",
+      "check": "both scripts run on one scratch books folder with every optional book except pulls; outputs compared with cmp",
+      "commit": "c5c837a",
+      "record": ".changes/2026-11-24-pr-cycle-time/tests.txt",
+      "remaining": "fetch without the file is held by a test that fixes its calls and output, not compared byte for byte against the old script."
+    }
+  ],
+  "next": [
+    {
+      "item": "R44 unit 2: in the quality books repo, move the checker pin, create books/pulls.csv, backfill, and add the table to briefs/TEMPLATE.md",
+      "source": "ROADMAP.md R44",
+      "why_now": "Nothing is booked until the books have the file and the pin moves to this version.",
+      "impact": "The weekly brief cannot say whether CI or people hold pull requests until then."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.43.0"
+  }
+}
