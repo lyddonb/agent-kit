@@ -1,0 +1,33 @@
+uv run --no-project --quiet --python 3.12 --with pyyaml python tools/kitgen.py --check
+kitgen: 26 generated files and 27 files with GENERATED blocks up to date
+uv run --no-project --quiet --python 3.12 --with pyyaml python tools/validate.py
+validate: 43 skills in 7 plugins, 88 script commands, 0 errors, 0 warnings
+uv run --no-project --quiet --python 3.12 --with pyyaml python -m unittest discover -s tests
+......................................................................................................................................................................................................................................................................s..............................................................................................................................................................~/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/unittest/case.py:589: ResourceWarning: unclosed file <_io.BufferedReader name=3>
+  if method() is not None:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+~/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/unittest/case.py:589: ResourceWarning: unclosed file <_io.BufferedReader name=5>
+  if method() is not None:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................ssssss..........sssssssssssssssss...........................................E...................................................................................................................................................................
+======================================================================
+ERROR: test_a_timeout_kills_the_cli_and_what_it_started (test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "~/code/agent-runtime/agent-kit/.worktrees/fix-leak-speed-flake/tests/test_second_opinion.py", line 194, in test_a_timeout_kills_the_cli_and_what_it_started
+    pid = int((self.dir / "pid").read_text())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/pathlib.py", line 1027, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '$TMPDIR/...'
+
+----------------------------------------------------------------------
+Ran 1461 tests in 2069.705s
+
+FAILED (errors=1, skipped=24)
+make: *** [unit] Error 1
+exit 2 in 2081s, 14:13:54

@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "goal": "Keep a test that catches a quadratic leak-check matcher without failing when the machine is busy: the speed test failed at 5.58s beside two other suites because it timed wall-clock against 5.0s.",
+  "changed": [
+    "LeakSpeedTest runs leak-check at 5,000 ids with a 256 KB report and at 20,000 ids with a 1 MB report, three times each, alternating, and asserts that the smaller CPU time (time.process_time) at the big size is less than 8x the smaller one at the small size. Linear work grows about 4x and quadratic work about 16x.",
+    "The 5.0-second wall-clock bound is gone; the match count at 20,000 ids is still checked."
+  ],
+  "claims": [
+    {
+      "claim": "The old wall-clock assertion fails under load while the work is unchanged: under 60 busy loops it took 5.33s and 6.28s, and one leak-check call's CPU time stayed at 0.54 to 0.55s while its wall time went from 2.3s to 5.4s.",
+      "verdict": "VERIFIED",
+      "check": "the old test three times on origin/main beside 60 busy Python loops on a 10-core Mac; one leak-check call timed by process_time and perf_counter with and without the loops",
+      "commit": "ee1bbe3",
+      "record": ".changes/2026-11-26-leak-speed-cpu-ratio/old-test-under-load.txt",
+      "remaining": "The original 5.58s failure beside two make test runs was not reproduced; two suites on 10 cores raised the wall time only to 0.74s here."
+    },
+    {
+      "claim": "The new test fails on a quadratic matcher: with Needles.find replaced by one scan of the text per needle, it measured 12.80 to 13.00 in 5 of 5 runs, against the threshold of 8.",
+      "verdict": "VERIFIED",
+      "check": "the committed test run through QUALITY_SCRIPT pointing at a copy of quality.py with that find",
+      "commit": "ee1bbe3",
+      "record": ".changes/2026-11-26-leak-speed-cpu-ratio/ratios.txt",
+      "remaining": "Only this one quadratic shape was tried. A superlinear term too small to push the ratio past 8 passes: from these numbers, one costing under about 0.9s of CPU at 20,000 ids."
+    },
+    {
+      "claim": "The new test does not depend on load: the ratio was 3.62 to 4.53 over 20 runs at load average 45 to 50, and 4.25 to 4.62 under 60 busy loops at load average up to 168.",
+      "verdict": "VERIFIED",
+      "check": "the committed test, ratio printed from its assertion, 20 runs and then 3 runs under the loops",
+      "commit": "ee1bbe3",
+      "record": ".changes/2026-11-26-leak-speed-cpu-ratio/ratios.txt",
+      "remaining": "One machine (Apple silicon, 10 cores); not measured on GitHub's hosted runners."
+    },
+    {
+      "claim": "The test passed 20 of 20 times in a loop with a full make test running beside it, before and after rebasing onto main at 30cdf30.",
+      "verdict": "VERIFIED",
+      "check": "a loop of 20 fresh uv run unittest invocations of LeakSpeedTest while make test ran the whole time: 13:11 to 13:15 on the first base, 13:39 to 13:42 at ee1bbe3 (load average near 100)",
+      "commit": "ee1bbe3",
+      "record": ".changes/2026-11-26-leak-speed-cpu-ratio/loop-20-rebased.txt",
+      "remaining": "CI on the pull request."
+    },
+    {
+      "claim": "The whole suite passes with the change.",
+      "verdict": "NOT VERIFIED",
+      "check": "make test at ee1bbe3, run beside the loop: 1461 tests, 1 error. test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started found no pid file. The make test beside the first loop (before the rebase) passed all 1461.",
+      "commit": "ee1bbe3",
+      "record": ".changes/2026-11-26-leak-speed-cpu-ratio/make-test.txt",
+      "remaining": "That test is in a file this change does not touch (added in b369b16). It passed 3 of 3 alone and 5 of 5 under 80 busy loops, so its cause is not found yet."
+    }
+  ],
+  "next": [
+    {
+      "item": "Root-cause test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started, which found no pid file once in a full make test at load average near 100",
+      "source": "inferred: the make test run for this change",
+      "why_now": "A flaky test is a bug, and it can turn any pull request's make test red.",
+      "impact": "Contributors stop seeing a red make test that their change did not cause."
+    }
+  ],
+  "release": {
+    "none": "A test fix; nothing a user of the kit sees changes."
+  }
+}
