@@ -1,0 +1,42 @@
+{
+ "t1": {
+  "full1": "r",
+  "full2": "p",
+  "slim": "q"
+ },
+ "t2": {
+  "full1": "p",
+  "full2": "q",
+  "slim": "r"
+ },
+ "t3": {
+  "full1": "r",
+  "full2": "p",
+  "slim": "q"
+ },
+ "t4": {
+  "full1": "q",
+  "full2": "p",
+  "slim": "r"
+ },
+ "t5": {
+  "full1": "q",
+  "full2": "r",
+  "slim": "p"
+ },
+ "t6": {
+  "full1": "q",
+  "full2": "p",
+  "slim": "r"
+ },
+ "t7": {
+  "full1": "p",
+  "full2": "r",
+  "slim": "q"
+ },
+ "t8": {
+  "full1": "p",
+  "full2": "q",
+  "slim": "r"
+ }
+}
