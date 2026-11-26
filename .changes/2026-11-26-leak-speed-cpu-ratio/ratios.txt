@@ -1,0 +1,19 @@
+LeakSpeedTest ratio = min CPU (process_time) at 20,000 ids / 1 MB over min CPU at 5,000 ids / 256 KB,
+three alternating runs per size. Threshold: < 8. Machine load average 45 to 50 on 10 cores (other suites running).
+Driver: a scratch script that runs the committed test and prints the ratio passed to assertLess.
+
+real matcher, 20 runs, sorted:
+3.62 3.92 3.99 4.06 4.09 4.15 4.18 4.20 4.20 4.21 4.21 4.24 4.29 4.31 4.36 4.36 4.41 4.41 4.49 4.53   (all PASS)
+
+quadratic copy (QUALITY_SCRIPT pointing at quality.py with Needles.find replaced by one text.find scan per needle), 5 runs:
+12.81 FAIL 0.389s then 4.983s
+12.84 FAIL 0.392s then 5.033s
+12.88 FAIL 0.377s then 4.854s
+12.80 FAIL 0.389s then 4.981s
+13.00 FAIL 0.385s then 5.010s
+
+real matcher under 60 busy Python loops (load average 77 at the start, 168 at the end), 3 runs:
+4.45 PASS 0.174s then 0.774s
+4.25 PASS 0.182s then 0.776s
+4.62 PASS 0.171s then 0.788s
+(CPU time itself rose about 40% under this load; the ratio did not move.)

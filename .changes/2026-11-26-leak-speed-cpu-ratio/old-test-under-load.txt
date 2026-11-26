@@ -1,0 +1,11 @@
+The old assertion (wall-clock under 5.0s at 20,000 ids / 1 MB) on origin/main 1a6aa9c,
+run three times while 60 busy Python loops ran on a 10-core Mac:
+
+run 1 ok 6.48
+run 2 FAIL 8.19 AssertionError: 5.32989062462002 not less than 5.0
+run 3 FAIL 9.66 AssertionError: 6.281466959044337 not less than 5.0
+
+The same machine and size, CPU time against wall-clock (one leak-check call, best of two):
+no burners:        cpu 0.552s  wall 2.340s
+under 60 burners:  cpu 0.543s  wall 5.404s
+(no burners still had other sessions' test suites running; load average about 45)
