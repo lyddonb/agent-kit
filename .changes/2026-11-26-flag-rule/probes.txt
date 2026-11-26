@@ -1,0 +1,18 @@
+# Earlier runs of the same task, kept because they changed the reference.
+# Run 1: inline --plugin-dir; bstack skills did not load, so beau-mode never ran. Task finished, no flag. Not counted.
+# Run 2: project-copied skills. The agent read references/flags.md, used --words and left the skill unedited,
+#   but its read of ~/.agents/flags.yaml was denied (the allowlist lacked 'command -v'), and it then wrote nothing
+#   and listed no 'Flags not written'. That led to the reference's 'a step below fails or is denied' clause.
+# Run 3 (planted-run.txt) used the reference with that clause.
+
+# Probe: the flag check in ledger append, on a copy of the flags repo, a flag with no data.target.
+$ $SCRATCH/bin/ledger --version
+ledger 1.2.1
+$ ledger append --root $SCRATCH/probe --run 2026-11-26-flags-scratch ... --data '{"kind": "flag", "did_instead": "x", "suggested_fix": "y"}'
+ledger append: a flag needs data.target, a non-empty string (a flag has data.target, data.did_instead and data.suggested_fix)
+exit=2
+$ ~/.local/bin/ledger --version
+ledger 1.2.0
+$ ledger append --root $SCRATCH/probe --run 2026-11-26-flags-scratch ... --data '{"kind": "flag", "did_instead": "x", "suggested_fix": "y"}'
+appended 2026-11-26-flags-scratch seq 3 ec05383b14f7d0f9a9b228213cfbc23255ef341bf245e651063d44f831e04023
+exit=0

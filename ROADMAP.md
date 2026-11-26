@@ -824,7 +824,7 @@ separate weekly pass reads the flags and proposes at most three skill edits, eac
 shows the flag's evidence failing before and a probe passing after. Beau merges every PR.
 Flag entries hold no transcript text.
 
-Order: agent-ledger's Flags unit, then R45. R48 after two weeks of flags. R47 is done. R46 any time.
+Order: agent-ledger's Flags unit and R45 are done. R48 after two weeks of flags, once H18 is. R47 is done. R46 any time.
 
 ## P1
 
@@ -843,6 +843,12 @@ generated files.
 passes `ledger verify`, holds no transcript text, and the task still finishes.
 **Why not done:** the convention it writes doesn't exist yet.
 **Prioritize when:** agent-ledger's Flags unit has merged.
+**Done 2026-11-26** in bstack 0.48.0: one Non-negotiable in beau-mode and the same line in
+beau-agent point at beau-mode's `references/flags.md`, which holds S3's commands. It replaces
+the old rule to fix a broken skill in its own change. Outside a governed run, flags go to the
+repo `~/.agents/flags.yaml` names; choosing it is H18. In a real session in a scratch repo, a
+skill with a wrong flag in its command produced one flag that passed `ledger verify` and held
+only the command and its error line, and the task finished. The change record has the run.
 
 ### R47. One list of what waits on Beau
 **What:** A read-only command that lists everything waiting on Beau across the repos: open
