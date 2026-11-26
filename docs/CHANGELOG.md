@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.44.0 (2026-11-26)
+
+- verify-work can now tell when a diff weakens Python tests. `scripts/test_guard.py --base origin/main` compares each changed test file with its copy at the merge base and prints every test deleted (or moved, with where to), and every skip, retry, wider timeout or tolerance, dropped assertion, or exact assertion traded for a weaker one. It runs on unittest and pytest files, reads the working tree or a commit, and exits 0: each line is a question for the author, not a block. agent-kit's own checklist runs it on any diff that touches tests.
+- Try: `Run test_guard.py --base origin/main on a branch that renames a test.`
+
 ## cfo 0.4.2 (2026-11-25)
 
 - The weekly Mac job no longer loses its week when the Mac is asleep on Sunday morning. The launch agent now starts it every hour, and the job (`--scheduled`) works only from Sunday 06:00 to Monday 23:59 local time: it skips a brief dark wake and tries again the next hour, retries a failed run every hour until Monday night, and stops after the first run that finishes without a failure. Plain runs and `--dry-run` behave as before. Install the job again to pick it up.

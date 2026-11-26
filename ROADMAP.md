@@ -350,7 +350,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R28, R30, R31 and R33 are done. Next: R29. R32 waits on R6 and on Beau (H14). R34 waits on R23.
+Order: R27, R28, R30, R31 and R33 are done, and R29's units 1 and 3 are built. Next: check R29 unit 2 against its done-when, then R40. R32 waits on R6 and on Beau (H14). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -410,7 +410,12 @@ and needs no dependency.
 (2) fails on a fixture PR that edits a probe and checks its box, passes when confirmed.
 (3) run against agent-kit's history it reports commit 990c84f (three tests renamed or
 replaced) and stays quiet on a docs-only commit. Units 2 and 3 print and exit 0 (observe).
-**Why not done:** The gates were built one at a time and nobody asked the question of all of them.
+**Status (2026-11-26):** unit 1 is done (the gate table in `docs/ARCHITECTURE.md`, pull request 79).
+Unit 2 is not confirmed here: `check-product.py --receipts RUN_ID --base REF` reports a criterion
+rewritten after its receipt, which is close to it but not the same check. Unit 3 is built: verify-work's
+`scripts/test_guard.py --base REF` prints and exits 0, `verify-work` and agent-kit's checklist
+(`tests-weakened`) run it, and on 990c84f it reports the three tests that commit renamed or
+replaced. Left open: running it in CI from the base branch's copy, which edits workflow files (H13).
 **Prioritize when:** before any gate moves to enforce.
 
 ### R30. A reliability checklist that triggers on the diff

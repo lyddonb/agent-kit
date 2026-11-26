@@ -1,0 +1,7 @@
+Every non-merge commit on origin/main before this branch (2026-11-26), each against its parent, under /usr/bin/python3 3.9.6.
+commits: 215, commits with findings: 17
+
+Findings by kind:
+  39 removed
+   2 cannot parse at the head (3.12 f-string syntax under 3.9)
+   1 assertions

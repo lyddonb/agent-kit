@@ -120,6 +120,22 @@
       "source": "No incident is on record. The item holds this repo to the no-comments rule bstack 0.37.0 adopted from pstack. Replayed over the 156 commits on main before it, the command fails on 60, for example commit 990c84f, which added 70 comments.",
       "added": "2026-11-21",
       "review_by": "2027-02-21"
+    },
+    {
+      "id": "tests-weakened",
+      "trigger": {
+        "paths": [
+          "tests/**",
+          "**/test_*.py"
+        ]
+      },
+      "check": {
+        "question": "Does every test this diff deletes, skips, retries or loosens have a reason the pull request states (a rename, a move, a split), and is every other one undone?",
+        "probe": "Run `python3 plugins/bstack/skills/verify-work/scripts/test_guard.py --base origin/main`. Each line it prints is one finding. A removal beside a `gains N tests` line in the same file is usually a rename: name it in the pull request. Anything else is undone, or the pull request says why the test is weaker on purpose and Beau agrees."
+      },
+      "source": "Commit 1782b7c (pull request 105) reverted pull requests 96 to 104 by mistake and deleted nine `test_debrief.py` tests with them; c62797b restored them. The guard reports those nine. Roadmap R29 unit 3; its replay target is 990c84f, which renamed or replaced three tests.",
+      "added": "2026-11-26",
+      "review_by": "2027-02-26"
     }
   ]
 }

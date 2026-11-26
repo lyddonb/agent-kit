@@ -32,6 +32,8 @@ Check the real thing, not a proxy. A green build, a passing unit test or a subag
    ```
 
    An item whose check is a command runs that command as the committed checklist states it. For an item whose check is a question, put the command that answers its probe after `--`, and pass `--not-run '<what>'` for any part you did not run. Commit your work first, as in step 9: a dirty tree is recorded as INCONCLUSIVE. Record by hand, with `ledger append`, only an item no command can answer. `references/checklist.md` has the file format and how to write an item.
+
+   When the diff touches Python tests, run `python3 <this skill's folder>/scripts/test_guard.py --base origin/main` too, whether or not the repo has a checklist. It prints every test the diff deletes and every skip, retry, wider timeout or tolerance, dropped assertion or weaker assertion it adds, and exits 0. Each line needs a reason in the evidence, such as a rename, a move or a split. An unexplained one makes the verdict NOT VERIFIED. Its docstring lists what it cannot see.
 8. **Give a verdict**:
    - **VERIFIED**: the predicate held on the real surface. Show the evidence.
    - **NOT VERIFIED**: it failed. Show what you saw.

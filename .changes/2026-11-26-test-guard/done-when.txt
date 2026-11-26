@@ -1,0 +1,24 @@
+$ python3 plugins/bstack/skills/verify-work/scripts/test_guard.py --base 990c84f^ --head 990c84f   (feat(bstack): quality books ingest and summary)
+test-guard: 4 findings in 1 test files
+tests/test_quality.py: FileProblemsTest.test_row_with_an_embedded_newline: removed
+tests/test_quality.py: WeeklyRulesTest.test_p50_equal_to_max_is_fine: removed
+tests/test_quality.py: WeeklyRulesTest.test_p50_more_than_max: removed
+tests/test_quality.py: gains 18 tests: AppendOnlyTest.test_a_removed_failure_row_is_caught_with_its_runs_failed_count_still_matching, AppendOnlyTest.test_an_edited_failure_row_is_caught_on_its_line, AppendOnlyTest.test_f
+
+$ python3 plugins/bstack/skills/verify-work/scripts/test_guard.py --base 1782b7c^ --head 1782b7c   (feat(local-ci): publish each run's test record to refs/local-ci/records)
+test-guard: 11 findings in 2 test files
+tests/test_debrief.py: BaseCheckTest.test_a_bad_list_on_the_base_exempts_nothing: removed
+tests/test_debrief.py: BaseCheckTest.test_a_glob_exempts_the_dated_briefs_but_not_the_template_beside_them: removed
+tests/test_debrief.py: BaseCheckTest.test_a_glob_star_stays_within_one_folder: removed
+tests/test_debrief.py: BaseCheckTest.test_a_list_the_pull_request_adds_does_not_exempt_the_pull_request: removed
+tests/test_debrief.py: BaseCheckTest.test_a_pull_request_that_leaves_a_bad_list_fails: removed
+tests/test_debrief.py: BaseCheckTest.test_a_pull_request_that_only_edits_the_list_needs_no_record: removed
+tests/test_debrief.py: BaseCheckTest.test_an_exempt_path_matches_from_the_root: removed
+tests/test_debrief.py: BaseCheckTest.test_an_exempt_path_with_a_source_change_still_owes_a_record: removed
+tests/test_debrief.py: BaseCheckTest.test_paths_the_base_exempts_need_no_record: removed
+tests/test_local_ci.py: StubStateTest.test_concurrent_stub_calls_lose_no_update_and_a_reader_never_sees_a_torn_file: removed
+tests/test_local_ci.py: gains 11 tests: RecordsTest.test_a_broken_records_folder_never_changes_the_status, RecordsTest.test_a_failed_push_is_retried_next_tick_and_never_changes_the_status, RecordsTest.test_a_link_or_a_fi
+
+$ python3 plugins/bstack/skills/verify-work/scripts/test_guard.py --base cb5299b^ --head cb5299b   (docs(review): a static check may ship as an error after a clean replay)
+test-guard: 0 findings in 0 test files
+
