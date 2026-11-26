@@ -479,7 +479,8 @@ class WeeklyJob(unittest.TestCase):
         r = subprocess.run(["bash", str(SCRIPT), "--install"], env=self.env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         plist = plistlib.loads((self.home / "Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist").read_bytes())
-        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO], "repo from the books' remote")
+        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--scheduled"],
+                         "repo from the books' remote")
         self.assertEqual(json.loads(settings.read_text()), {"model": "opus", "cleanupPeriodDays": 120})
         self.assertEqual(json.loads(Path(str(settings) + ".bak").read_text())["cleanupPeriodDays"], 30)
         self.assertIn("launchctl bootstrap gui/", self.notes.read_text())
@@ -495,8 +496,8 @@ class WeeklyJob(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         import plistlib
         plist = plistlib.loads(r.stdout.encode())
-        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
-        self.assertEqual(plist["StartCalendarInterval"], {"Weekday": 0, "Hour": 6, "Minute": 0})
+        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--scheduled"])
+        self.assertEqual(plist["StartCalendarInterval"], {"Minute": 0})
 
     def test_skill_uses_are_pushed_to_a_quality_brief_branch_with_a_pr(self):
         self.make_quality()
@@ -582,15 +583,15 @@ class WeeklyJob(unittest.TestCase):
         self.env["QUALITY_BOOKS"] = str(checkout)
         import plistlib
         plist = plistlib.loads(self.run_job("--print-plist").stdout.encode())
-        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO])
+        self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO, "--scheduled"])
 
     def test_plist_carries_the_quality_repo_only_when_set(self):
         import plistlib
         with_flag = plistlib.loads(self.quality_run("--print-plist").stdout.encode())
         self.assertEqual(with_flag["ProgramArguments"],
-                         ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO])
+                         ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO, "--scheduled"])
         without = plistlib.loads(self.run_job("--print-plist").stdout.encode())
-        self.assertEqual(without["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO])
+        self.assertEqual(without["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--scheduled"])
         self.assertEqual([k for k in without.get("EnvironmentVariables", {}) if "QUALITY" in k], [],
                          "no quality setting reaches the job's environment either")
 
@@ -604,7 +605,7 @@ class WeeklyJob(unittest.TestCase):
     def test_the_installed_job_carries_the_lock_because_its_environment_has_none(self):
         import plistlib
         lock = self.make_lock().resolve()
-        want = ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO, "--agentfiles-lock", str(lock)]
+        want = ["/bin/bash", str(SCRIPT), "--repo", REPO, "--quality-repo", QREPO, "--agentfiles-lock", str(lock), "--scheduled"]
         cases = {"the flag": (["--agentfiles-lock", str(lock)], {}),
                  "AGENTFILES_LOCK": ([], {"AGENTFILES_LOCK": str(lock)}),
                  "AGENTFILES_HOME": ([], {"AGENTFILES_HOME": str(lock.parent)})}
@@ -614,7 +615,8 @@ class WeeklyJob(unittest.TestCase):
                 self.assertEqual(plist["ProgramArguments"], want)
         with unittest.mock.patch.dict(self.env, {"AGENTFILES_LOCK": str(lock)}):
             no_pass = plistlib.loads(self.run_job("--print-plist").stdout.encode())
-        self.assertEqual(no_pass["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO], "no pass, no lock")
+        self.assertEqual(no_pass["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--scheduled"],
+                         "no pass, no lock")
 
     def test_a_lock_that_is_not_a_file_is_refused(self):
         r = self.quality_run("--agentfiles-lock", str(self.tmp / "nope.lock"), "--print-plist")
@@ -697,6 +699,116 @@ class WeeklyJob(unittest.TestCase):
         self.assertEqual(self.quality_branches(), ["main"])
         self.assertEqual(self.branches(), ["main"])
         self.assertEqual([c for c in self.gh_calls() if "-f" in c], [])
+
+
+    SUNDAY = "2026-11-22"
+    FULL_WAKE = "CPU Graphics Audio Network"
+    DARK_WAKE = "CPU Network"
+    NO_REPO = "no-such-repo.git"
+
+    def schedule(self, wake: str = FULL_WAKE):
+        self.stamp = self.tmp / "state/cfo-claude-code.done"
+        pmset = self.tmp / "pmset"
+        pmset.write_text(f"#!/bin/sh\necho 'System-wide power settings:'\n"
+                         f"echo 'Current System Capabilities are: {wake}'\n")
+        pmset.chmod(0o755)
+        self.env.update(CFO_STATE_DIR=str(self.stamp.parent), CFO_PMSET=str(pmset), CFO_NOW=f"{self.SUNDAY}T07:00")
+
+    def scheduled(self, now: str | None = None) -> subprocess.CompletedProcess:
+        if now:
+            self.env["CFO_NOW"] = now
+        return self.run_job("--scheduled")
+
+    def write_stamp(self, key: str):
+        self.stamp.parent.mkdir(parents=True)
+        self.stamp.write_text(key + "\n")
+
+    def test_a_dark_wake_books_nothing_and_tries_again_next_hour(self):
+        self.schedule(self.DARK_WAKE)
+        self.env["CFO_CLONE_URL"] = str(self.tmp / self.NO_REPO)
+        r = self.scheduled()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(r.stdout, "cfo-claude-code: dark wake (CPU Network); trying again next hour\n")
+        self.assertEqual(r.stderr, "")
+        self.assertEqual(self.gh_calls(), [])
+        self.assertFalse(self.vercel_calls.exists())
+        self.assertFalse(self.stamp.exists())
+
+    def test_a_failed_run_is_retried_then_a_finished_week_is_left_alone(self):
+        self.schedule()
+        branch = f"cfo/brief-{this_sunday().isoformat()}"
+        good_url = self.env["CFO_CLONE_URL"]
+        self.env["CFO_CLONE_URL"] = str(self.tmp / self.NO_REPO)
+        failed = self.scheduled()
+        self.assertNotEqual(failed.returncode, 0, failed.stdout)
+        self.assertFalse(self.stamp.exists(), "a failed run leaves no stamp")
+        self.assertEqual(self.branches(), ["main"])
+
+        self.env["CFO_CLONE_URL"] = good_url
+        retried = self.scheduled("2026-11-22T08:00")
+        self.assertEqual(retried.returncode, 0, retried.stdout + retried.stderr)
+        self.assertIn(f"claude-code:{week(self.last_week)}:unassigned", self.ledger(branch))
+        self.assertEqual(self.stamp.read_text().strip(), self.SUNDAY)
+
+        pushed, gh_before = self.rev(branch), len(self.gh_calls())
+        self.env["CFO_CLONE_URL"] = str(self.tmp / self.NO_REPO)
+        again = self.scheduled("2026-11-22T09:00")
+        self.assertEqual((again.returncode, again.stdout, again.stderr), (0, "", ""))
+        self.assertEqual(len(self.gh_calls()), gh_before, "no clone, no gh call")
+        self.assertEqual(self.rev(branch), pushed)
+
+    def test_the_window_runs_from_sunday_0600_to_monday_2359(self):
+        self.schedule(self.DARK_WAKE)
+        cases = {"2026-11-22T05:59": False, "2026-11-22T06:00": True, "2026-11-23T23:59": True,
+                 "2026-11-24T00:00": False, "2026-11-25T07:00": False, "2026-11-21T12:00": False}
+        for now, inside in cases.items():
+            with self.subTest(now=now):
+                r = self.scheduled(now)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertEqual("dark wake" in r.stdout, inside, r.stdout)
+                self.assertEqual(r.stderr, "")
+                if not inside:
+                    self.assertEqual(r.stdout, "")
+
+    def test_outside_the_window_nothing_runs(self):
+        self.schedule()
+        self.env["CFO_CLONE_URL"] = str(self.tmp / self.NO_REPO)
+        r = self.scheduled("2026-11-25T07:00")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        self.assertEqual(self.gh_calls(), [])
+        self.assertFalse(self.vercel_calls.exists())
+
+    def test_monday_belongs_to_the_window_that_began_on_sunday(self):
+        self.schedule()
+        self.write_stamp(self.SUNDAY)
+        self.env["CFO_CLONE_URL"] = str(self.tmp / self.NO_REPO)
+        r = self.scheduled("2026-11-23T10:00")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        self.assertEqual(self.gh_calls(), [])
+
+    def test_the_next_weeks_window_is_not_blocked_by_an_old_stamp(self):
+        self.schedule()
+        self.write_stamp(self.SUNDAY)
+        r = self.scheduled("2026-11-29T07:00")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.stamp.read_text().strip(), "2026-11-29")
+
+    def test_a_missing_pmset_does_not_block_the_run(self):
+        self.schedule()
+        self.env["CFO_PMSET"] = str(self.tmp / "no-pmset")
+        r = self.scheduled()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.stamp.read_text().strip(), self.SUNDAY)
+
+    def test_a_plain_run_ignores_the_window_the_stamp_and_the_wake_state(self):
+        self.schedule(self.DARK_WAKE)
+        self.env["CFO_NOW"] = "2026-11-25T07:00"
+        self.write_stamp(self.SUNDAY)
+        r = self.run_job()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("dark wake", r.stdout)
+        self.assertIn(f"cfo/brief-{this_sunday().isoformat()}", self.branches())
+        self.assertEqual(self.stamp.read_text().strip(), self.SUNDAY, "a plain run never writes the stamp")
 
 
 if __name__ == "__main__":
