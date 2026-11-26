@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.45.0",
+      "date": "2026-11-26",
+      "plugin": "bstack",
+      "version": "0.45.0",
+      "changes": [
+        "New waiting-on-me skill lists everything across your repos that waits on you, in one read-only pass: open `HUMAN_TASKS.md` items with blockers first and what each blocks, `gate` ledger entries with no later `gate-answer` in unsealed runs (worktrees included), open pull requests that are not drafts with their check state, and open questions in `questions.md`. Each item links to its source. Pass the repos, or a folder of repos, every time; `--github OWNER/NAME` adds a repo's pull requests without a clone, and `--json` is for a notifier. A source it cannot read is listed and the exit code is 1."
+      ],
+      "try": "What's waiting on me across ~/code?"
+    },
+    {
       "id": "bstack@0.44.0",
       "date": "2026-11-26",
       "plugin": "bstack",

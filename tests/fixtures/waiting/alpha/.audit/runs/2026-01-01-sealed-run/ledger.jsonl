@@ -1,0 +1,3 @@
+{"actor": {"id": "a", "kind": "agent"}, "data": {}, "evidence": [], "hash": "y", "prev": "x", "run_id": "2026-01-01-sealed-run", "seq": 1, "summary": "charter", "ts": "2026-01-02T10:00:01Z", "type": "charter", "v": 1, "why": "fixture"}
+{"actor": {"id": "a", "kind": "agent"}, "data": {"gate": "spend"}, "evidence": [], "hash": "y", "prev": "x", "run_id": "2026-01-01-sealed-run", "seq": 2, "summary": "spend: budget reached", "ts": "2026-01-02T10:00:02Z", "type": "gate", "v": 1, "why": "fixture"}
+{"actor": {"id": "a", "kind": "agent"}, "data": {}, "evidence": [], "hash": "y", "prev": "x", "run_id": "2026-01-01-sealed-run", "seq": 3, "summary": "sealed", "ts": "2026-01-02T10:00:03Z", "type": "seal", "v": 1, "why": "fixture"}

@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.45.0 (2026-11-26)
+
+- New waiting-on-me skill lists everything across your repos that waits on you, in one read-only pass: open `HUMAN_TASKS.md` items with blockers first and what each blocks, `gate` ledger entries with no later `gate-answer` in unsealed runs (worktrees included), open pull requests that are not drafts with their check state, and open questions in `questions.md`. Each item links to its source. Pass the repos, or a folder of repos, every time; `--github OWNER/NAME` adds a repo's pull requests without a clone, and `--json` is for a notifier. A source it cannot read is listed and the exit code is 1.
+- Try: `What's waiting on me across ~/code?`
+
 ## bstack 0.44.0 (2026-11-26)
 
 - verify-work can now tell when a diff weakens Python tests. `scripts/test_guard.py --base origin/main` compares each changed test file with its copy at the merge base and prints every test deleted (or moved, with where to), and every skip, retry, wider timeout or tolerance, dropped assertion, or exact assertion traded for a weaker one. It runs on unittest and pytest files, reads the working tree or a commit, and exits 0: each line is a question for the author, not a block. agent-kit's own checklist runs it on any diff that touches tests.
