@@ -20,6 +20,8 @@ Each arm also got a 60-word preamble saying where the skill files live, included
 above. A count is the input tokens of a one-word `claude -p` reply on Sonnet with that prompt,
 minus the same call with no prompt (3,407). The principles index in the brief is the generated
 block inside `SKILL.md`, so the full arm is that file alone.
+Main has since changed one line of `SKILL.md` (R45's flag rule, PR 123, 8 more words). The
+eval tested the text before that change.
 
 Cost per run, from each run's `total_cost_usd` (measured): full $0.36 (16 runs), slim $0.38
 (8 runs). The slim prompt is 5,336 tokens shorter, but it is cached after the first turn, so it
