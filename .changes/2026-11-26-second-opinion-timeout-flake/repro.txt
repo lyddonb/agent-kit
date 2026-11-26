@@ -1,0 +1,27 @@
+# At 3af620c (test only), three runs of TimeoutTest:
+ERROR: test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests._red.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed)
+FileNotFoundError: [Errno 2] No such file or directory: 'tmpugrlz1bh/pid'
+Ran 2 tests in 2.371s
+FAILED (errors=1)
+ERROR: test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests._red.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed)
+FileNotFoundError: [Errno 2] No such file or directory: 'tmphfx5m28s/pid'
+Ran 2 tests in 2.250s
+FAILED (errors=1)
+ERROR: test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests._red.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed)
+FileNotFoundError: [Errno 2] No such file or directory: 'tmprgz8vw0r/pid'
+Ran 2 tests in 2.351s
+FAILED (errors=1)
+
+# At 0c83998 (fix), three runs of TimeoutTest:
+test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests.test_second_opinion.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed) ... ok
+test_a_timeout_kills_the_cli_and_what_it_started (tests.test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started) ... ok
+Ran 2 tests in 4.994s
+OK
+test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests.test_second_opinion.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed) ... ok
+test_a_timeout_kills_the_cli_and_what_it_started (tests.test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started) ... ok
+Ran 2 tests in 5.083s
+OK
+test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests.test_second_opinion.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed) ... ok
+test_a_timeout_kills_the_cli_and_what_it_started (tests.test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started) ... ok
+Ran 2 tests in 4.792s
+OK

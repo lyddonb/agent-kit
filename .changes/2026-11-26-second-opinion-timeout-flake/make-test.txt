@@ -1,0 +1,4 @@
+# make test at 0c83998 (check, validate, unit)
+validate: 43 skills in 7 plugins, 88 script commands, 0 errors, 0 warnings
+Ran 1476 tests in 790.029s
+OK (skipped=24)

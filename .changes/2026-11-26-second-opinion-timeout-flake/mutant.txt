@@ -1,0 +1,8 @@
+# Mutant: kill_group calls os.kill(pgid, sig) instead of os.killpg, so only the CLI is signalled.
+# The grandchild keeps the CLI's stdout open, so the run outlives the test's 20s bound.
+ERROR: test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests.test_second_opinion.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed)
+subprocess.TimeoutExpired: Command '[python, -c, READY_GATE, second_opinion.py, ..., --timeout, 1]' timed out after 20 seconds
+ERROR: test_a_timeout_kills_the_cli_and_what_it_started (tests.test_second_opinion.TimeoutTest.test_a_timeout_kills_the_cli_and_what_it_started)
+subprocess.TimeoutExpired: Command '[python, -c, READY_GATE, second_opinion.py, ..., --timeout, 1]' timed out after 20 seconds
+Ran 2 tests in 40.057s
+FAILED (errors=2)
