@@ -1,0 +1,11 @@
+second_opinion.py --reviewer cli:cursor-agent:gpt-5.6-sol-high --prompt-file /tmp/so-prompt.md --cwd . --json
+run from agent-kit main at 5bb37ba, 2026-11-26, by Beau in his terminal
+
+prompt: Review plugins/bstack/skills/beau-mode/references/second-opinion.md. List at most three concrete problems, quoting each line. Do not edit files.
+
+status ok, 85.6 s. Findings, as returned:
+1. second-opinion.md:7 "It never edits files": not guaranteed; plan/ask mode is not a filesystem sandbox, as line 35 admits.
+2. second-opinion.md:32 "python3 scripts/second_opinion.py ...": the relative path needs an undocumented working directory and fails from the repository root.
+3. second-opinion.md:39 "stops the CLI and everything it started": the script kills one process group, so detached processes can survive.
+
+Checked against second_opinion.py: claude_argv passes --permission-mode plan and cursor_argv --mode ask (permission modes, no sandbox); run_cli starts the child with start_new_session=True and calls os.killpg on that group only.
