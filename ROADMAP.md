@@ -115,18 +115,15 @@ evidence would overfit.
 ## P1
 
 ### R11. Cross-model reviewers through other agents' CLIs
-**What:** A `second-opinion` script that runs a review prompt through another installed
-agent CLI (`claude -p`, `cursor-agent -p`, later `codex exec` and `pi -p`) and returns its
-answer, plus a roles-file syntax for it, for example
-`reviewers: {claude-code: [opus, "cli:cursor-agent:gpt-5"]}`. `interrogate`, `reflect` and
-the trail review in `show-me-your-work` would then get reviewers from a different model
-family even inside Claude Code.
-**Why not done:** Deferred by choice in the first build. It needs each CLI signed in on the
-machine and real runs to settle timeouts, output parsing and cost. The roles file already
-takes lists, so adding a `cli:` entry type changes no skill text.
-**Prioritize when:** a review panel inside one tool keeps agreeing with itself, or a
-cross-family review catches something a same-family panel missed. Measure before adding:
-R33 tunes the one reviewer first, and R34's replay is the test of whether a second finds more.
+**Done 2026-11-26** in bstack 0.47.0. The beau-mode skill's `scripts/second_opinion.py` sends one
+prompt, read-only, to `claude` or `cursor-agent` and returns a checked answer or a named failure.
+A roles-file entry `cli:<agent>:<model>` names one, and the roles rules say how to run it. The
+contract is `plugins/bstack/skills/beau-mode/references/second-opinion.md`. It came ahead of its
+own trigger because Beau chose it as the judge route for R42 and R43 (HUMAN_TASKS H17).
+**Still open:** `codex exec` and `pi -p`. Measured 2026-11-26: `codex exec` exits 0 with an empty
+answer when its sign-in fails, so it needs real runs on a signed-in machine first. A
+`cursor-agent` reviewer has the user's rules loaded, and no flag turns that off. No profile sets a
+`cli:` entry yet, so no panel changed.
 
 ### R12. `automate-me`: refine beau-mode from transcripts
 **What:** Port pstack's automate-me. Mine the current project's transcripts (with
@@ -475,8 +472,9 @@ a failing test back to the agent with the failing output.
 ### R33. One tuned reviewer: `REVIEW.md` and rounds that build
 **Done 2026-11-18** in bstack 0.18.0 (pull request 57): `REVIEW.md` at the root of this repo, read
 from the default branch by `interrogate`, review rounds that build on the last one, and a starter
-`REVIEW.md` from `scaffold-product`. R11 (cross-model CLI reviewers) still waits on R34: add a
-reviewer only when a replay shows it finds what the first one misses.
+`REVIEW.md` from `scaffold-product`. R11's script is built, but a `cli:` reviewer on a review
+panel still waits on R34: add a reviewer only when a replay shows it finds what the first one
+misses.
 
 ### R44. Pull request cycle time in the quality books
 **What:** the books say how long a merged pull request was open and where that time went, in
@@ -750,7 +748,7 @@ anything changes. Full analysis: the Agent Kit project's `plans/context-clutter.
 | The curator learns from PR trails, not docs | A line here until lyddonb/curator is in the workspace | curator's roadmap (knowledge factory K2) |
 | Rejections and flags name what misled the agent | R23 (edited in place) | agent-ledger's `rejection` type |
 
-Both evals need a judge model, and Skill ops says none until Beau agrees (H17).
+Both evals need a judge model. Beau allowed one for these two only (H17, 2026-11-26), run through R11.
 
 ## P1
 
@@ -764,7 +762,7 @@ both arm is not worse than trails alone. When step 4 reads a KB, it loads entrie
 by the chosen playbook or by the files the change touches, never by similarity to the task text.
 Change KNOWLEDGE.md's "no skill edit needed" to "needs a passing R42 eval".
 **Where:** `plugins/bstack/skills/beau-mode/SKILL.md` step 4, `docs/KNOWLEDGE.md`.
-**Depends on:** a KB with an MCP interface (R16's trigger), H17.
+**Depends on:** a KB with an MCP interface (R16's trigger), R11, and the judge model H17 leaves open.
 **Playbook:** Eval.
 **Done when:** the eval's reply is in the PR with every arm's scores, and step 4 either loads by
 id or is removed.
@@ -782,12 +780,13 @@ identical runs, so a difference smaller than that noise band counts as none. Ube
 ablation (below) reports wins the same way. If the slim arm holds on every rubric item,
 propose moving playbook-only text out of `SKILL.md`, through R25's cut rules.
 **Where:** `plugins/bstack/skills/beau-mode/**`. Changes nothing until the eval passes.
-**Depends on:** H17.
+**Depends on:** R11, and the judge model H17 leaves open. A `cursor-agent` judge has the user's
+rules loaded, beau-mode among them. Say so in the reply, or judge through a CLI that runs clean.
 **Playbook:** Eval.
 **Done when:** the eval's reply is in a PR with a keep or slim recommendation and the token
 count of each arm.
 **Why not done:** found 2026-11-23. It is the cheapest test of the claim above and needs no KB.
-**Prioritize when:** H17 is answered. Before R13's beau-mode comparison, which can reuse its tasks.
+**Prioritize when:** the judge model is named. Before R13's beau-mode comparison, which can reuse its tasks.
 
 # Knowledge factory
 
