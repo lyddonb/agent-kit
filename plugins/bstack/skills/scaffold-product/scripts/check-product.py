@@ -2,7 +2,7 @@
 """Check that a repo follows the product layout from bstack's scaffold-product skill.
 
 Usage:
-    python3 check-product.py [REPO_DIR] [--receipts RUN_ID [--base REF]]
+    python3 check-product.py [REPO_DIR] [--base REF] [--receipts RUN_ID]
 
 Prints one `file:line: problem` line per problem on stderr and a summary on stdout.
 Exit code 0 when there are no problems, 1 when there are some, 2 on bad usage.
@@ -17,6 +17,12 @@ the criterion's own text is unchanged since that commit, and no source has chang
 (bookkeeping files don't count: .audit/, .changes/, .evidence/, docs/phases/, docs/plans/, docs/DECISIONS.md,
 ROADMAP.md, HUMAN_TASKS.md, IDEAS.md).
 Needs `ledger` on PATH; exit 2 when it, the run folder or REF is missing.
+
+With --base REF, or with --receipts, each box this branch newly checked is also compared with REF.
+A criterion whose `Probe:` text differs from REF's, or that REF doesn't have, was judged by a probe
+written in the same diff that checks it. It prints an `observe: file:line: ...` line on stderr unless
+its item gains a `**Confirmed.**` line it didn't have at REF, saying who accepted the new probe. An
+`observe:` line never changes the exit code. Exit 2 when REF is missing.
 
 The layout (see the skill's references/layout.md):
   AGENTS.md, README.md, ROADMAP.md, HUMAN_TASKS.md, IDEAS.md
@@ -344,6 +350,7 @@ def drafts(repo: Path) -> int:
 
 
 CHECKED_ITEM = re.compile(r"^\s*- \[[xX]\] \*\*([A-Z]\d+)\.\*\*")
+ITEM_CONFIRMED = re.compile(r"\*\*Confirmed\.\*\*")
 ANY_ITEM = re.compile(r"^\s*- (?:\[[ xX]\] )?(?:~~)?\*\*([A-Z]\d+)\.\*\*")
 # What the Product phase playbook edits alongside a ticked box. These are records, not source, so a
 # change to one doesn't make a receipt stale. verify-work's receipt.py has the same list.
@@ -369,9 +376,8 @@ def checked_ids(text: str) -> dict[str, int]:
     return found
 
 
-def criterion_text(text: str, cid: str) -> str | None:
-    """What an item claims: its lines up to the next item, blank line or heading, without the box
-    state and without `Evidence:`, which ticking the box changes."""
+def item_block(text: str, cid: str) -> str | None:
+    """An item's lines up to the next item, blank line or heading, joined on spaces."""
     block: list[str] | None = None
     for l in text.splitlines():
         m = ANY_ITEM.match(l)
@@ -382,20 +388,45 @@ def criterion_text(text: str, cid: str) -> str | None:
             break
         else:
             block.append(l)
+    return None if block is None else " ".join(x.strip() for x in block)
+
+
+def criterion_text(text: str, cid: str) -> str | None:
+    """What an item claims: its block without the box state, `Evidence:` or `**Confirmed.**`, which
+    are written about the claim after it is made."""
+    block = item_block(text, cid)
     if block is None:
         return None
-    claim = re.sub(r"^- \[[ xX]\] ", "- ", " ".join(x.strip() for x in block))
-    return " ".join(EVIDENCE.split(claim, 1)[0].split())
+    claim = re.sub(r"^- \[[ xX]\] ", "- ", block)
+    claim = EVIDENCE.split(claim, 1)[0]
+    return " ".join(ITEM_CONFIRMED.split(claim, 1)[0].split())
+
+
+def probe_text(claim: str) -> str:
+    parts = PROBE.split(claim, 1)
+    return parts[1].strip() if len(parts) == 2 else ""
+
+
+def confirmations(text: str, cid: str) -> set[str]:
+    """Each `**Confirmed.**` statement in an item's block."""
+    block = item_block(text, cid) or ""
+    return {" ".join(part.split()) for part in ITEM_CONFIRMED.split(block)[1:]}
+
+
+def base_specs(repo: Path, base: str) -> dict[str, str]:
+    """Phase id -> that phase's spec text at base. Keyed by phase id, so a renamed spec still matches."""
+    found: dict[str, str] = {}
+    for name in git(repo, "ls-tree", "--name-only", f"{base}:docs/phases").stdout.splitlines():
+        m = PHASE_FILE.match(name)
+        if m:
+            found[m.group(1)] = git(repo, "show", f"{base}:docs/phases/{name}").stdout
+    return found
 
 
 def newly_checked(repo: Path, base: str) -> list[tuple[Path, str, str, int]]:
     """(spec, phase id, item id, line) for each item checked now and not checked in that phase's
     spec at base. Keyed by phase id, not file name, so renaming a spec makes nothing new."""
-    before: set[tuple[str, str]] = set()
-    for name in git(repo, "ls-tree", "--name-only", f"{base}:docs/phases").stdout.splitlines():
-        m = PHASE_FILE.match(name)
-        if m:
-            before |= {(m.group(1), cid) for cid in checked_ids(git(repo, "show", f"{base}:docs/phases/{name}").stdout)}
+    before = {(phase, cid) for phase, text in base_specs(repo, base).items() for cid in checked_ids(text)}
     out = []
     for spec in sorted((repo / "docs/phases").glob("*.md")) if (repo / "docs/phases").is_dir() else []:
         m = PHASE_FILE.match(spec.name)
@@ -452,17 +483,41 @@ def receipt_problems(repo: Path, rel: str, line: int, crit: str, data: dict | No
     return out
 
 
+def require_base(repo: Path, base: str) -> None:
+    if git(repo, "rev-parse", "--git-dir").returncode != 0:
+        raise UsageError(f"{repo} is not inside a git repo; --base reads git history")
+    if git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode != 0:
+        raise UsageError(f"base ref {base} does not exist here (fetch it, or pass --base)")
+
+
+def probe_changes(repo: Path, base: str) -> list[str]:
+    """Observations for newly checked boxes whose probe this branch wrote, unless a person confirmed it."""
+    before = base_specs(repo, base)
+    out = []
+    for spec, phase, cid, line in newly_checked(repo, base):
+        rel = f"docs/phases/{spec.name}"
+        now = spec.read_text(encoding="utf-8", errors="replace")
+        then = before.get(phase, "")
+        old = criterion_text(then, cid)
+        if old is not None and probe_text(old) == probe_text(criterion_text(now, cid) or ""):
+            continue
+        if confirmations(now, cid) - confirmations(then, cid):
+            continue
+        what = (f"{phase}-{cid} is new in this diff and checked in it" if old is None
+                else f"{phase}-{cid}'s Probe: changed in the diff that checks it")
+        out.append(f"{rel}:{line}: {what}; the change judged itself. Add a `**Confirmed.**` line to the item "
+                   f"saying who accepted the probe, or check the box in a later PR")
+    return out
+
+
 def check_receipts(repo: Path, run_id: str, base: str) -> tuple[list[str], int, int]:
     """Problems for newly checked boxes without a current receipt, how many are new, how many backed."""
     if shutil.which("ledger") is None:
         raise UsageError("`ledger` is not on PATH; --receipts needs agent-ledger")
-    if git(repo, "rev-parse", "--git-dir").returncode != 0:
-        raise UsageError(f"{repo} is not inside a git repo; --receipts reads git history")
+    require_base(repo, base)
     run_dir = repo / ".audit/runs" / run_id
     if not (run_dir / "ledger.jsonl").is_file():
         raise UsageError(f"no ledger for run {run_id} at .audit/runs/{run_id}/ledger.jsonl")
-    if git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode != 0:
-        raise UsageError(f"base ref {base} does not exist here (fetch it, or pass --base)")
     new = newly_checked(repo, base)
     if subprocess.run(["ledger", "verify", f".audit/runs/{run_id}"], cwd=repo, capture_output=True).returncode != 0:
         return ["the run's ledger fails verify"], len(new), 0
@@ -476,8 +531,8 @@ def check_receipts(repo: Path, run_id: str, base: str) -> tuple[list[str], int, 
     return problems, len(new), backed
 
 
-def parse(argv: list[str]) -> tuple[str, str | None, str]:
-    """(repo dir, receipts run id, base ref), or UsageError."""
+def parse(argv: list[str]) -> tuple[str, str | None, str | None]:
+    """(repo dir, receipts run id, base ref or None when neither flag is given), or UsageError."""
     positional: list[str] = []
     opts: dict[str, str] = {}
     it = iter(argv[1:])
@@ -493,9 +548,8 @@ def parse(argv: list[str]) -> tuple[str, str | None, str]:
             positional.append(a)
     if len(positional) > 1:
         raise UsageError("")
-    if "--base" in opts and "--receipts" not in opts:
-        raise UsageError("--base only goes with --receipts")
-    return (positional[0] if positional else "."), opts.get("--receipts"), opts.get("--base", "origin/main")
+    base = opts.get("--base", "origin/main" if "--receipts" in opts else None)
+    return (positional[0] if positional else "."), opts.get("--receipts"), base
 
 
 def main(argv: list[str]) -> int:
@@ -510,20 +564,27 @@ def main(argv: list[str]) -> int:
         return 2
     problems = check(repo)
     receipt_line = ""
-    if run_id is not None:
-        try:
+    observed: list[str] = []
+    try:
+        if base is not None:
+            require_base(repo, base)
+            observed = probe_changes(repo, base)
+        if run_id is not None:
             more, new, backed = check_receipts(repo, run_id, base)
-        except UsageError as e:
-            print(f"check-product: {e}", file=sys.stderr)
-            return 2
-        problems += more
-        receipt_line = f", receipts: {new} newly checked, {backed} backed"
+            problems += more
+            receipt_line = f", receipts: {new} newly checked, {backed} backed"
+    except UsageError as e:
+        print(f"check-product: {e}", file=sys.stderr)
+        return 2
     for p in problems:
         print(p, file=sys.stderr)
+    for o in observed:
+        print(f"observe: {o}", file=sys.stderr)
     noted = notes(repo)
     for n in noted:
         print(f"note: {n}", file=sys.stderr)
     note_line = f", {len(noted)} note(s)" if noted else ""
+    note_line += f", {len(observed)} self-judged probe(s) observed" if observed else ""
     print(f"check-product: {repo.name}: {len(problems)} problem(s), {drafts(repo)} draft marker(s) awaiting confirmation"
           f"{note_line}{receipt_line}")
     return 1 if problems else 0
