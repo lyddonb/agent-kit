@@ -1,0 +1,38 @@
+Live runs of second_opinion.py on 2026-11-26, at b369b16's script, from the worktree root.
+
+## prompt
+You are reviewing a documentation file in this repository: plugins/bstack/skills/beau-mode/references/second-opinion.md.
+Read it, and read plugins/bstack/snippets/roles.md. List at most three concrete problems: a statement that is wrong, two rules that conflict, or a step an agent could not follow as written. For each, quote the line and say why. If you find none, say "No problems found." Do not edit any file.
+
+## cursor
+{"reviewer": "cli:cursor-agent:gpt-5.6-sol-high", "agent": "cursor-agent", "model": "gpt-5.6-sol-high", "status": "ok", "seconds": 96.3, "cost_usd": null, "detail": ""}
+I’ll apply the repository’s beau-mode review guidance, then check the two documents strictly for concrete, actionable contradictions or unusable steps.- `second-opinion.md:35–36`: “`--cwd DIR` is … what it can read… it sees only the prompt.”  
+  `cwd` only changes the process’s working directory; it is not a filesystem sandbox. The same document also says Cursor loads user rules and skills, so “only the prompt” directly contradicts line 24.
+
+## claude
+{"reviewer": "cli:claude:sonnet", "agent": "claude", "model": "sonnet", "status": "ok", "seconds": 20.3, "cost_usd": 0.0818078, "detail": ""}
+I found two problems. Both are minor, and neither is a wrong statement.
+
+1. **`roles.md`, line 5**: "run `python3 ../beau-mode/scripts/second_opinion.py --reviewer ENTRY --prompt-file FILE --json` from this skill's folder"
+   - This snippet is shared across skills, so "this skill's folder" depends on where it is pasted. The `../beau-mode/` path only resolves from a sibling folder under `skills/`.
+   - `second-opinion.md` (line 32) runs `scripts/second_opinion.py` from beau-mode itself. The two docs give different invocation paths, and nothing says which to use.
+   - The line also doesn't say where to write `FILE`, so the agent has to pick a location on its own.
+
+2. **`roles.md`, line 5**: "A status other than `ok` means that reviewer gave no answer: say which status in the reply"
+   - `second-opinion.md` (line 58) says an unknown agent or malformed spec exits 2 with no result. With `--json` there is then no object and no `status` field to report.
+   - The `roles.md` step has no instruction for that case. An agent following it as written can't name a status, so it doesn't know whether to fall back to the current model.
+
+I also checked `second_opinion.py` with a read-only grep. The exit codes, the `--timeout` default of 600 and the flags in the `second-opinion.md` table match the code. No files were edited.
+
+## timeout
+{"reviewer": "cli:cursor-agent:gpt-5.3-codex-low", "agent": "cursor-agent", "model": "gpt-5.3-codex-low", "status": "timeout", "seconds": 3.1, "cost_usd": null, "detail": "killed after 3s"}
+
+
+## missing (PATH=/usr/bin:/bin)
+{"reviewer": "cli:claude:sonnet", "status": "missing", "detail": "claude is not on PATH"} exit 1
+
+## unknown agent
+second_opinion.py: error: unknown agent 'codex': want one of claude, cursor-agent  exit 2
+
+## after the timeout
+pgrep -fl 'cursor-agent.*gpt-5.3-codex-low' 3s later: no process

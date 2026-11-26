@@ -1,0 +1,7 @@
+roles.md with --json changed to --jsonx, then make gen validate:
+error:   plugins/bstack/snippets/roles.md:5: passes --jsonx to `second_opinion.py`, which does not accept it there (it accepts --cwd, --help, --json, --list, --prompt-file, --reviewer, --timeout)
+validate: 43 skills in 7 plugins, 87 script commands, 1 errors, 0 warnings
+make: *** [validate] Error 1
+
+restored:
+validate: 43 skills in 7 plugins, 87 script commands, 0 errors, 0 warnings
