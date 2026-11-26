@@ -3,7 +3,8 @@
 # books, and hand the rows to the weekly brief PR.
 #
 # The scheduled cloud run that writes the brief can't read ~/.claude/projects, and the Vercel CLI is
-# logged in only here, so this job runs on the Mac (launchd, Sundays before the cloud run). It pushes
+# logged in only here, so this job runs on the Mac (launchd, hourly from Sunday 06:00 until it
+# succeeds once, before the cloud run). It pushes
 # its ledger rows to the open brief PR's branch, or opens a brief PR on a new cfo/brief-YYYY-MM-DD
 # branch. The cloud run already adds its commit to an open brief PR, so each week still ends in one
 # PR. It never pushes to main, merges or force-pushes.
@@ -15,7 +16,8 @@
 #
 # Usage:
 #   weekly-claude-code.sh --install | --uninstall | --status | --run-now   # manage the launchd agent
-#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--agentfiles-lock FILE] [--dry-run]   # what the agent runs
+#   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--agentfiles-lock FILE] [--dry-run]   # one run
+#   weekly-claude-code.sh --scheduled [same options]   # what the agent runs every hour
 #   weekly-claude-code.sh [--repo OWNER/NAME] [--quality-repo OWNER/NAME] [--agentfiles-lock FILE] --print-plist
 # --repo defaults to the GitHub remote of the books checkout in $CFO_BOOKS.
 # --quality-repo defaults to the GitHub remote of the checkout in $QUALITY_BOOKS; with neither, the
@@ -24,11 +26,18 @@
 # writes the path into the agent, whose environment has neither variable. Without a lock, versions
 # are empty.
 # The quality books need books/skill-uses.csv (header only is fine).
+# --scheduled runs only from Sunday 06:00 to Monday 23:59 in $CFO_TZ, and only until one run of that
+# window has finished without a failure (its Sunday's date is kept in a stamp file). It skips a dark
+# wake, when the Mac is briefly awake with no display and the network may drop, and the next hour tries
+# again. A failed run leaves no stamp, so the next hour retries it. Outside those cases it prints nothing.
 #
 # Needs git, gh (logged in) and uv; Vercel billing also needs the vercel CLI, logged in (without it,
 # that part is skipped). Test hooks: CFO_CLONE_URL (clone from here instead of GitHub),
 # CFO_LOGS (Claude Code logs dir), CFO_CLAUDE_SETTINGS (settings file --install edits), CFO_JOB_PATH (the agent's PATH), CFO_PYTHON (a Python 3.10+ instead of uv), CFO_TZ (default America/Denver),
-# CFO_UTC_TODAY (the UTC date that picks the Vercel week and closes the skill-use weeks). Skill-use
+# CFO_UTC_TODAY (the UTC date that picks the Vercel week and closes the skill-use weeks). --scheduled:
+# CFO_NOW (the local date-time to use as now, like 2026-11-22T07:00), CFO_STATE_DIR (where the stamp
+# cfo-claude-code.done lives; default ~/Library/Application Support/agent-kit), CFO_PMSET (the pmset
+# to ask; default /usr/bin/pmset). Skill-use
 # pass: QUALITY_BOOKS (checkout whose remote --quality-repo defaults to), QUALITY_CLONE_URL (clone
 # the quality books from here), QUALITY_PY (quality.py; default: bstack's, next to this plugin),
 # CFO_CURSOR_LOGS (Cursor logs dir).
@@ -44,6 +53,7 @@ QUALITY_REPO=""
 LOCK=""
 DRY_RUN=0
 PRINT_PLIST=0
+SCHEDULED=0
 
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOGFILE="$HOME/Library/Logs/cfo-claude-code.log"
@@ -59,6 +69,7 @@ while [ $# -gt 0 ]; do
     --agentfiles-lock) LOCK=${2:-}; [ -n "$LOCK" ] || usage; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --print-plist) PRINT_PLIST=1; shift ;;
+    --scheduled) SCHEDULED=1; shift ;;
     --install) ACTION=install; shift ;;
     --uninstall) ACTION=uninstall; shift ;;
     --status) ACTION=status; shift ;;
@@ -162,10 +173,10 @@ if [ "$PRINT_PLIST" = 1 ]; then
 <dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>$SELF</string><string>--repo</string><string>$REPO</string>$([ ${#QUALITY_ARGS[@]} = 0 ] || printf '<string>%s</string>' "${QUALITY_ARGS[@]}")</array>
-  <!-- Sundays 06:00 local time, before the cloud brief. A Mac asleep at 06:00 runs it on wake. -->
+  <array><string>/bin/bash</string><string>$SELF</string><string>--repo</string><string>$REPO</string>$([ ${#QUALITY_ARGS[@]} = 0 ] || printf '<string>%s</string>' "${QUALITY_ARGS[@]}")<string>--scheduled</string></array>
+  <!-- Every hour. The scheduled flag keeps the run to Sunday 06:00 to Monday 23:59 and to once a week. -->
   <key>StartCalendarInterval</key>
-  <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+  <dict><key>Minute</key><integer>0</integer></dict>
   <key>EnvironmentVariables</key>
   <dict><key>PATH</key><string>$JOB_PATH</string></dict>
   <key>StandardOutPath</key><string>$LOGFILE</string>
@@ -198,6 +209,28 @@ fail() {
 }
 trap 'fail "line $LINENO exited $?"' ERR
 py() { "${PY[@]}" -c "$@"; }
+
+STAMP="${CFO_STATE_DIR:-$HOME/Library/Application Support/agent-kit}/cfo-claude-code.done"
+WINDOW=""
+if [ "$SCHEDULED" = 1 ]; then
+  WINDOW=$(py '
+import datetime, os, sys
+from zoneinfo import ZoneInfo
+now = os.environ.get("CFO_NOW")
+now = datetime.datetime.fromisoformat(now) if now else datetime.datetime.now(ZoneInfo(sys.argv[1]))
+day = now.date()
+if day.weekday() == 6 and now.hour >= 6:
+    print(day)
+elif day.weekday() == 0:
+    print(day - datetime.timedelta(days=1))' "$TZNAME")
+  [ -n "$WINDOW" ] || exit 0
+  [ "$(cat "$STAMP" 2>/dev/null || true)" != "$WINDOW" ] || exit 0
+  CAPS=$("${CFO_PMSET:-/usr/bin/pmset}" -g systemstate 2>/dev/null | sed -n 's/^.*Current System Capabilities are: *//p' | head -n 1) || CAPS=""
+  case " $CAPS " in
+    "  "|*" Graphics "*) ;;
+    *) echo "cfo-claude-code: dark wake ($CAPS); trying again next hour"; exit 0 ;;
+  esac
+fi
 echo "cfo-claude-code: $(date -u +%FT%TZ) repo $REPO dry_run $DRY_RUN"
 
 # Older logs may already be partly deleted by Claude Code's cleanup, and a partial week would be
@@ -517,3 +550,7 @@ fi
 
 run_skills_pass
 report_problems
+if [ "$SCHEDULED" = 1 ]; then
+  mkdir -p "$(dirname "$STAMP")"
+  printf '%s\n' "$WINDOW" >"$STAMP"
+fi
