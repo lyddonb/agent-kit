@@ -1,0 +1,7 @@
+$ comments.py --base origin/main
+comments: the diff adds 0 to Python files
+exit 0
+
+$ test_guard.py --base origin/main --head HEAD
+test-guard: 0 findings in 0 test files
+exit 0

@@ -572,7 +572,7 @@ The work spans four repos. Each item has one full entry, in the repo where its c
 | The prune brief covers skills | R41 | The profile half: agentfiles R18. The brief section: quality phase 1c |
 | Cuts are proposed by ablation | R25 (edited in place) | The always-on block is agentfiles' |
 | Upstream skills pass the same lint | agentfiles R17 | Uses the lint above (was R39) |
-| Tokens per skill use | R49 | The book's new columns: quality |
+| Tokens per skill use | R49. Done 2026-11-26: `book-skills` books tokens per use | The book's new columns: quality phase 1g |
 
 **How to work these.** The rules under Verification loops apply: one PR per entry or unit, its
 own worktree and branch, stop at merge-ready, and a new check is proven to fail on a real past
@@ -722,6 +722,16 @@ match the transcripts' usage by hand.
 its cuts were judged on (one skill 46% cheaper after a change, another unchanged).
 **Prioritize when:** now. It costs one more read in a pass that already runs, and R41, R25 and
 R43 all assume a cost column.
+**Done 2026-11-26** in bstack 0.46.0: three token columns on `books/skill-uses.csv`, and
+`tokens_per_use` per skill in `summary --json`. A use's tokens are the usage of the model
+responses in the window the counts cover, each response once (Claude Code repeats its usage on
+every record it splits a response into) and the response that made the load left out. A book on
+the earlier header keeps working, and `book-skills` appends rows to it in that shape with no
+tokens. `migrate-skills` moves it to the new header once the books' CI pin has this version, and
+the rows booked before keep empty token cells. A run over four weeks of real transcripts into a
+scratch book filled the columns on every Claude Code row, `check` passed, a second run changed
+nothing, and five random rows matched a recount from the raw records. Its change record has the
+counts.
 
 # Context loading
 

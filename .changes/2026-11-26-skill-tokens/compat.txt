@@ -1,0 +1,18 @@
+The old and new formats side by side, on scratch clones of the books, with skill-uses.csv cut
+to an earlier prefix and committed as the base so the run has rows to add. Results only.
+
+New book-skills (0a7f57a) on the legacy header:
+  booked rows, and said "books/skill-uses.csv has the header without token columns, so no tokens
+  were booked; run migrate-skills to add them"
+  every line has the legacy 11 columns
+  the file is byte-identical (cmp) to what book-skills at the books' pin 45274f4 writes from the
+  same base and the same transcripts
+
+check --base on that file:        45274f4 ok, 0 problems   0a7f57a ok, 0 problems
+summary --json on that file:      identical sha1 under 45274f4 and 0a7f57a
+
+migrate-skills at 0a7f57a on it, then check --base (the legacy base commit):
+  0a7f57a: ok, 0 problems
+  second migrate-skills: "already has the token columns; nothing to do"
+  45274f4: fails, starting "row has 14 columns, expected 11"
+  So the header flip must wait for the books' pin to reach this version.

@@ -14,6 +14,7 @@ Usage:
     uv run --python 3.12 quality.py leak-check BOOKS_DIR FILE [FILE ...] [--json]
     uv run --python 3.12 quality.py book-skills BOOKS_DIR [--claude-logs DIR] [--cursor-logs DIR] [--lock FILE]
                                                 [--since YYYY-MM-DD] [--dry-run] [--json]
+    uv run --python 3.12 quality.py migrate-skills BOOKS_DIR [--dry-run]
 
 `record-junit` runs COMMAND (pytest, with `--junitxml=FILE`) and writes the same record from the XML file it left.
 `record` runs `python -m unittest discover -s TESTS_DIR` and writes what happened to FILE as
@@ -201,14 +202,19 @@ neither skipped nor timed, and a `runs.csv` row (any week); `outside_suite_ms` i
 minus suite wall time, each floored at 0, and `runs_floored` says how many runs the floor acted on. See SKILL.md for
 each key.
 
-Skill use. books/skill-uses.csv (`week,skill,source,version,tool,how,calls,searches,errors,verdict,use`) has one
-row per skill invocation and is append only. It is optional until created with its header: without the file every
+Skill use. books/skill-uses.csv (`week,skill,source,version,tool,how,calls,searches,errors,verdict,use,input_tokens,
+output_tokens,cache_write_tokens`) has one row per skill invocation and is append only. A file with the earlier header,
+the same without the three token columns, is valid too: its rows read with empty token cells and `book-skills`
+appends rows in its shape; `migrate-skills` moves it to the full header, adding an empty cell per token column to
+every row, which `check --base` accepts and no other change to an old row. It is optional until created with its header: without the file every
 command prints, returns and writes what it did before, and `book-skills` exits 2. With it, `check` holds each row to
 `SKILL_RULES` (a real ISO week; `skill` matching [A-Za-z0-9][A-Za-z0-9._-]{0,99}; `tool` claude-code or cursor;
 `verdict` unjudged; `use` 16 hex and unique; a claude-code row with `how` one of typed, named, auto, subagent and
-`calls` at most 20 with `searches` and `errors` each at most `calls`; a cursor row with those four cells empty), and
-`summary --json` gains `skills` for the week: `uses`, `window` (20) and `by_skill`, most used first, each with
-`skill`, `source`, `uses`, `by_how`, `by_tool`, the sums `calls`, `searches` and `errors`, and `unjudged`.
+`calls` at most 20 with `searches` and `errors` each at most `calls`, and the three token cells all empty or all
+non-negative integers; a cursor row with those seven cells empty), and `summary --json` gains `skills` for the week:
+`uses`, `window` (20) and `by_skill`, most used first, each with `skill`, `source`, `uses`, `by_how`, `by_tool`, the
+sums `calls`, `searches` and `errors`, and `unjudged`, and, when the file has the token columns, the token sums,
+`token_uses` and `tokens_per_use` (see `_skill_tokens`).
 
 `book-skills` reads this machine's agent transcripts and appends the uses it has not booked. It runs on the machine
 that has the transcripts, never in CI. A Claude Code use is a `Skill` tool call, a slash command followed by the record
@@ -218,7 +224,9 @@ being edited. Only `user` and `assistant` records are read. `how` is `subagent` 
 command whose record has `origin.kind` human or no origin at all (those are counted and reported); `named` when the
 last text a user record carried names the skill (see `names_skill`), or for a slash command another session sent;
 otherwise `auto`. `calls`, `searches` (ToolSearch calls) and `errors` (`is_error` true) count the tool results that
-follow the load in the same chain, up to the next turn a human typed or 20 results. A use that sits in two files (a
+follow the load in the same chain, up to the next turn a human typed or 20 results; the token cells sum the usage
+of the model responses in that span (input, output and cache-write tokens, each response once by its message id,
+the one that made the load left out). A use that sits in two files (a
 resumed or forked session) is booked once, with its longest window. Cursor's only trace is a read of an installed
 SKILL.md: one row per transcript and skill, in the week of the file's modification time, with no `how` and no counts.
 Only closed ISO weeks (UTC) are booked, since a session still running has a window still growing; `--since` leaves
@@ -311,12 +319,15 @@ SCHEMAS = {RUNS: RUNS_SCHEMA, FAILURES: FAILURES_SCHEMA, WEEKLY: WEEKLY_SCHEMA, 
 # they are not adopted and every command behaves as it did before they existed; exactly one is a check problem.
 REPOS_SCHEMA = ("seen", "repo", "github", "visibility")
 VISIBILITIES = ("public", "private", "internal", "unknown")
-SKILLS_SCHEMA = ("week", "skill", "source", "version", "tool", "how", "calls", "searches", "errors", "verdict", "use")
+SKILLS_LEGACY_SCHEMA = ("week", "skill", "source", "version", "tool", "how", "calls", "searches", "errors", "verdict", "use")
+SKILL_TOKENS = ("input_tokens", "output_tokens", "cache_write_tokens")
+SKILLS_SCHEMA = SKILLS_LEGACY_SCHEMA + SKILL_TOKENS
 VOLUME_SCHEMA = ("week", "repo", "sha", "rule", "test_files", "test_lines", "source_files", "source_lines", "evidence")
 PULLS_SCHEMA = ("merged", "repo", "number", "opened", "ready", "head_ci_done", "ci_ms", "wait_ms", "shas", "checks",
                 "force_pushes", "evidence")
 OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA, REPOS: REPOS_SCHEMA,
                     VOLUME: VOLUME_SCHEMA, PULLS: PULLS_SCHEMA}
+LEGACY_SCHEMAS = {SKILLS: SKILLS_LEGACY_SCHEMA}
 SKILL_TOOLS = ("claude-code", "cursor")
 SKILL_HOWS = ("typed", "named", "auto", "subagent")
 SKILL_VERDICTS = ("unjudged",)  # no rule fills a verdict yet
@@ -974,6 +985,7 @@ class Table:
     rows: list[Row] = field(default_factory=list)
     data: bytes = b""
     present: bool = False  # the file exists (an optional file that is left out has no header and no rows)
+    legacy: bool = False
     bad_format: bool = False  # bytes that cannot be compared line by line (already reported)
 
 
@@ -1030,10 +1042,12 @@ def _parse_table(rel: str, data: bytes | OSError | None, problems: list[Problem]
         start = before + 1  # a quoted field may span lines; the row is reported at its first
         if table.header is None:
             table.header = record
-        elif len(record) != len(schema):
-            problems.append(Problem(rel, start, f"row has {len(record)} columns, expected {len(schema)}"))
+            table.legacy = tuple(record) == LEGACY_SCHEMAS.get(rel)
+            shape = LEGACY_SCHEMAS[rel] if table.legacy else schema
+        elif len(record) != len(shape):
+            problems.append(Problem(rel, start, f"row has {len(record)} columns, expected {len(shape)}"))
         else:
-            table.rows.append(Row(start, dict(zip(schema, record))))
+            table.rows.append(Row(start, {**dict.fromkeys(schema, ""), **dict(zip(shape, record))}))
     if table.header is None:
         problems.append(Problem(rel, 1, "empty file; expected the header " + ",".join(schema)))
     return table
@@ -1440,11 +1454,12 @@ def _skill_cells_rule(cells: dict) -> Iterator[str]:
 
 
 def _skill_window_rule(cells: dict) -> Iterator[str]:
-    """Cursor records no tool results, so its rows carry a use and nothing else. A Claude Code row has all four."""
-    measured = ("how",) + _SKILL_COUNTS
+    """Cursor records no tool results and no usage, so its rows carry a use and nothing else. A Claude Code row has
+    `how` and the three counts, and all three token cells or none: a row booked before the token columns has none."""
+    measured = ("how",) + _SKILL_COUNTS + SKILL_TOKENS
     if cells["tool"] == "cursor":
         if any(cells[name] for name in measured):
-            yield "a cursor row has empty how, calls, searches and errors"
+            yield "a cursor row has empty how, calls, searches, errors and token cells"
         return
     if cells["tool"] != "claude-code":
         return
@@ -1455,6 +1470,8 @@ def _skill_window_rule(cells: dict) -> Iterator[str]:
         yield "calls, searches and errors must be non-negative integers"
     elif counts[0] > SKILL_WINDOW or max(counts[1:]) > counts[0]:
         yield f"calls is at most {SKILL_WINDOW}, and searches and errors are each at most calls"
+    if any(cells[name] for name in SKILL_TOKENS) and _counts_ok(cells, SKILL_TOKENS) is None:
+        yield "input_tokens, output_tokens and cache_write_tokens must be all empty or all non-negative integers"
 
 
 SKILL_RULES: dict[str, Rule] = {"week": _week_rule, "cells": _skill_cells_rule, "window": _skill_window_rule}
@@ -1472,7 +1489,7 @@ def check_load(books: Books) -> Iterator[Problem]:
 def check_header(books: Books) -> Iterator[Problem]:
     for rel, schema in TABLE_SCHEMAS.items():
         header = books.tables[rel].header
-        if header is not None and tuple(header) != schema:
+        if header is not None and tuple(header) != schema and not books.tables[rel].legacy:
             yield Problem(rel, 1, "header does not match the schema: expected " + ",".join(schema))
 
 
@@ -1730,11 +1747,30 @@ def _append_only(books: Books, rel: str) -> Iterator[Problem]:
     if books.tables[rel].bad_format:
         return  # load already said why; comparing bytes would only repeat it on every line
     old, new = _lines(shown.stdout), _lines(books.tables[rel].data)
+    migrated = _migration(rel, old, new)
+    if migrated:
+        old = migrated
     for i, line in enumerate(old):
         if i >= len(new):
             yield Problem(rel, i + 1, f"removed since {ref}")
         elif new[i] != line:
-            yield Problem(rel, i + 1, f"changed since {ref}")
+            yield Problem(rel, i + 1, f"changed since {ref}" + (" (beyond adding empty cells for the new columns)" if migrated else ""))
+
+
+def _migrated_lines(rel: str, old: list[bytes]) -> list[bytes]:
+    """The lines of a file with the legacy header once `migrate-skills` has moved it to the full schema: the new
+    header, then each row with one empty cell per added column. No row of these books holds a newline."""
+    pad = b"," * (len(TABLE_SCHEMAS[rel]) - len(LEGACY_SCHEMAS[rel]))
+    return [",".join(TABLE_SCHEMAS[rel]).encode()] + [line + pad for line in old[1:]]
+
+
+def _migration(rel: str, old: list[bytes], new: list[bytes]) -> list[bytes] | None:
+    """What the base's lines must have become, when the base has the legacy header and the file now has the full one."""
+    if rel not in LEGACY_SCHEMAS or not old or not new:
+        return None
+    if old[0] != ",".join(LEGACY_SCHEMAS[rel]).encode() or new[0] != ",".join(TABLE_SCHEMAS[rel]).encode():
+        return None
+    return _migrated_lines(rel, old)
 
 
 CHECKS: tuple[tuple[str, Check], ...] = (
@@ -1863,6 +1899,9 @@ class SkillUseRow(NamedTuple):
     errors: int | None
     verdict: str
     use: str
+    input_tokens: int | None
+    output_tokens: int | None
+    cache_write_tokens: int | None
 
 
 class VolumeRow(NamedTuple):
@@ -3074,7 +3113,7 @@ def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[Weekl
               kinds: Iterable[KindRow] = (), jobs: list[JobRow] | None = None,
               steps: list[StepRow] | None = None, skill_uses: list[SkillUseRow] | None = None,
               private: set[str] | None = None, public_only: bool = False, volume: list[VolumeRow] | None = None,
-              pulls: list[PullRow] | None = None) -> dict:
+              pulls: list[PullRow] | None = None, skill_tokens: bool = False) -> dict:
     """The week's numbers as plain data: integers, strings, lists and dicts, nothing else. `jobs` and `steps` are
     given (possibly empty) only for adopted job books; each listed repo then gets a `lifecycle` and `recorded`, and a
     repo with runs in the job books and no `runs.csv` row that week is listed too, as an unrecorded one. `skill_uses` is
@@ -3109,15 +3148,26 @@ def summarize(runs: list[RunRow], failures: list[FailureRow], weekly: list[Weekl
         "week": week,
     }
     if skill_uses is not None:
-        result["skills"] = _skills_summary([u for u in skill_uses if u.week == week])
+        result["skills"] = _skills_summary([u for u in skill_uses if u.week == week], skill_tokens)
     if public_only:
         result["public_only"] = True
     return result
 
 
-def _skills_summary(uses: list[SkillUseRow]) -> dict:
+def _skill_tokens(rows: list[SkillUseRow]) -> dict:
+    """Token sums over the rows that measured them, and their mean per such row, rounded to a whole token (None when
+    no row did). Cursor rows and rows booked before the token columns are left out of both."""
+    measured = [r for r in rows if r.input_tokens is not None]
+    sums = {name: sum(getattr(r, name) for r in measured) for name in SKILL_TOKENS}
+    total = sum(sums.values())
+    return {**sums, "token_uses": len(measured),
+            "tokens_per_use": (2 * total + len(measured)) // (2 * len(measured)) if measured else None}
+
+
+def _skills_summary(uses: list[SkillUseRow], tokens: bool = False) -> dict:
     """Uses per skill in one week, most used first. `calls`, `searches` and `errors` are sums over the Claude Code
-    rows (a Cursor row has none), each row counting at most the first SKILL_WINDOW tool results after the load."""
+    rows (a Cursor row has none), each row counting at most the first SKILL_WINDOW tool results after the load. With
+    `tokens` (the book has the token columns), each skill also has `_skill_tokens`."""
     groups: dict[tuple[str, str], list[SkillUseRow]] = {}
     for u in uses:
         groups.setdefault((u.skill, u.source), []).append(u)
@@ -3126,7 +3176,7 @@ def _skills_summary(uses: list[SkillUseRow]) -> dict:
                  "by_tool": {tool: sum(r.tool == tool for r in rows) for tool in SKILL_TOOLS},
                  "calls": sum(r.calls or 0 for r in rows), "searches": sum(r.searches or 0 for r in rows),
                  "errors": sum(r.errors or 0 for r in rows),
-                 "unjudged": sum(r.verdict == "unjudged" for r in rows)}
+                 "unjudged": sum(r.verdict == "unjudged" for r in rows), **(_skill_tokens(rows) if tokens else {})}
                 for (skill, source), rows in groups.items()]
     by_skill.sort(key=lambda s: (-s["uses"], s["skill"], s["source"]))
     return {"by_skill": by_skill, "uses": len(uses), "window": SKILL_WINDOW}
@@ -3232,6 +3282,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
     step_rows = _typed_rows(books, STEPS, StepRow) if adopted(books) else None
     failures, weekly, kinds = _typed_rows(books, FAILURES, FailureRow), _typed_rows(books, WEEKLY, WeeklyRow), _typed_rows(books, KINDS, KindRow)
     skills = _typed_rows(books, SKILLS, SkillUseRow) if books.tables[SKILLS].present else None
+    skill_tokens = books.tables[SKILLS].present and not books.tables[SKILLS].legacy
     private = private_repos(books) if books.tables[REPOS].present else None
     volume = _typed_rows(books, VOLUME, VolumeRow) if books.tables[VOLUME].present else None
     pulls = _typed_rows(books, PULLS, PullRow) if books.tables[PULLS].present else None
@@ -3242,7 +3293,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
         skills = None
         volume = public(volume) if volume is not None else None
         pulls = public(pulls) if pulls is not None else None
-    result = summarize(runs, failures, weekly, week, kinds, job_rows, step_rows, skills, private, args.public_only, volume, pulls)
+    result = summarize(runs, failures, weekly, week, kinds, job_rows, step_rows, skills, private, args.public_only, volume, pulls,
+                       skill_tokens)
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_summary(result))
     return 0
 
@@ -5776,6 +5828,7 @@ class SkillUse(NamedTuple):
     errors: int | None
     key: str
     no_origin: bool = False  # a slash command in a record with no `origin`: booked as typed, and counted
+    tokens: tuple[int, int, int] | None = None
 
 
 def _parts(record: dict, kind: str) -> list[dict]:
@@ -5881,12 +5934,39 @@ def _base_dir(record: dict, tool_id: str | None) -> str | None:
     return text.split("\n", 1)[0][len(_SKILL_BASE):].strip() if text.startswith(_SKILL_BASE) else None
 
 
-def _window(records: list[dict], start: int, chain: str, own_id: str | None, tool_names: dict[str, str]) -> tuple[int, int, int]:
-    """(calls, searches, errors) over the tool results that follow a load in the same chain, up to the next turn a
-    human typed or SKILL_WINDOW results, whichever comes first. The load's own result is not counted."""
+_USAGE = ("input_tokens", "output_tokens", "cache_creation_input_tokens")
+
+
+def _message_key(record: dict) -> str | None:
+    """One model response is split over several assistant records that repeat its id and its usage."""
+    key = record["message"].get("id")
+    return key if isinstance(key, str) else record.get("uuid") if isinstance(record.get("uuid"), str) else None
+
+
+def _usage(record: dict) -> tuple[int, int, int]:
+    usage = record["message"].get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    return tuple(v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0 for v in (usage.get(k) for k in _USAGE))
+
+
+def _window(records: list[dict], start: int, chain: str, own_id: str | None,
+            tool_names: dict[str, str]) -> tuple[int, int, int, tuple[int, int, int]]:
+    """(calls, searches, errors, tokens) over what follows a load in the same chain, up to the next turn a human
+    typed or SKILL_WINDOW tool results, whichever comes first. The counts are over the tool results; the load's own
+    result is not counted. The tokens are the usage of the model responses in the same span, each response once and
+    the one that made the load left out: the cost of the use, the way a session's cost after a call minus before it
+    measures it."""
     calls = searches = errors = 0
+    tokens = [0, 0, 0]
+    seen = {_message_key(records[start])} if records[start]["type"] == "assistant" else set()
     for record in records[start + 1:]:
-        if record["type"] != "user" or (record.get("agentId") or "") != chain:
+        if (record.get("agentId") or "") != chain:
+            continue
+        if record["type"] == "assistant":
+            key = _message_key(record)
+            if key not in seen:
+                seen.add(key)
+                tokens = [a + b for a, b in zip(tokens, _usage(record))]
             continue
         results = _parts(record, "tool_result")
         if not results and not record.get("isMeta") and _origin(record) == "human":
@@ -5898,8 +5978,8 @@ def _window(records: list[dict], start: int, chain: str, own_id: str | None, too
             searches += tool_names.get(part.get("tool_use_id")) == "ToolSearch"
             errors += part.get("is_error") is True
             if calls == SKILL_WINDOW:
-                return calls, searches, errors
-    return calls, searches, errors
+                return calls, searches, errors, tuple(tokens)
+    return calls, searches, errors, tuple(tokens)
 
 
 def claude_code_uses(path: str, home: str) -> Iterator[SkillUse]:
@@ -5950,8 +6030,9 @@ def claude_code_uses(path: str, home: str) -> Iterator[SkillUse]:
                 how = "typed" if kind in (None, "human") else "named"
             else:
                 how = "named" if names_skill(prompt.get(chain, ""), skill) else "auto"
-            yield SkillUse(day, skill, plugin, "claude-code", how, *_window(records, i, chain, own_id, tool_names),
-                           "claude-code:" + key, typed and how == "typed" and kind is None)
+            calls, searches, errors, tokens = _window(records, i, chain, own_id, tool_names)
+            yield SkillUse(day, skill, plugin, "claude-code", how, calls, searches, errors,
+                           "claude-code:" + key, typed and how == "typed" and kind is None, tokens)
 
 
 def cursor_uses(path: str, root: str, home: str) -> Iterator[SkillUse]:
@@ -6055,7 +6136,8 @@ def scan_skill_uses(claude_logs: str, cursor_logs: str, home: str, since: date |
         for path in _transcripts(root, since) if os.path.isdir(root) else []:
             try:
                 for use in read(path):
-                    uses[use.key] = max(uses.get(use.key, use), use, key=lambda u: (u.calls or 0, u.searches or 0, u.errors or 0, u.how, u.day))
+                    uses[use.key] = max(uses.get(use.key, use), use, key=lambda u: (u.calls or 0, u.searches or 0, u.errors or 0, u.how, u.day,
+                                                                                        u.tokens or (0, 0, 0)))
             except OSError:
                 unreadable += 1
     return [uses[key] for key in sorted(uses)], unreadable
@@ -6086,6 +6168,8 @@ def cmd_book_skills(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 2
     home = os.path.expanduser("~")
+    legacy = books.tables[SKILLS].legacy
+    shape = LEGACY_SCHEMAS[SKILLS] if legacy else SKILLS_SCHEMA
     this_week = _iso_week(days["today"] or datetime.now(timezone.utc).date())
     found, unreadable = scan_skill_uses(args.claude_logs or os.path.join(home, ".claude", "projects"),
                                         args.cursor_logs or os.path.join(home, ".cursor", "projects"), home, days["since"])
@@ -6098,7 +6182,8 @@ def cmd_book_skills(args: argparse.Namespace) -> int:
         cells = _cells(SKILLS_SCHEMA, week=_iso_week(use.day), skill=use.skill, tool=use.tool, how=use.how,
                        calls="" if use.calls is None else use.calls, searches="" if use.searches is None else use.searches,
                        errors="" if use.errors is None else use.errors, verdict=SKILL_VERDICTS[0],
-                       use=hashlib.sha256(use.key.encode("utf-8")).hexdigest()[:16], source="", version="")
+                       use=hashlib.sha256(use.key.encode("utf-8")).hexdigest()[:16], source="", version="",
+                       **dict(zip(SKILL_TOKENS, use.tokens if use.tokens is not None and not legacy else ("", "", ""))))
         if days["since"] is not None and use.day < days["since"]:
             totals["before_since"] += 1
         elif cells["week"] >= this_week:
@@ -6120,7 +6205,7 @@ def cmd_book_skills(args: argparse.Namespace) -> int:
     by_week: dict[str, int] = {}
     for cells in rows:
         by_week[cells["week"]] = by_week.get(cells["week"], 0) + 1
-    data = _appended(books.tables[SKILLS].data, "".join(_csv_line(cells[k] for k in SKILLS_SCHEMA) for cells in rows))
+    data = _appended(books.tables[SKILLS].data, "".join(_csv_line(cells[k] for k in shape) for cells in rows))
     if rows:
         files = {rel: books.tables[rel].data if books.tables[rel].present else None for rel in TABLE_SCHEMAS}
         after = run_checks(books_from_bytes(args.books_dir, {**files, SKILLS: data}))
@@ -6136,7 +6221,8 @@ def cmd_book_skills(args: argparse.Namespace) -> int:
             print(f"quality.py: cannot write the books, they are unchanged: {e}", file=sys.stderr)
             return 1
     if args.json:
-        print(json.dumps({"dry_run": args.dry_run, "totals": totals, "weeks": by_week, "wrote": wrote}, sort_keys=True, indent=2))
+        print(json.dumps({"dry_run": args.dry_run, "totals": totals, "weeks": by_week, "wrote": wrote, "tokens": not legacy},
+                         sort_keys=True, indent=2))
     else:
         print(("would book " if args.dry_run else "booked ") + f"{len(rows)} skill uses"
               + (" for " + ", ".join(f"{week} ({n})" for week, n in sorted(by_week.items())) if rows else "")
@@ -6144,6 +6230,46 @@ def cmd_book_skills(args: argparse.Namespace) -> int:
               f"{totals['before_since']} before --since, {totals['bad_names']} with a name the books refuse, "
               f"{unreadable} unreadable files")
         print(f"of the {len(rows)}: {totals['not_in_lock']} not in the lock, {totals['no_origin']} slash commands with no origin")
+        if legacy:
+            print(f"{SKILLS} has the header without token columns, so no tokens were booked; run migrate-skills to add them")
+    return 0
+
+
+def cmd_migrate_skills(args: argparse.Namespace) -> int:
+    """Move books/skill-uses.csv from the legacy header to the full schema: the new header, and one empty cell per
+    added column on every row. The rows booked before keep empty token cells, since nothing measured them. Running
+    it again finds nothing to do."""
+    if not os.path.isdir(args.books_dir):
+        print(f"quality.py: not a directory: {args.books_dir}", file=sys.stderr)
+        return 2
+    books = load(args.books_dir)
+    problems = run_checks(books)
+    if problems:
+        _print_problems(problems)
+        print(f"{len(problems)} problems; refusing to migrate books that fail check")
+        return 1
+    table = books.tables[SKILLS]
+    if not table.present:
+        print(f"quality.py: migrate-skills needs {SKILLS}", file=sys.stderr)
+        return 2
+    if not table.legacy:
+        print(f"{SKILLS} already has the token columns; nothing to do")
+        return 0
+    data = b"".join(line + b"\n" for line in _migrated_lines(SKILLS, _lines(table.data)))
+    files = {rel: books.tables[rel].data if books.tables[rel].present else None for rel in TABLE_SCHEMAS}
+    after = run_checks(books_from_bytes(args.books_dir, {**files, SKILLS: data}))
+    if after:
+        _print_problems(after)
+        print(f"{len(after)} problems; nothing written")
+        return 1
+    if not args.dry_run:
+        try:
+            commit_files(args.books_dir, {SKILLS: data})
+        except OSError as e:
+            print(f"quality.py: cannot write the books, they are unchanged: {e}", file=sys.stderr)
+            return 1
+    print(("would add " if args.dry_run else "added ") + f"{', '.join(SKILL_TOKENS)} to {SKILLS}: "
+          f"{len(table.rows)} rows keep them empty")
     return 0
 
 
@@ -6202,6 +6328,10 @@ def main(argv: list[str] | None = None) -> int:
     skills.add_argument("--dry-run", action="store_true", help="say what would be booked; write nothing")
     skills.add_argument("--json", action="store_true")
     skills.set_defaults(func=cmd_book_skills)
+    migrate = sub.add_parser("migrate-skills", help="add the token columns to books/skill-uses.csv, empty on the rows already booked")
+    migrate.add_argument("books_dir", metavar="BOOKS_DIR")
+    migrate.add_argument("--dry-run", action="store_true", help="say what would change; write nothing")
+    migrate.set_defaults(func=cmd_migrate_skills)
     audit = sub.add_parser("audit-ci", help="what a repo's workflow files say about CI speed (read-only, no books)")
     audit.add_argument("repo_dir", metavar="REPO_DIR")
     audit.add_argument("--json", action="store_true")

@@ -1,0 +1,16 @@
+Five claude-code rows of the four-week run, picked with random.seed(49) from the claude-code rows, recounted
+from the raw transcript JSON by a separate script: it finds the load record by the use's key,
+then walks the following records of the same chain itself, adding the usage of each new message
+id (not the loading one) until the 20th tool result or a typed turn. It uses only
+quality.claude_code_uses to find which file holds the use. The use-to-transcript mapping stayed
+in the scratch folder.
+
+  week      copies  responses  recount calls  tokens (in, out, cache write)  booked
+  2026-W45  1       20         20             match                          MATCH
+  2026-W46  1       19         20             match                          MATCH
+  2026-W46  1       19         20             match                          MATCH
+  2026-W46  1       17         20             match                          MATCH
+  2026-W46  2       13         20             match                          MATCH
+
+5 of 5 match on calls and on all three token cells. The one use found in two files (a resumed
+session) matched the longer copy, as the book keeps.

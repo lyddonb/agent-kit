@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "goal": "Say what each skill use costs, not only how often it happens: book input, output and cache-write tokens per use over the window R38 already counts, and give tokens per use per skill in summary --json, so a proposed cut to a skill can show it saves anything (roadmap R49, after Uber's method of session cost after a skill call minus before).",
+  "changed": [
+    "quality.py book-skills books input_tokens, output_tokens and cache_write_tokens on each Claude Code row: the usage of the model responses after the load, up to the next typed turn or the 20th tool result, each response once by its message id, without the response that made the load. Cursor rows stay empty.",
+    "summary --json gains, per skill, the token sums, token_uses (rows that measured tokens) and tokens_per_use, when the book has the token columns. check holds the token cells to all empty or all non-negative integers, and none on a Cursor row.",
+    "The columns go after use. A book on the earlier header still passes check, reads with empty token cells, gets rows appended in the old shape byte for byte, and gives the same summary. The new migrate-skills moves it to the new header once, padding old rows with empty cells; check --base accepts that change and no other edit to an old row.",
+    "ROADMAP.md marks R49 done. bstack 0.46.0."
+  ],
+  "claims": [
+    {
+      "claim": "Over four weeks of this Mac's real transcripts into a scratch book with the new header, every Claude Code row got token cells and no Cursor row did, check passed, and a second run changed nothing.",
+      "verdict": "VERIFIED",
+      "check": "book-skills --since 2026-10-26 --today 2026-11-26 --lock agentfiles.lock twice, check, shasum -c between the runs",
+      "commit": "0a7f57a",
+      "record": ".changes/2026-11-26-skill-tokens/real-run.txt",
+      "remaining": "Run before the rebase onto main, at 4045767, whose quality.py and tests are identical to 0a7f57a; fa5f660 only removes comments. The scratch book is kept outside the repo."
+    },
+    {
+      "claim": "Five rows picked at random match a recount of calls and all three token cells from the raw transcript records.",
+      "verdict": "VERIFIED",
+      "check": "a separate script that walks the raw JSON from each use's load record",
+      "commit": "0a7f57a",
+      "record": ".changes/2026-11-26-skill-tokens/hand-check.txt",
+      "remaining": "All five picks had a full 20-result window; a window cut short by a typed turn is proven by tests only."
+    },
+    {
+      "claim": "Repeating a response's usage across its records is safe to deduplicate by message id: no id in five weeks of transcripts carried two different usages.",
+      "verdict": "VERIFIED",
+      "check": "a probe over the last five weeks of transcript files",
+      "commit": "0a7f57a",
+      "record": ".changes/2026-11-26-skill-tokens/real-run.txt",
+      "remaining": "A future Claude Code that streams partial usage per record would need the max per id; the code takes the first."
+    },
+    {
+      "claim": "The old and new formats work together: on a legacy-header book the new book-skills writes the same bytes as the books' current pin, both checkers pass it, both summaries are byte-identical, and after migrate-skills the new checker passes against the legacy base while the old one refuses it.",
+      "verdict": "VERIFIED",
+      "check": "scratch clones of the books, quality.py at 0a7f57a and at 45274f4, cmp and sha1",
+      "commit": "0a7f57a",
+      "record": ".changes/2026-11-26-skill-tokens/compat.txt",
+      "remaining": "The header flip on the real books waits for the books' pin to reach this version (their H11)."
+    },
+    {
+      "claim": "The tests hold the token rules: counting each record instead of each response, counting the loading response's later parts, or dropping the migration exception each turns a test red, and a migration that edits an old cell, adds measured tokens to an old row or skips the padding fails check --base.",
+      "verdict": "VERIFIED",
+      "check": "three planted faults in copies of quality.py, then python -m unittest tests.test_quality_skills (56 tests)",
+      "commit": "0a7f57a",
+      "record": ".changes/2026-11-26-skill-tokens/mutants.txt",
+      "remaining": "The check's limits are proven on planted faults, not a real past commit: no past commit migrated a book."
+    },
+    {
+      "claim": "The diff adds no comments and weakens no test, and the whole suite passes.",
+      "verdict": "VERIFIED",
+      "check": "comments.py --base origin/main; test_guard.py --base origin/main --head HEAD; make test; make versions",
+      "commit": "fa5f660",
+      "record": ".changes/2026-11-26-skill-tokens/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "The books repo's H11: run migrate-skills on the real skill book",
+      "source": "the books repo's HUMAN_TASKS H11",
+      "why_now": "Until it runs, the weekly job keeps booking rows without tokens.",
+      "impact": "The weekly brief's Tokens per use column fills from the next booked week."
+    },
+    {
+      "item": "R41's prune table and R25 and R43's cut proposals read tokens_per_use",
+      "source": "ROADMAP.md R41, R25, R43",
+      "why_now": "They all assumed a cost column, which now exists.",
+      "impact": "A proposal to cut or rewrite a skill can say what a use costs before and after."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.46.0"
+  }
+}

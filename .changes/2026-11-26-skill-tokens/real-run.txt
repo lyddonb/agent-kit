@@ -1,0 +1,12 @@
+book-skills at 0a7f57a's quality.py over four closed weeks of this Mac's real transcripts
+(2026-W44 to 2026-W47), into a scratch copy of the books whose skill-uses.csv held only the new
+header. The scratch copy is kept outside the repo. Results only: no counts, sums, skill names,
+sessions or projects.
+
+Run 1: rows booked in each of the four weeks, no unreadable files, no refused names.
+  check: ok, 0 problems
+Token columns: every claude-code row has non-zero token cells; cursor rows have none.
+Run 2, same flags: booked nothing; skill-uses.csv byte for byte unchanged (shasum -c OK).
+
+Usage repetition probe over the last five weeks of transcripts, subagent files included:
+  0 differing usage across repeated message ids; no record without a message id or usage.
