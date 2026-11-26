@@ -350,7 +350,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R28, R30, R31 and R33 are done, and R29's units 1 and 3 are built. Next: check R29 unit 2 against its done-when, then R40. R32 waits on R6 and on Beau (H14). R34 waits on R23.
+Order: R27, R28, R30, R31, R33 and R44 are done, and R29's units 1 and 3 are built. Next: check R29 unit 2 against its done-when, then R40. R32 waits on R6 and on Beau (H14). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -382,15 +382,14 @@ number comes from this output, and it must stay the same bytes on every run.
 `test_agentfiles.ConfigTests.test_cycle_detected` under agentfiles `caught_on_pr` and nothing
 under any `failed_on_main`; the property test "summary equals a recomputation from the raw
 artifacts" passes with the new keys; `check` still passes books written before the change.
-**Status (2026-11-21):** units 1 and 2 are done. `caught_on_pr` shipped in bstack 0.14.0 (pull
+**Done 2026-11-26.** Units 1 and 2 shipped here: `caught_on_pr` in bstack 0.14.0 (pull
 request 52) and `by_kind` in pull request 56, where a kind comes from an optional hand-edited
-`books/kinds.csv` (the real books have none yet, so every test counts as a unit test). On the
-real books, `summary --json --week 2026-W46` lists
-`test_agentfiles.ConfigTests.test_cycle_detected` under agentfiles `caught_on_pr` and nothing
-under any `failed_on_main`. Unit 3 is built (2026-11-25): the books repo's brief template gains a cost-and-catches
-table by kind, lists `caught_on_pr` under Reliability, and holds a slow-test proposal to
-its kind and catches, with H5 (a) in its `AGENTS.md` and its first `books/kinds.csv`. It
-waits on the books repo's pull request. The first brief written from it is the last proof.
+`books/kinds.csv`. Unit 3 merged in the books repo: its brief template has a cost-and-catches
+table by kind, lists `caught_on_pr` under Reliability, and holds a slow-test proposal to its
+kind and catches, with its first `books/kinds.csv`. Rechecked on the books on 2026-11-26:
+`summary --json --week 2026-W46` lists `test_agentfiles.ConfigTests.test_cycle_detected` under
+agentfiles `caught_on_pr` and nothing under any `failed_on_main`. Still unchecked: the first
+brief written from the new template.
 
 ## P1
 
@@ -502,6 +501,10 @@ same bytes on books without the file.
 **Prioritize when:** now. A prototype on 2026-11-24 over agent-kit's 56 pull requests merged in
 the previous seven days found medians of 7.4 minutes open, 1.9 in CI, 0.1 reworking and 2.1
 waiting to merge, with no pull request where the parts summed past its open time.
+**Done 2026-11-26.** Unit 1 shipped in bstack 0.43.0 (pull request 112), whose change record
+proves the done-when: booked rows match a prototype's per pull request numbers, and books
+without `books/pulls.csv` give the same bytes. Unit 2 merged in the books repo: the pulls book
+is adopted and the brief template has the cycle time table.
 
 ## P2
 
@@ -797,7 +800,7 @@ separate weekly pass reads the flags and proposes at most three skill edits, eac
 shows the flag's evidence failing before and a probe passing after. Beau merges every PR.
 Flag entries hold no transcript text.
 
-Order: agent-ledger's Flags unit, then R45. R48 after two weeks of flags. R46 and R47 any time.
+Order: agent-ledger's Flags unit, then R45. R48 after two weeks of flags. R47 is done. R46 any time.
 
 ## P1
 
@@ -832,6 +835,12 @@ open PR waiting on review, and each item links to its source.
 on a schedule. That trigger is met: the CFO and skill-use weekly job, local-ci, and the weekly
 quality brief.
 **Prioritize when:** now, or the next time a human task waits more than a week unnoticed.
+**Done 2026-11-26** in bstack 0.45.0: the `waiting-on-me` skill and `waiting.py`. Run on the
+workspace on 2026-11-26, it listed every open human task in the five repos and every open pull
+request a plain `gh pr list` showed, each with a link. Its change record has the counts. It
+reads the books' open questions, which is where every brief proposal is decided, so it lists
+proposals as questions. Open ledger gates are proven on fixtures only: every run on the
+workspace's default branches was sealed that day.
 
 ## P2
 
