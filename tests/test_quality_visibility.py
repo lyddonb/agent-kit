@@ -842,24 +842,35 @@ class LeakCommandTest(LeakCase):
 
 
 class LeakSpeedTest(TempCase):
-    def test_a_big_file_against_twenty_thousand_ids_that_share_a_prefix_is_not_quadratic(self):
-        ids = [f"tests.test_module_{i}.TestCase.test_method_{i}" for i in range(20_000)]
+    def books_and_text(self, name: str, ids: int, lines: int) -> tuple[Path, Path]:
+        """Books holding `ids` private test ids that share a prefix, and a report of `lines` lines that names some of them."""
+        test_ids = [f"tests.test_module_{i}.TestCase.test_method_{i}" for i in range(ids)]
         b = Builder(SECRET)
         b.visibility(STAMP, "secret-app", "acme/secret-app", "private")
-        for test_id in ids:
+        for test_id in test_ids:
             b.weekly[("2026-W46", "secret-app", test_id)] = ["2026-W46", "secret-app", test_id, 1, 1, 10, 10]
-        b.write(self.books)
-        body = "".join(f"line {i} of the report: tests.test_module_{i * 7 % 20000}.TestCase.test_method_{i * 7 % 20000} failed in tests.test_module_x\n"
-                       for i in range(9000))
-        path = self.tmp / "big.txt"
-        path.write_text(body[:1 << 20])
-        self.assertGreater(path.stat().st_size, 900_000)
-        started = time.monotonic()
-        code, out = tf.cli("leak-check", self.books, path)
-        took = time.monotonic() - started
-        self.assertEqual(code, 1)
+        books = self.tmp / f"books-{name}"
+        b.write(books)
+        path = self.tmp / f"{name}.txt"
+        path.write_text("".join(f"line {i} of the report: tests.test_module_{i * 7 % ids}.TestCase.test_method_{i * 7 % ids} failed in tests.test_module_x\n"
+                                for i in range(lines)))
+        return books, path
+
+    def test_a_big_file_against_twenty_thousand_ids_that_share_a_prefix_is_not_quadratic(self):
+        small = self.books_and_text("small", 5_000, 2_250)
+        big = self.books_and_text("big", 20_000, 9_000)
+        self.assertGreater(big[1].stat().st_size, 900_000)
+        cpu: dict[tuple[Path, Path], list[float]] = {small: [], big: []}
+        for _ in range(3):
+            for books, path in (small, big):
+                started = time.process_time()
+                code, out = tf.cli("leak-check", books, path)
+                cpu[books, path].append(time.process_time() - started)
+                self.assertEqual(code, 1)
         self.assertIn(f"{len(set(i * 7 % 20000 for i in range(9000)))} matches in 1 files; checked against 1 private repos (1 links, 0 commits, 20000 tests", out)
-        self.assertLess(took, 5.0)
+        ratio = min(cpu[big]) / min(cpu[small])
+        self.assertLess(ratio, 8, f"4x the ids and 4x the text took {ratio:.1f}x the CPU time (linear is 4x, quadratic 16x): "
+                                  f"{min(cpu[small]):.3f}s then {min(cpu[big]):.3f}s")
 
 
 if __name__ == "__main__":
