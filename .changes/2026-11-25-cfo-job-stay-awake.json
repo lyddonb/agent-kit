@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "goal": "Stop the weekly Mac job losing a week when the Mac is asleep on Sunday morning: on 2026-11-22 launchd ran the missed job in a 2-second dark wake, the first network call failed across the sleep, and nothing ever retried it.",
+  "changed": [
+    "The launch agent starts the job every hour and passes the new --scheduled flag; plain runs, --dry-run and --run-now are unchanged.",
+    "--scheduled runs only from Sunday 06:00 to Monday 23:59 in CFO_TZ, skips a dark wake (no Graphics in pmset's capabilities) with one log line, and writes a stamp only after a run exits 0, so a failed run is retried every hour until the window closes and a finished week is left alone.",
+    "SKILL.md describes the schedule, the dark-wake skip and the stamp file."
+  ],
+  "claims": [
+    {
+      "claim": "A --scheduled run inside the window with a dark-wake pmset prints one line and exits 0 without a clone, a gh call or a Vercel call; after a failed run (no stamp) the next run books the rows and writes the stamp; the run after that exits 0 silently and clones nothing; outside the window, and for Monday after a Sunday stamp, nothing runs; the window edges are Sunday 06:00 and Monday 23:59; a missing pmset does not block the run; a plain run ignores window, stamp and pmset.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_weekly_claude_code.py through a fake pmset, gh and vercel; the 8 new tests failed at 2d914c6 and pass at f57c3d1, and 5 loops of them were green",
+      "commit": "f57c3d1",
+      "record": ".changes/2026-11-25-cfo-job-stay-awake/tests.txt",
+      "remaining": "A fake pmset, not a real battery dark wake; launchd was not installed or fired."
+    },
+    {
+      "claim": "--print-plist gives StartCalendarInterval {Minute: 0} and ends ProgramArguments with --scheduled, and --install writes it.",
+      "verdict": "VERIFIED",
+      "check": "plist tests parse the printed and the installed plist",
+      "commit": "f57c3d1",
+      "record": ".changes/2026-11-25-cfo-job-stay-awake/tests.txt",
+      "remaining": "The user's installed agent still has the old schedule until --install is run again."
+    }
+  ],
+  "next": [
+    {
+      "item": "Run weekly-claude-code.sh --install again on the Mac",
+      "source": "inferred: the installed plist is not rewritten by merging",
+      "why_now": "Until then the agent keeps the old Sunday-06:00-only schedule and the week can still be lost.",
+      "impact": "Beau's Mac job survives a sleeping Sunday morning."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml cfo@0.4.2"
+  }
+}

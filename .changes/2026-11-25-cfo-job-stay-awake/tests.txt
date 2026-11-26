@@ -1,0 +1,3 @@
+tests/test_weekly_claude_code.py at f57c3d1: 44 tests, OK. At 2d914c6 (tests only, script unchanged) 20 of them failed: the 8 new tests and the plist tests that now expect --scheduled and {"Minute": 0}.
+New tests, 5 runs in a loop at f57c3d1: Ran 9 tests, OK, five times.
+Not run: launchd itself (no --install) and a real dark wake. The dark-wake check reads a fake pmset.
