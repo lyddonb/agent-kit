@@ -327,8 +327,6 @@ PULLS_SCHEMA = ("merged", "repo", "number", "opened", "ready", "head_ci_done", "
                 "force_pushes", "evidence")
 OPTIONAL_SCHEMAS = {KINDS: KINDS_SCHEMA, JOBS: JOBS_SCHEMA, STEPS: STEPS_SCHEMA, SKILLS: SKILLS_SCHEMA, REPOS: REPOS_SCHEMA,
                     VOLUME: VOLUME_SCHEMA, PULLS: PULLS_SCHEMA}
-# An older header a file may still have. Its rows read with the columns it lacks empty, its writers append rows in its
-# shape, and `migrate-skills` moves it to the full schema by adding those empty cells to every row.
 LEGACY_SCHEMAS = {SKILLS: SKILLS_LEGACY_SCHEMA}
 SKILL_TOOLS = ("claude-code", "cursor")
 SKILL_HOWS = ("typed", "named", "auto", "subagent")
@@ -987,7 +985,7 @@ class Table:
     rows: list[Row] = field(default_factory=list)
     data: bytes = b""
     present: bool = False  # the file exists (an optional file that is left out has no header and no rows)
-    legacy: bool = False  # the header is the file's LEGACY_SCHEMAS entry
+    legacy: bool = False
     bad_format: bool = False  # bytes that cannot be compared line by line (already reported)
 
 
@@ -5830,7 +5828,7 @@ class SkillUse(NamedTuple):
     errors: int | None
     key: str
     no_origin: bool = False  # a slash command in a record with no `origin`: booked as typed, and counted
-    tokens: tuple[int, int, int] | None = None  # input, output and cache-write tokens over the window
+    tokens: tuple[int, int, int] | None = None
 
 
 def _parts(record: dict, kind: str) -> list[dict]:
@@ -5936,7 +5934,7 @@ def _base_dir(record: dict, tool_id: str | None) -> str | None:
     return text.split("\n", 1)[0][len(_SKILL_BASE):].strip() if text.startswith(_SKILL_BASE) else None
 
 
-_USAGE = ("input_tokens", "output_tokens", "cache_creation_input_tokens")  # SKILL_TOKENS, as a message's usage names them
+_USAGE = ("input_tokens", "output_tokens", "cache_creation_input_tokens")
 
 
 def _message_key(record: dict) -> str | None:
@@ -6170,7 +6168,7 @@ def cmd_book_skills(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 2
     home = os.path.expanduser("~")
-    legacy = books.tables[SKILLS].legacy  # rows go in the file's own shape: no token cells until migrate-skills
+    legacy = books.tables[SKILLS].legacy
     shape = LEGACY_SCHEMAS[SKILLS] if legacy else SKILLS_SCHEMA
     this_week = _iso_week(days["today"] or datetime.now(timezone.utc).date())
     found, unreadable = scan_skill_uses(args.claude_logs or os.path.join(home, ".claude", "projects"),

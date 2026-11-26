@@ -34,7 +34,7 @@ TODAY = "2026-11-18"  # 2026-W47 is the open week
 OLD_SHA, NEW_SHA = "a" * 40, "b" * 40
 ROW = dict(zip(quality.SKILLS_SCHEMA, ("2026-W46", "alpha", "mine:@demo", NEW_SHA, "claude-code", "auto", "3", "1", "0",
                                        "unjudged", "0123456789abcdef", "1000", "200", "300")))
-LEGACY_HEADER = ",".join(quality.SKILLS_LEGACY_SCHEMA) + "\n"  # the header R38 shipped, before the token columns
+LEGACY_HEADER = ",".join(quality.SKILLS_LEGACY_SCHEMA) + "\n"
 
 
 def stamp(n: int, day: str = DAY) -> str:
