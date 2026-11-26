@@ -1,0 +1,33 @@
+# The bash block from references/flags.md, extracted verbatim (awk) and run with /bin/bash 3.2.57(1)-release,
+# HOME=$SCRATCH/home holding .agents/flags.yaml, and ledger 1.2.1 first on PATH. Placeholders left as written.
+
+## flags repo: existing (1 runs before)
+appended 2026-11-26-flags-scratch seq 3 4dc77e3036548a62c6933121687446fde0f166a7d633235e1a275d9e226848f0
+exit=0
+$ ls .audit/runs
+2026-11-26-flags-scratch
+$ ledger verify
+ok: 1 runs, 0 sealed, 0 indexed
+$ git status --short
+ M .audit/runs/2026-11-26-flags-scratch/ledger.jsonl
+
+## flags repo: empty (0 runs before)
+started 2026-11-26-flags-scratch: $SCRATCH/f-empty/.audit/runs/2026-11-26-flags-scratch/ledger.jsonl seq 1 06e1a4b82c40556668499c1219e50e66dfd38e9e55731c88a4aeaddeb32b1e74
+appended 2026-11-26-flags-scratch seq 2 3a16ae31cc7406a3ccf36cac108f81a3a23b7849be7d6946b8181a88a1667f06
+exit=0
+$ ls .audit/runs
+2026-11-26-flags-scratch
+$ ledger verify
+ok: 1 runs, 0 sealed, 0 indexed
+$ git status --short
+?? .audit/
+
+## flags repo: only last week's run (2026-11-20, before Monday 2026-11-23)
+started 2026-11-26-flags-scratch: $SCRATCH/f-old/.audit/runs/2026-11-26-flags-scratch/ledger.jsonl seq 1 6efc9afcdd16aaa6ab68a06147bb295632e3761e14f02da7bc1002f11f0eaf7d
+appended 2026-11-26-flags-scratch seq 2 6978799884d517649e485d0f1c77af417ee2f8c4c7007c3fa8e3642e0d9920b9
+exit=0
+$ ls .audit/runs
+2026-11-20-flags-scratch
+2026-11-26-flags-scratch
+$ ledger verify
+ok: 2 runs, 0 sealed, 0 indexed

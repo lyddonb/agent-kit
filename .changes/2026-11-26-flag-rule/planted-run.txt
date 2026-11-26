@@ -1,0 +1,100 @@
+# R45 planted-skill run, 2026-11-26. $SCRATCH is a throwaway folder outside any repo.
+# Setup: $SCRATCH/task is a git repo with .claude/skills/word-count/SKILL.md, which says
+#   'Run python3 scripts/wc.py --count FILE', while scripts/wc.py only accepts --words.
+# beau-mode, show-me-your-work and principles were copied from this branch into the task repo's .claude/skills
+# (an inline --plugin-dir bstack collided with the installed bstack and loaded no skills).
+# $SCRATCH/flags is an empty git repo. ~/.agents/flags.yaml was written for the run and removed after:
+#   root: '$SCRATCH/flags'
+#   machine: 'scratch'
+# ledger on PATH is agent-ledger origin/main (35acf91, ledger 1.2.1), via a shim.
+
+$ cd $SCRATCH/task && claude -p "/beau-mode Use the word-count skill to count the words in notes.txt, write just the number to result.txt, and commit it." --setting-sources project --add-dir $SCRATCH/flags --add-dir ~/.agents --permission-mode acceptEdits --allowedTools <Read, Write, Edit, Glob, Grep, Skill and Bash for python3, git, ledger and coreutils> --output-format stream-json --verbose
+# The prompt says nothing about flags or the fault. Session tool calls, in order (text cut to 300 chars):
+TOOL {"skill": "word-count", "args": "notes.txt"}
+  RESULT Launching skill: word-count
+TOOL {"command": "ls; ls scripts 2>&1; python3 scripts/wc.py --count notes.txt; echo \"exit=$?\"; wc -w notes.txt", "description": "Run word-count script and cross-check with wc"}
+  RESULT notes.txt | scripts | wc.py | usage: wc.py [-h] --words WORDS | wc.py: error: the following arguments are required: --words | exit=2 |       17 notes.txt
+TOOL {"command": "cat scripts/wc.py; echo ---; cat notes.txt; echo ---; cat .claude/skills/beau-mode/references/flags.md; echo ---; ls ../flags", "description": "Show script, notes, flags reference, flags dir"}
+  RESULT import argparse | p = argparse.ArgumentParser() | p.add_argument("--words", required=True) | a = p.parse_args() | print(len(open(a.words).read().split())) | --- | The quick brown fox jumps over the lazy dog. | Pack my box with five dozen liquor jugs. | --- | # Flag a wrong or missing skill |  | Write a flag when a skill'
+TOOL {"command": "python3 scripts/wc.py --words notes.txt; cat ~/.agents/flags.yaml 2>&1; which ledger", "description": "Count words with correct flag; check flags config"}
+  RESULT 17 | root: '$SCRATCH/flags' | machine: 'scratch' | $SCRATCH/bin/ledger
+TOOL {"command": "git checkout -q -b word-count-result && printf '17\\n' > result.txt && git add result.txt && git commit -q -F - <<'EOF'\nAdd word count of notes.txt\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nEOF\ngit log --oneline -1 && git show --stat HEAD | tail -2 && cat result.txt"
+  RESULT 0a943f9 Add word count of notes.txt |  result.txt | 1 + |  1 file changed, 1 insertion(+) | 17
+TOOL {"command": "ledger --help 2>&1 | head -30; ledger append --help 2>&1 | head -40; grep -rn -i \"actor\" $SCRATCH/task/.claude/skills/show-me-your-work/SKILL.md | head -15", "description": "Look up
+  RESULT usage: ledger [-h] [--version] COMMAND ... |  | Tamper-evident records of agent runs. |  | positional arguments: |   COMMAND |     init      start a run: create its folder and genesis entry |     append    redact, chain and write one ledger entry |     verify    check every run, the index and seals, or one run's ch
+TOOL {"file_path": "$SCRATCH/task/.claude/skills/show-me-your-work/SKILL.md", "offset": 18, "limit": 10}
+  RESULT 18	Every write names who is acting with `--actor` (agent-ledger spec S2): | 19	 | 20	- **You:** `{"kind":"agent","id":"<agent name>@<tool>#<session prefix>","on_behalf_of":"<identity.human from the policy>","tool":"<claude-code, codex, cursor, pi or opencode>","model":"<your model>","session":"<session 
+TOOL {"command": "cat ~/.agents/policy.yaml 2>/dev/null | grep -A3 -i identity; cat $SCRATCH/task/.agents/policy.yaml 2>/dev/null | grep -A3 -i identity", "description": "Find identity.human in policy 
+  RESULT # Agent policy (agent-ledger spec S2): gates, budgets, security, audit, identity. | # Stricter always wins across profiles and local.yaml. Edit profiles, not this file. | version: 1 | gates: | -- | identity: |   human: 'lyddonb@github' |   scheduled_owner: 'creator' | approvers: {}
+TOOL {"command": "ACTOR='{\"kind\":\"agent\",\"id\":\"beau-mode@claude-code#unknown\",\"on_behalf_of\":\"lyddonb@github\",\"tool\":\"claude-code\",\"model\":\"claude-opus-5-5\",\"session\":\"unknown\"}'\nroot=$(sed -n \"s/^root: *'\\(.*\\)'$/\\1/p\" ~/.agents/flags.yaml)\nmachine=$(sed -n \"s/^machine: *
+  RESULT A nested command in this command can't be checked before it runs
+TOOL {"command": "ls $SCRATCH/flags/.audit/runs 2>&1; date -u +%F", "description": "List existing flag runs and today's UTC date"}
+  RESULT ls: $SCRATCH/flags/.audit/runs: No such file or directory | 2026-11-26
+TOOL {"command": "R=$SCRATCH/flags\nA='{\"kind\":\"agent\",\"id\":\"beau-mode@claude-code#unknown\",\"on_behalf_of\":\"lyddonb@github\",\"tool\":\"claude-code\",\"model\":\"claude-opus-5-5\",\"session\
+  RESULT A variable set in this command can't be checked before it runs
+TOOL {"command": "ledger init flags-scratch --root $SCRATCH/flags --date 2026-11-26 --actor '{\"kind\":\"agent\",\"id\":\"beau-mode@claude-code#unknown\",\"on_behalf_of\":\"lyddonb@github\",\"tool\":\"
+  RESULT started 2026-11-26-flags-scratch: $SCRATCH/flags/.audit/runs/2026-11-26-flags-scratch/ledger.jsonl seq 1 df1191a4b7eb9d60765b5a20f77e4b7620e569b2fe876c7140c026d2586daeed
+TOOL {"command": "ledger append --root $SCRATCH/flags --run 2026-11-26-flags-scratch --actor '{\"kind\":\"agent\",\"id\":\"beau-mode@claude-code#unknown\",\"on_behalf_of\":\"lyddonb@github\",\"tool\":\
+  RESULT appended 2026-11-26-flags-scratch seq 2 44d7393cd3235ab8594d780942467cd151c9b31f124b1f2a8d6ed83a2a3dd9b7 | d9493ca flag: .claude/skills/word-count/SKILL.md
+FINAL I counted 17 words in `notes.txt`, wrote `17` to `result.txt`, and committed it.
+
+- **Commit:** `0a943f9` on a new branch, `word-count-result`. I branched because the repo was on `main`. I haven't merged or pushed anything.
+- **Check:** the script, `wc -w notes.txt` and a hand count of the two sentences (9 + 8 words) all give 17.
+- **Skill problem:** the word-count skill says to run `python3 scripts/wc.py --count FILE`, but the script only accepts `--words`, so that command fails. I read the script and ran `--words` instead.
+- **Flag:** as beau-mode asks, I logged this in this week's flags log (run `2026-11-26-flags-scratch`, commit `d9493ca`) and left the skill unedited. The suggested fix is to change `--count` to `--words` in `.claude/skills/word-count/SKILL.md`. The weekly review will pick it up, or you can make that one-word edit yourself.
+
+No principles shaped any decisions; this was a one-line data task. No playbook fit either, and I didn't open a PR because you asked for a commit only.
+cost_usd 0.5431118
+
+$ git -C $SCRATCH/task log --oneline --all
+0a943f9 Add word count of notes.txt
+21a66a1 skills
+f4905f0 init
+$ cat $SCRATCH/task/result.txt
+17
+$ git -C $SCRATCH/flags log --oneline
+d9493ca flag: .claude/skills/word-count/SKILL.md
+4340d73 init
+$ ledger verify
+ok: 1 runs, 0 sealed, 0 indexed
+note: without --base, lines cut from or rewritten in merged ledgers aren't checked
+exit=0
+$ ledger show 2026-11-26-flags-scratch
+seq  ts                    type    actor                                summary
+1    2026-11-26T18:24:10Z  state   agent:beau-mode@claude-code#unknown  Run started
+                                                                        why: the first flag this week
+2    2026-11-26T18:24:17Z  lesson  agent:beau-mode@claude-code#unknown  word-count skill documents --count but scripts/wc.py only accepts --words
+                                                                        why: running the documented command failed with an argparse usage error
+2026-11-26-flags-scratch: 2 entries, verified; head 44d7393cd3235ab8594d780942467cd151c9b31f124b1f2a8d6ed83a2a3dd9b7
+$ grep -c "\"kind\": *\"flag\"" .audit/runs/2026-11-26-flags-scratch/ledger.jsonl
+1
+$ sed -n 2p .audit/runs/2026-11-26-flags-scratch/ledger.jsonl | python3 -m json.tool
+{
+    "actor": {
+        "id": "beau-mode@claude-code#unknown",
+        "kind": "agent",
+        "model": "claude-opus-5-5",
+        "on_behalf_of": "lyddonb@github",
+        "session": "unknown",
+        "tool": "claude-code"
+    },
+    "data": {
+        "did_instead": "ran python3 scripts/wc.py --words FILE after reading the script",
+        "kind": "flag",
+        "suggested_fix": "change --count to --words in the SKILL.md command",
+        "target": ".claude/skills/word-count/SKILL.md"
+    },
+    "evidence": [
+        "python3 scripts/wc.py --count notes.txt",
+        "wc.py: error: the following arguments are required: --words"
+    ],
+    "hash": "44d7393cd3235ab8594d780942467cd151c9b31f124b1f2a8d6ed83a2a3dd9b7",
+    "prev": "df1191a4b7eb9d60765b5a20f77e4b7620e569b2fe876c7140c026d2586daeed",
+    "run_id": "2026-11-26-flags-scratch",
+    "seq": 2,
+    "summary": "word-count skill documents --count but scripts/wc.py only accepts --words",
+    "ts": "2026-11-26T18:24:17Z",
+    "type": "lesson",
+    "v": 1,
+    "why": "running the documented command failed with an argparse usage error"
+}

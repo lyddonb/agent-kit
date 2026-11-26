@@ -1,0 +1,12 @@
+----------------------------------------------------------------------
+Ran 1461 tests in 1052.978s
+
+OK (skipped=24)
+kitgen: 26 generated files and 27 files with GENERATED blocks up to date
+versions: 0 plugin(s) changed without a version bump
+✔ Validation passed
+$ control-kit drive skills-load
+PASS skills-load     4 steps, 2.00s
+PASSED: 1/1 features
+$ checklist.py --base origin/main
+checklist: 1 of 8 items match; plugins-in-step: make check versions -> versions: 0 plugin(s) changed without a version bump
