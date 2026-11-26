@@ -1,0 +1,14 @@
+$ comments.py --base origin/main
+comments: the diff adds 7 to Python files
+plugins/bstack/skills/qualitydirector/scripts/quality.py:330: # An older header a file may still have. Its rows read with the columns it lacks empty, its writers append rows in its
+plugins/bstack/skills/qualitydirector/scripts/quality.py:331: # shape, and `migrate-skills` moves it to the full schema by adding those empty cells to every row.
+plugins/bstack/skills/qualitydirector/scripts/quality.py:990: # the header is the file's LEGACY_SCHEMAS entry
+plugins/bstack/skills/qualitydirector/scripts/quality.py:5833: # input, output and cache-write tokens over the window
+plugins/bstack/skills/qualitydirector/scripts/quality.py:5939: # SKILL_TOKENS, as a message's usage names them
+plugins/bstack/skills/qualitydirector/scripts/quality.py:6173: # rows go in the file's own shape: no token cells until migrate-skills
+tests/test_quality_skills.py:37: # the header R38 shipped, before the token columns
+exit 1
+
+$ test_guard.py --base origin/main
+test-guard: 0 findings in 0 test files
+exit 0

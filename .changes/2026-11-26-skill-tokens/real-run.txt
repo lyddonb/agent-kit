@@ -1,0 +1,23 @@
+book-skills at 0a7f57a over four closed weeks of this Mac's real transcripts (2026-W44 to
+2026-W47: --since 2026-10-26 --today 2026-11-26, with agentfiles.lock), into a scratch copy of
+the books whose skill-uses.csv held only the new header. The scratch copy is kept outside the
+repo. Counts and token sums only: no skill names, sessions or projects.
+
+Run 1 (--json totals):
+  found 294, booked 244 (W44 11, W45 12, W46 109, W47 112), open week 42, before --since 8,
+  already booked 0, bad names 0, not in lock 13, no origin 2, unreadable files 0
+  check: ok, 0 problems
+
+Token columns:
+  claude-code rows 214, with token cells 214, with a non-zero total 214
+  cursor rows 30, with token cells 0
+  sums over the 214: input_tokens 5775, output_tokens 3092878, cache_write_tokens 13366657
+
+Run 2, same flags:
+  booked 0 skill uses; 244 already booked, 42 in the open week, 8 before --since,
+  0 with a name the books refuse, 0 unreadable files
+  shasum -c on skill-uses.csv from before run 2: OK (byte for byte unchanged)
+
+Usage repetition probe (521 transcript files from the last 35 days, subagent files included):
+  29943 message ids, 21774 repeated over more than one record, 0 with differing usage,
+  0 records without a message id, 0 without usage, 3824 ids also in another file

@@ -1,0 +1,12 @@
+Planted faults in a copy of quality.py at 0a7f57a, each run with
+QUALITY_SCRIPT=<copy> python -m unittest tests.test_quality_skills:
+
+  m1  count every assistant record, not each message id once      FAILED (failures=1)
+  m2  count the rest of the response that made the load            FAILED (failures=1)
+      (passed at first: the split-load test was added for it)
+  m3  drop the append-only exception for the migration             FAILED (failures=1)
+
+Unchanged copy: OK. The append-only exception's limits are planted faults in
+LegacyHeaderTest.test_a_migration_that_changes_an_old_cell_or_drops_the_padding_fails_append_only:
+an old cell changed, an old row given measured tokens, and the new header without the padding
+each fail check --base.
