@@ -33,7 +33,8 @@ DAY = "2026-11-10"  # a Tuesday in 2026-W46
 TODAY = "2026-11-18"  # 2026-W47 is the open week
 OLD_SHA, NEW_SHA = "a" * 40, "b" * 40
 ROW = dict(zip(quality.SKILLS_SCHEMA, ("2026-W46", "alpha", "mine:@demo", NEW_SHA, "claude-code", "auto", "3", "1", "0",
-                                       "unjudged", "0123456789abcdef")))
+                                       "unjudged", "0123456789abcdef", "1000", "200", "300")))
+LEGACY_HEADER = ",".join(quality.SKILLS_LEGACY_SCHEMA) + "\n"  # the header R38 shipped, before the token columns
 
 
 def stamp(n: int, day: str = DAY) -> str:
@@ -57,9 +58,20 @@ class Session:
     def prompt(self, text: str = SECRET, origin: str | None = "human") -> dict:
         return self._add("user", text, **({"origin": {"kind": origin}} if origin else {}))
 
-    def call(self, name: str, **given) -> str:
+    def respond(self, content: list, usage: tuple[int, int, int] | None = None, records: int = 1) -> None:
+        """One model response, split over `records` assistant records that repeat its id and usage, as Claude Code
+        writes a response with several parts."""
+        message_id = f"msg_{next(self.serial)}"
+        for _ in range(records):
+            record = self._add("assistant", content)
+            record["message"]["id"] = message_id
+            if usage is not None:
+                record["message"]["usage"] = dict(zip(("input_tokens", "output_tokens", "cache_creation_input_tokens"), usage),
+                                                  cache_read_input_tokens=99999)
+
+    def call(self, name: str, usage: tuple[int, int, int] | None = None, **given) -> str:
         tool_id = f"toolu_{next(self.serial)}"
-        self._add("assistant", [{"type": "text", "text": SECRET}, {"type": "tool_use", "id": tool_id, "name": name, "input": given}])
+        self.respond([{"type": "text", "text": SECRET}, {"type": "tool_use", "id": tool_id, "name": name, "input": given}], usage)
         return tool_id
 
     def result(self, tool_id: str, error: bool | None = False) -> None:
@@ -68,9 +80,9 @@ class Session:
             part["is_error"] = error
         self._add("user", [part])
 
-    def skill(self, name: str, base: str = "/somewhere/plugins/demo/skills/alpha") -> str:
+    def skill(self, name: str, base: str = "/somewhere/plugins/demo/skills/alpha", usage: tuple[int, int, int] | None = None) -> str:
         """A Skill tool call, its result, and the record that loads the skill's text."""
-        tool_id = self.call("Skill", skill=name)
+        tool_id = self.call("Skill", usage, skill=name)
         self.result(tool_id)
         self._add("user", [{"type": "text", "text": f"Base directory for this skill: {base}\n\n{SECRET}"}],
                   isMeta=True, sourceToolUseID=tool_id)
@@ -82,9 +94,9 @@ class Session:
         if base is not None:
             self._add("user", [{"type": "text", "text": f"Base directory for this skill: {base}\n\n{SECRET}"}], isMeta=True)
 
-    def work(self, count: int, tool: str = "Bash", error: bool | None = False) -> None:
+    def work(self, count: int, tool: str = "Bash", error: bool | None = False, usage: tuple[int, int, int] | None = None) -> None:
         for _ in range(count):
-            self.result(self.call(tool, command=SECRET), error)
+            self.result(self.call(tool, usage, command=SECRET), error)
 
     def text(self) -> str:
         return "".join(json.dumps(r) + "\n" for r in self.records)
@@ -145,7 +157,8 @@ class WhatCountsAsAUseTest(SkillsCase):
         row = self.one(s)
         self.assertEqual({k: v for k, v in row.items() if k != "use"},
                          {"week": "2026-W46", "skill": "alpha", "source": "demo", "version": "", "tool": "claude-code",
-                          "how": "auto", "calls": "0", "searches": "0", "errors": "0", "verdict": "unjudged"})
+                          "how": "auto", "calls": "0", "searches": "0", "errors": "0", "verdict": "unjudged",
+                          "input_tokens": "0", "output_tokens": "0", "cache_write_tokens": "0"})
         self.assertRegex(row["use"], r"^[0-9a-f]{16}$")
 
     def test_a_typed_slash_command_that_loads_a_skill_is_a_use(self):
@@ -288,6 +301,127 @@ class WindowTest(SkillsCase):
         s.common = {"isSidechain": True, "agentId": "agent-1"}
         s.work(7, error=True)
         self.assertEqual(self.counts(s), ("2", "0", "0"))
+
+
+class TokensTest(SkillsCase):
+    def tokens(self, session: Session) -> tuple[str, str, str]:
+        row = self.one(session)
+        return row["input_tokens"], row["output_tokens"], row["cache_write_tokens"]
+
+    def test_each_response_after_the_load_counts_once_and_the_loading_response_does_not(self):
+        s = Session()
+        s.prompt()
+        s.skill("demo:alpha", usage=(5, 5, 5))
+        s.respond([{"type": "text", "text": SECRET}], (100, 10, 1000), records=3)
+        s.work(2, usage=(1, 2, 3))
+        self.assertEqual(self.tokens(s), ("102", "14", "1006"), "a response split over three records counts once; "
+                         "cache reads are not booked; the response that called Skill is the cost before the use")
+
+    def test_tokens_stop_where_the_counts_stop_at_twenty_tool_results(self):
+        s = Session()
+        s.prompt()
+        s.skill("demo:alpha")
+        s.work(20, usage=(1, 1, 1))
+        s.work(3, usage=(50, 50, 50))
+        self.assertEqual(self.tokens(s), ("20", "20", "20"))
+
+    def test_tokens_stop_at_the_next_typed_turn_and_leave_out_another_chain(self):
+        s = Session()
+        s.prompt()
+        s.skill("demo:alpha")
+        s.work(1, usage=(1, 1, 1))
+        common, s.common = s.common, {"isSidechain": True, "agentId": "agent-1"}
+        s.work(2, usage=(7, 7, 7))
+        s.common = common
+        s.prompt(origin="human")
+        s.work(2, usage=(9, 9, 9))
+        self.assertEqual(self.tokens(s), ("1", "1", "1"))
+
+    def test_a_later_part_of_the_response_that_made_the_load_is_not_counted(self):
+        s = Session()
+        s.prompt()
+        s.skill("demo:alpha", usage=(5, 5, 5))
+        loading = next(r for r in s.records if r["type"] == "assistant")
+        s.records.append({**loading, "uuid": "uuid-later-part", "message": {**loading["message"], "content": [{"type": "text", "text": SECRET}]}})
+        s.work(1, usage=(1, 1, 1))
+        self.assertEqual(self.tokens(s), ("1", "1", "1"))
+
+    def test_a_response_with_no_usage_counts_as_zero(self):
+        s = Session()
+        s.slash("demo:alpha")
+        s.work(1)
+        s.work(1, usage=(4, 0, 2))
+        self.assertEqual(self.tokens(s), ("4", "0", "2"))
+
+
+class LegacyHeaderTest(SkillsCase):
+    """Books still on the header R38 shipped: every command keeps working on them, and migrate-skills moves them on."""
+    def setUp(self):
+        super().setUp()
+        (self.books / quality.SKILLS).write_text(LEGACY_HEADER)
+        s = Session()
+        s.prompt()
+        s.skill("demo:alpha")
+        s.work(2, usage=(1, 2, 3))
+        self.write(s)
+
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", str(self.books), *args],
+                       check=True, capture_output=True)
+
+    def test_book_skills_appends_rows_in_the_legacy_shape_and_says_how_to_add_tokens(self):
+        code, out = self.book()
+        self.assertEqual(code, 0, out)
+        lines = (self.books / quality.SKILLS).read_text().splitlines()
+        self.assertEqual((lines[0] + "\n", len(lines), lines[1].count(",")), (LEGACY_HEADER, 2, 10), lines)
+        self.assertIn("run migrate-skills", out)
+        self.assertEqual(self.run_cli("check", self.books)[0], 0)
+
+    def test_summary_of_a_legacy_book_has_no_token_keys(self):
+        self.book()
+        result = json.loads(self.run_cli("summary", self.books, "--json", "--week", "2026-W46")[1])
+        self.assertEqual(result["skills"]["by_skill"][0], {
+            "skill": "alpha", "source": "demo", "uses": 1, "by_how": {"typed": 0, "named": 0, "auto": 1, "subagent": 0},
+            "by_tool": {"claude-code": 1, "cursor": 0}, "calls": 2, "searches": 0, "errors": 0, "unjudged": 1})
+
+    def test_migrate_adds_empty_token_cells_passes_append_only_and_runs_once(self):
+        self.book()
+        self.git("init", "-q")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "books")
+        before = (self.books / quality.SKILLS).read_text().splitlines()
+        code, out = self.run_cli("migrate-skills", self.books)
+        self.assertEqual((code, out), (0, f"added input_tokens, output_tokens, cache_write_tokens to {quality.SKILLS}: 1 rows keep them empty\n"))
+        after = (self.books / quality.SKILLS).read_text()
+        self.assertEqual(after, HEADER + before[1] + ",,,\n")
+        self.assertEqual(self.run_cli("check", self.books, "--base", "HEAD")[0], 0)
+        self.assertEqual(self.run_cli("migrate-skills", self.books)[0], 0)
+        self.assertEqual((self.books / quality.SKILLS).read_text(), after, "a second migrate changes nothing")
+        s = Session(day="2026-11-11")
+        s.prompt()
+        s.skill("demo:beta")
+        s.work(1, usage=(7, 8, 9))
+        self.write(s, "s2.jsonl")
+        row = self.booked()[-1]
+        self.assertEqual((row["skill"], row["input_tokens"], row["output_tokens"], row["cache_write_tokens"]), ("beta", "7", "8", "9"))
+        self.assertEqual(self.run_cli("check", self.books, "--base", "HEAD")[0], 0)
+
+    def test_a_migration_that_changes_an_old_cell_or_drops_the_padding_fails_append_only(self):
+        """Planted faults: the exception for the migration covers adding empty cells and nothing else."""
+        self.book()
+        self.git("init", "-q")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "books")
+        path = self.books / quality.SKILLS
+        old = path.read_text().splitlines()
+        path.write_text(HEADER + old[1].replace(",auto,", ",named,") + ",,,\n")
+        code, lines = self.run_cli("check", self.books, "--base", "HEAD")
+        self.assertEqual(code, 1)
+        self.assertIn("books/skill-uses.csv:2: changed since HEAD (beyond adding empty cells for the new columns)", lines)
+        path.write_text(HEADER + old[1] + ",0,0,0\n")
+        self.assertEqual(self.run_cli("check", self.books, "--base", "HEAD")[0], 1, "an old row may not gain measured tokens")
+        path.write_text(HEADER + old[1] + "\n")
+        self.assertEqual(self.run_cli("check", self.books, "--base", "HEAD")[0], 1, "a new header needs the cells too")
 
 
 class RunTwiceTest(SkillsCase):
@@ -491,9 +625,10 @@ class CursorTest(SkillsCase):
         self.transcript("one", installed, installed, f"{self.home}/code/kit/skills/beta/SKILL.md")
         self.transcript("two", installed, tool="ReadFile")
         rows = self.booked()
-        self.assertEqual([{k: r[k] for k in ("week", "skill", "tool", "how", "calls", "searches", "errors", "verdict")} for r in rows],
+        self.assertEqual([{k: r[k] for k in ("week", "skill", "tool", "how", "calls", "searches", "errors", "verdict") + quality.SKILL_TOKENS}
+                          for r in rows],
                          [{"week": "2026-W46", "skill": "alpha", "tool": "cursor", "how": "", "calls": "", "searches": "",
-                           "errors": "", "verdict": "unjudged"}] * 2)
+                           "errors": "", "verdict": "unjudged", "input_tokens": "", "output_tokens": "", "cache_write_tokens": ""}] * 2)
         self.assertEqual(self.book()[1].splitlines()[0][:22], "booked 0 skill uses; 2")
 
     def test_a_resumed_transcript_whose_date_moved_is_not_booked_again(self):
@@ -521,7 +656,8 @@ class CheckSkillUsesTest(SkillsCase):
 
     def test_a_good_row_of_each_tool_passes_and_is_counted(self):
         self.append()
-        self.append(tool="cursor", how="", calls="", searches="", errors="", use="f" * 16, source="", version="")
+        self.append(tool="cursor", how="", calls="", searches="", errors="", use="f" * 16, source="", version="",
+                    input_tokens="", output_tokens="", cache_write_tokens="")
         self.assertEqual(self.check(), (0, ["ok, 9 rows, 0 problems"]))
 
     def test_each_bad_cell_is_named_on_its_line(self):
@@ -531,6 +667,18 @@ class CheckSkillUsesTest(SkillsCase):
             with self.subTest(column=column):
                 (self.books / quality.SKILLS).write_text(HEADER)
                 self.append(**{column: value})
+                code, lines = self.check()
+                self.assertEqual(code, 1, lines)
+                self.assertTrue(lines[0].startswith("books/skill-uses.csv:2: "), lines)
+
+    def test_token_cells_are_all_or_none_and_none_on_a_cursor_row(self):
+        self.append(input_tokens="", output_tokens="", cache_write_tokens="")
+        self.assertEqual(self.check()[0], 0, "a row booked before the token columns has none")
+        for cells in ({"output_tokens": ""}, {"input_tokens": "-1"}, {"tool": "cursor", "how": "", "calls": "", "searches": "",
+                                                                       "errors": "", "source": "", "version": ""}):
+            with self.subTest(cells=cells):
+                (self.books / quality.SKILLS).write_text(HEADER)
+                self.append(**cells)
                 code, lines = self.check()
                 self.assertEqual(code, 1, lines)
                 self.assertTrue(lines[0].startswith("books/skill-uses.csv:2: "), lines)
@@ -583,20 +731,33 @@ class SummaryTest(SkillsCase):
     def test_uses_per_skill_for_the_week_most_used_first(self):
         week = json.loads(self.summary("--json"))["week"]
         rows = [dict(ROW, week=week, use=f"{i:016x}") for i in range(5)]
-        rows[1].update(how="typed", calls="20", searches="0", errors="4")
-        rows[2].update(tool="cursor", how="", calls="", searches="", errors="")
-        rows[3].update(skill="beta", source="", version="", how="subagent")
+        rows[0].update(input_tokens="1001")
+        rows[1].update(how="typed", calls="20", searches="0", errors="4", input_tokens="", output_tokens="", cache_write_tokens="")
+        rows[2].update(tool="cursor", how="", calls="", searches="", errors="", input_tokens="", output_tokens="", cache_write_tokens="")
+        rows[3].update(skill="beta", source="", version="", how="subagent", input_tokens="10", output_tokens="0", cache_write_tokens="1")
         rows[4].update(week="2026-W40")
         (self.books / quality.SKILLS).write_text(HEADER + "".join(",".join(r[k] for k in quality.SKILLS_SCHEMA) + "\n" for r in rows))
         result = json.loads(self.summary("--json"))
         self.assertEqual(result["skills"], {"uses": 4, "window": 20, "by_skill": [
             {"skill": "alpha", "source": "mine:@demo", "uses": 3, "by_how": {"typed": 1, "named": 0, "auto": 1, "subagent": 0},
-             "by_tool": {"claude-code": 2, "cursor": 1}, "calls": 23, "searches": 1, "errors": 4, "unjudged": 3},
+             "by_tool": {"claude-code": 2, "cursor": 1}, "calls": 23, "searches": 1, "errors": 4, "unjudged": 3,
+             "input_tokens": 1001, "output_tokens": 200, "cache_write_tokens": 300, "token_uses": 1, "tokens_per_use": 1501},
             {"skill": "beta", "source": "", "uses": 1, "by_how": {"typed": 0, "named": 0, "auto": 0, "subagent": 1},
-             "by_tool": {"claude-code": 1, "cursor": 0}, "calls": 3, "searches": 1, "errors": 0, "unjudged": 1}]})
+             "by_tool": {"claude-code": 1, "cursor": 0}, "calls": 3, "searches": 1, "errors": 0, "unjudged": 1,
+             "input_tokens": 10, "output_tokens": 0, "cache_write_tokens": 1, "token_uses": 1, "tokens_per_use": 11}]},
+            "tokens per use count only the rows that measured them: not the cursor row, not one booked before the columns")
         without = {k: v for k, v in result.items() if k != "skills"}
         self.assertEqual(without, json.loads((ROOT / "tests/fixtures/quality-summary.json").read_text()))
         self.assertIn("skills: 4 uses of 2 skills", self.summary())
+
+    def test_tokens_per_use_is_rounded_to_a_whole_token_and_none_when_nothing_measured_them(self):
+        week = json.loads(self.summary("--json"))["week"]
+        rows = [dict(ROW, week=week, use=f"{i:016x}", input_tokens=str(n), output_tokens="0", cache_write_tokens="0")
+                for i, n in enumerate((1, 2))]
+        rows.append(dict(ROW, week=week, skill="beta", use="f" * 16, input_tokens="", output_tokens="", cache_write_tokens=""))
+        (self.books / quality.SKILLS).write_text(HEADER + "".join(",".join(r[k] for k in quality.SKILLS_SCHEMA) + "\n" for r in rows))
+        by_skill = json.loads(self.summary("--json"))["skills"]["by_skill"]
+        self.assertEqual([(s["skill"], s["token_uses"], s["tokens_per_use"]) for s in by_skill], [("alpha", 2, 2), ("beta", 0, None)])
 
     def test_a_header_only_book_reports_zero_uses(self):
         self.assertEqual(json.loads(self.summary("--json"))["skills"], {"by_skill": [], "uses": 0, "window": 20})
