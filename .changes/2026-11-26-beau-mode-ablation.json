@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "goal": "Find out whether the roughly 3,000 words of beau-mode's SKILL.md that beau-agent loads before any work help or distract, compared with a slim router that restates the task, picks a playbook and reads only that playbook and the principles it names, so the always-on text is cut only if the slim router does as well (R43).",
+  "changed": [
+    "ROADMAP R43 is done with a keep recommendation: the slim arm fell outside the noise band on scope and reply.",
+    "The change folder holds the eval's report, the rubric and rules written before judging, the 8 tasks, the slim arm's text, the judge's per-task verdicts, the computed win shares, a per-run table and the harness that ran it.",
+    "Nothing under plugins/bstack/skills/beau-mode/ changed."
+  ],
+  "claims": [
+    {
+      "claim": "The slim arm holds on cause, fix and proof and does not hold on scope (0.344 against a band of 0) or reply (0.281 against a band of 0.125), so the pre-registered rule says keep.",
+      "verdict": "VERIFIED",
+      "check": "score.py over the 8 judge verdicts, all status ok, against the rule in prereg.md",
+      "commit": "e5babc7",
+      "record": ".changes/2026-11-26-beau-mode-ablation/scores.json",
+      "remaining": "8 tasks and one identical-run pair for the band; the judge has beau-mode loaded through cursor-agent's user rules; label positions were not balanced."
+    },
+    {
+      "claim": "The full arm adds 7,505 tokens to the system prompt and the slim arm 2,169, and cost per run was $0.36 for full and $0.38 for slim.",
+      "verdict": "VERIFIED",
+      "check": "tok.py: one-word claude -p replies on Sonnet with each arm and with none; total_cost_usd per run from the transcripts",
+      "commit": "e5babc7",
+      "record": ".changes/2026-11-26-beau-mode-ablation/tokens.txt",
+      "remaining": "Sonnet in claude -p only; other tools and models were not run."
+    },
+    {
+      "claim": "The full arm opened its playbook in 10 of 16 runs and the slim arm in 8 of 8; no run opened a principle file.",
+      "verdict": "VERIFIED",
+      "check": "Every tool call input naming playbooks/ or references/ in each run's stream-json transcript, cross-checked against tool results holding a playbook header",
+      "commit": "e5babc7",
+      "record": ".changes/2026-11-26-beau-mode-ablation/runs.tsv",
+      "remaining": "Why the full arm skips its playbook is inferred, not tested."
+    },
+    {
+      "claim": "The merged PRs' own new tests can separate the arms.",
+      "verdict": "NOT VERIFIED",
+      "check": "truth.py ran them for t3, t7 and t8 against the base and every candidate",
+      "commit": "e5babc7",
+      "record": ".changes/2026-11-26-beau-mode-ablation/runs.tsv",
+      "remaining": "They fail on the unmodified base and on nearly every candidate because they test the merged design, so they cannot stand in for the judge."
+    }
+  ],
+  "next": [
+    {
+      "item": "R13's beau-mode comparison reuses these tasks, harness and full runs",
+      "source": "ROADMAP.md R13 and R43",
+      "why_now": "R43 was to run first so R13 could reuse its tasks, and R42 already reuses them.",
+      "impact": "R13 starts with 8 tasks, a harness and a noise band instead of building them, which makes its runs cheap."
+    },
+    {
+      "item": "Test why the full arm skips its playbook in 6 of 16 runs, for example by repeating step 2 at the end of SKILL.md",
+      "source": "inferred, from runs.tsv",
+      "why_now": "It is the one place this eval shows the always-on text distracting, and the tasks and harness are ready.",
+      "impact": "Agents that skip the playbook skip its proof and gate steps. If a moved step 2 gets every run to open its playbook, beau-agent's work gets those checks every time."
+    }
+  ],
+  "release": {
+    "none": "An eval and its record; no plugin or skill text changed."
+  }
+}
