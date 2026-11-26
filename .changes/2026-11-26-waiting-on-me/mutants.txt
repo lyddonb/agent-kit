@@ -1,0 +1,6 @@
+One-line mutants of waiting.py at cea0674, each followed by python3 -m unittest tests.test_waiting:
+status closed when it contains done => FAILED (failures=2)
+sealed runs not skipped => FAILED (failures=3)
+answered open questions kept => FAILED (failures=2)
+unanchored Answer match => FAILED (failures=2)
+drafts kept => FAILED (failures=2)

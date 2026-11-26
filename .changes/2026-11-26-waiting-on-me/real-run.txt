@@ -1,0 +1,21 @@
+waiting.py run on this machine against the workspace folder (a git repo whose
+direct subfolders are the five harness repos), plus one --github repo with no clone.
+Two of the five repos and the --github repo are private, so their names and counts are left
+out here. The full output is kept outside this repo.
+
+Before the run, every HUMAN_TASKS.md table and Open section was counted by hand, and
+`gh pr list --state open` was run per repo.
+
+Public repos, script vs hand count:
+  agent-kit     open tasks 7 (3 blockers: H8, H14, H17)   matches
+  agentfiles    open tasks 6                               matches
+  agent-ledger  open tasks 2                               matches
+Private repos: every open task (both the [ ] Done-column shape and the ## Open bullet shape)
+and every open questions.md bullet matched the hand count.
+Pull requests: in every repo the listed non-draft PRs were exactly the ones gh pr list showed
+(during the session agent-kit #116 merged and left the list; agent-ledger #45 and agentfiles
+#31 opened and joined it).
+Open ledger gates: 0. Every run under .audit/runs on the default branches and worktrees was
+sealed; gates are proven on fixtures only (tests.txt, Gates and GatesChanges).
+Links: every item carried one; files matching origin/main linked to GitHub at the line.
+Exit code 0: nothing under "Could not read".

@@ -1,0 +1,15 @@
+Checklist items that fired on this diff (checklist.py --base origin/main after rebasing on ffe87e5: 5 of 8), run at cea0674:
+
+gh-call: a gh wrapper first on WAITING_GH whose "auth status" exits 1 ("not logged in") and
+passes every other call to the real gh. waiting.py never calls auth status: it exited 0 and
+listed the same pull request sections as with the real gh.
+
+skill-description: verify-kit control-kit launch, doctor, drive skills-load on this checkout:
+"PASS skills-load 4 steps", and the session init lists bstack:waiting-on-me. A model picking
+the skill from the "Use for" phrases was not tried (verify-kit does not map it).
+
+added-comment: comments.py --base origin/main: "the diff adds 0 to Python files".
+
+plugins-in-step: make check and make versions pass (see make-test.txt).
+
+tests-weakened: test_guard.py --base origin/main: "0 findings in 0 test files" (the diff adds a test file and changes none).
