@@ -27,7 +27,7 @@
     {
       "claim": "Repeating a response's usage across its records is safe to deduplicate by message id: no id in five weeks of transcripts carried two different usages.",
       "verdict": "VERIFIED",
-      "check": "a probe over 521 transcript files from the last 35 days",
+      "check": "a probe over the last five weeks of transcript files",
       "commit": "0a7f57a",
       "record": ".changes/2026-11-26-skill-tokens/real-run.txt",
       "remaining": "A future Claude Code that streams partial usage per record would need the max per id; the code takes the first."
