@@ -22,6 +22,7 @@ name = os.path.basename(sys.argv[0])
 prompt = sys.stdin.read()
 mode = os.environ.get("FAKE_MODE", "ok")
 if mode == "sleep":
+    time.sleep(float(os.environ.get("FAKE_START_DELAY", "0")))
     child = subprocess.Popen(["sleep", "30"])
     with open(os.environ["FAKE_PIDFILE"], "w") as f:
         f.write(str(child.pid))
@@ -58,9 +59,9 @@ class SecondOpinionCase(unittest.TestCase):
         self.prompt = self.dir / "prompt.md"
         self.prompt.write_text("review this please")
 
-    def run_so(self, *args, mode="ok", path=None, stdin=None, timeout=60):
+    def run_so(self, *args, mode="ok", path=None, stdin=None, timeout=60, start_delay=0):
         env = {**os.environ, "PATH": path if path is not None else f"{self.bin}{os.pathsep}{os.environ['PATH']}",
-               "FAKE_MODE": mode, "FAKE_PIDFILE": str(self.dir / "pid")}
+               "FAKE_MODE": mode, "FAKE_PIDFILE": str(self.dir / "pid"), "FAKE_START_DELAY": str(start_delay)}
         done = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env,
                               input=stdin, timeout=timeout)
         return done.returncode, done.stdout, done.stderr
@@ -186,9 +187,9 @@ class InvocationTest(SecondOpinionCase):
 
 
 class TimeoutTest(SecondOpinionCase):
-    def test_a_timeout_kills_the_cli_and_what_it_started(self):
+    def assert_timeout_kills_the_grandchild(self, start_delay):
         began = time.monotonic()
-        code, res, _ = self.review("cli:claude:opus", "--timeout", "1", mode="sleep", timeout=20)
+        code, res, _ = self.review("cli:claude:opus", "--timeout", "1", mode="sleep", timeout=20, start_delay=start_delay)
         self.assertLess(time.monotonic() - began, 10)
         self.assertEqual((code, res["status"]), (1, "timeout"))
         pid = int((self.dir / "pid").read_text())
@@ -201,6 +202,12 @@ class TimeoutTest(SecondOpinionCase):
             time.sleep(0.1)
         os.kill(pid, 9)
         self.fail("the grandchild survived the timeout")
+
+    def test_a_timeout_kills_the_cli_and_what_it_started(self):
+        self.assert_timeout_kills_the_grandchild(start_delay=0)
+
+    def test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed(self):
+        self.assert_timeout_kills_the_grandchild(start_delay=2)
 
 
 if __name__ == "__main__":
