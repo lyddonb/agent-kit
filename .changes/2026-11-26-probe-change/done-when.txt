@@ -1,0 +1,13 @@
+Done-when: check-product.py --base reports a fixture branch that edits C1's probe and checks its box, and passes it once the item gains a **Confirmed.** line. Observe mode: exit 0.
+
+Before (origin/main at 1a6aa9c), python3 .changes/2026-11-26-probe-change/replay_test.py.txt:
+--receipts --base: 0 check-product: demo: 0 problem(s), 0 draft marker(s) awaiting confirmation, receipts: 1 newly checked, 1 backed (no stderr)
+no flags: 0 check-product: demo: 0 problem(s), 0 draft marker(s) awaiting confirmation (no stderr)
+
+After (this branch):
+--receipts --base: 0 check-product: demo: 0 problem(s), 0 draft marker(s) awaiting confirmation, 1 self-judged probe(s) observed, receipts: 1 newly checked, 1 backed observe: docs/phases/P1-first-slice.md:35: P1-C1's Probe: changed in the diff that checks it; the change judged itself. Add a `**Confirmed.**` line to the item saying who accepted the probe, or check the box in a later PR
+no flags: 0 check-product: demo: 0 problem(s), 0 draft marker(s) awaiting confirmation (no stderr)
+
+Fixture with the new **Confirmed.** line: tests/test_check_product_probe_change.py test_a_new_confirmed_line_on_the_item_passes_it
+Ran 2 tests in 1.967s
+OK
