@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "goal": "Make a diff that deletes, skips, retries or loosens a Python test visible on the pull request before it merges, so 'never skip or weaken a test' is checked rather than remembered (roadmap R29, unit 3).",
+  "changed": [
+    "verify-work gains scripts/test_guard.py: --base REF [--head REF] compares each changed Python test file with its copy at the merge base, function by function, and prints every test deleted or moved and every skip, retry, wider timeout or tolerance, dropped assertion, or exact assertion traded for a weaker one. It exits 0, and 2 only when it cannot run.",
+    "verify-work's step 7 runs it whenever a diff touches Python tests, and an unexplained finding makes the verdict NOT VERIFIED.",
+    "agent-kit's .agents/checklist.json gains tests-weakened, which fires on any diff under tests/ and runs the guard as its probe."
+  ],
+  "claims": [
+    {
+      "claim": "On agent-kit's history the guard reports the three tests 990c84f renamed or replaced, reports the nine debrief tests 1782b7c deleted by an accidental revert, and prints nothing on docs-only cb5299b.",
+      "verdict": "VERIFIED",
+      "check": "python3 test_guard.py --base C^ --head C for each commit, under /usr/bin/python3 3.9.6; HistoryTest replays 990c84f and cb5299b in the suite",
+      "commit": "e6abc66",
+      "record": ".changes/2026-11-26-test-guard/done-when.txt",
+      "remaining": "agent-kit's history only; agent-ledger, agentfiles and pytest suites were not replayed."
+    },
+    {
+      "claim": "Every rule is held by a test: switching any one of fifteen rules off turns at least one test in tests/test_test_guard.py red.",
+      "verdict": "VERIFIED",
+      "check": "fifteen one-line mutants of test_guard.py, each followed by python3 -m unittest tests.test_test_guard",
+      "commit": "e6abc66",
+      "record": ".changes/2026-11-26-test-guard/mutants.txt",
+      "remaining": "The fixtures are hand-written unittest and pytest shapes, not every way a skip or retry can be spelled."
+    },
+    {
+      "claim": "Over all 215 non-merge commits on main it fires on 17, almost all removals beside renames; two findings are a 3.12-only f-string read under 3.9, which the message now names with the version.",
+      "verdict": "VERIFIED",
+      "check": "the guard on every commit against its parent, findings tallied by kind",
+      "commit": "e6abc66",
+      "record": ".changes/2026-11-26-test-guard/history.txt",
+      "remaining": "Whether each removal was a fair rename was not judged commit by commit."
+    },
+    {
+      "claim": "The whole suite passes with the guard, its tests and the new checklist item.",
+      "verdict": "VERIFIED",
+      "check": "make test after rebasing onto main at ce910b2",
+      "commit": "e6abc66",
+      "record": ".changes/2026-11-26-test-guard/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "Run the guard in CI in observe mode, from the base branch's copy as change-record.yml runs debrief.py, in agent-kit and then the watched repos",
+      "source": "ROADMAP.md R29 and docs/ARCHITECTURE.md's gate table (the rows answered 'R29 unit 3')",
+      "why_now": "Today it runs only when verify-work or the checklist runs; a pull request that skips both is not read.",
+      "impact": "Every pull request would show its test-weakening lines without anyone asking. Editing workflow files is Beau's call (H13)."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.44.0"
+  }
+}

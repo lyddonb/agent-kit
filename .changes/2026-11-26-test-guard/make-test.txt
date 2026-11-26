@@ -1,0 +1,4 @@
+$ make test   (at e6abc66, rebased onto main ce910b2)
+Ran 1414 tests in 254.553s
+OK (skipped=24)
+validate: 42 skills in 7 plugins, 83 script commands, 0 errors, 0 warnings
