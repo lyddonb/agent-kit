@@ -14,6 +14,12 @@
     - "The weekly Mac job no longer loses its week when the Mac is asleep on Sunday morning. The launch agent now starts it every hour, and the job (`--scheduled`) works only from Sunday 06:00 to Monday 23:59 local time: it skips a brief dark wake and tries again the next hour, retries a failed run every hour until Monday night, and stops after the first run that finishes without a failure. Plain runs and `--dry-run` behave as before. Install the job again to pick it up."
   try: "Run weekly-claude-code.sh --repo OWNER/NAME --print-plist and check that it starts every hour and passes --scheduled."
 
+- date: 2026-11-25
+  plugin: bstack
+  version: 0.43.1
+  changes:
+    - "beau-help lists cfo 0.4.2 and what changed in it: the weekly Mac job retries hourly through Sunday and Monday instead of losing its week to one dark wake."
+
 - date: 2026-11-24
   plugin: bstack
   version: 0.43.0

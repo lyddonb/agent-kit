@@ -11,6 +11,15 @@
       "try": "Run weekly-claude-code.sh --repo OWNER/NAME --print-plist and check that it starts every hour and passes --scheduled."
     },
     {
+      "id": "bstack@0.43.1",
+      "date": "2026-11-25",
+      "plugin": "bstack",
+      "version": "0.43.1",
+      "changes": [
+        "beau-help lists cfo 0.4.2 and what changed in it: the weekly Mac job retries hourly through Sunday and Monday instead of losing its week to one dark wake."
+      ]
+    },
+    {
       "id": "bstack@0.43.0",
       "date": "2026-11-24",
       "plugin": "bstack",
