@@ -87,9 +87,8 @@ step-by-step instructions. Context and the full mapping to this repo:
 [notes in agent-ledger](https://github.com/lyddonb/agent-ledger/blob/main/docs/notes/intent-over-steps.md). The ideal-state spec landed in bstack 0.11.0; R21 to R26
 in the roadmap carry the next parts.
 
-- **A notifier for scheduled jobs.** One place that reads each scheduled job's result (CFO
-  brief, quality brief, maintain-verification-skill) and decides: a message now, a line in a
-  daily digest, or nothing. Worth it once three or more jobs run on a schedule.
+- **A notifier for scheduled jobs.** Now ROADMAP R47, narrowed to a list of what waits on Beau.
+  A notifier that messages him can read R47's output later.
 - **"Should work" is not a status.** A check in `unslop` or `verify-work` that flags replies
   and PR bodies claiming something works without a VERIFIED result or a receipt.
 - **Hillclimb on the books.** R17's Hillclimb playbook, fed from the quality books and the

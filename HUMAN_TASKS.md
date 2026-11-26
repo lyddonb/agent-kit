@@ -238,3 +238,7 @@ Allowing a judge for these two evals, and on which model, is your call. It also 
 2. If allowed, which model judges. It should differ from the candidates' model, since Scribe's
    weak point was grading with the same model.
 3. If not, R43 falls back to R25's rule: no cut without an agent-ledger M3 eval covering the text.
+**Evidence (2026-11-25):** Uber's skill ablation uses a blind judge, a per-skill noise band from
+identical runs, and a human-annotated set to check the judge. It reports most skills made
+sessions better and cheaper, and the least help from skills that teach tool discovery. R43
+now asks for the noise band. Its numbers are Uber's own.
