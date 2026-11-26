@@ -65,6 +65,7 @@ When a server fits two categories, pick the one matching its main evidence and n
 
 - If the file, the role, or your tool's entry is missing, or the value is `inherit`, don't pass a model. The subagent runs on the current model.
 - If your tool rejects a model name, rerun that subagent on the current model and say so in the reply.
+- An entry that starts with `cli:` (for example `cli:cursor-agent:gpt-5.6-sol-high`) names another agent's CLI, not a model for your tool. Don't start a subagent for it. Write its brief to a file in your scratch folder and run `python3 ../beau-mode/scripts/second_opinion.py --reviewer ENTRY --prompt-file FILE --json` from this skill's folder (the script lives in the beau-mode skill, next to this one), adding `--cwd` with the worktree when it must read code. It only reads, so never give it a step that edits files or runs a repro. Exit 2 means the entry itself is wrong (an unknown agent or a malformed spec): name the entry in the reply. Any `status` other than `ok` means that reviewer gave no answer: name the status in the reply. In both cases, if the step needs that seat filled, run it on the current model and say the review was not independent.
 - When a step asks for a *different* model and none is configured, pick a different one your tool offers if you can choose models. Otherwise use the current model and say in the reply that the review was not independent.
 - If your tool can't start subagents, do the subagent's work yourself, one step at a time, and say in the reply that the review was not independent.
 

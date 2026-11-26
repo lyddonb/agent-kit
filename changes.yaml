@@ -9,6 +9,13 @@
 
 - date: 2026-11-26
   plugin: bstack
+  version: 0.47.0
+  changes:
+    - "A reviewer or judge can now come from another agent's CLI, so a Claude Code session can get a GPT model's read. A roles-file entry `cli:<agent>:<model>` (for example `cli:cursor-agent:gpt-5.6-sol-high`) names one, and the beau-mode skill's `scripts/second_opinion.py` runs it: one read-only call to `claude` or `cursor-agent`, killed after `--timeout` seconds (600 by default), with a JSON result whose status is `ok`, `empty`, `error`, `timeout` or `missing`. A CLI that exits 0 with a blank or failed answer counts as a failure, not a review. No profile sets a `cli:` entry yet, so review panels are unchanged until you add one."
+  try: "Run second_opinion.py --list, then ask cli:cursor-agent:gpt-5.6-sol-high to review a diff."
+
+- date: 2026-11-26
+  plugin: bstack
   version: 0.46.0
   changes:
     - "qualitydirector's `book-skills` now books what each skill use cost: `input_tokens`, `output_tokens` and `cache_write_tokens` over the same window as the counts (from the load to the next typed turn or the 20th tool result), read from the usage on each Claude Code model response, each response once. Cursor rows stay empty. `summary --json` gains the token sums, `token_uses` and `tokens_per_use` per skill. A book on the earlier header keeps working unchanged until you run the new `migrate-skills`, which adds the columns and leaves the rows already booked with empty token cells; run it once the books' CI checks with this version."

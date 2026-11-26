@@ -1,0 +1,7 @@
+## codex probe (raw CLI, not the script)
+echo PROMPT | codex exec -m gpt-5.3-codex -s read-only --skip-git-repo-check --output-last-message codex.last -
+[2026-11-26T18:27:52] stream error: Failed to refresh token: 401 Unauthorized; retrying 4/5 in 1.646s…
+[2026-11-26T18:27:54] stream error: Failed to refresh token: 401 Unauthorized; retrying 5/5 in 3.408s…
+[2026-11-26T18:27:57] ERROR: Failed to refresh token: 401 Unauthorized
+Warning: no last agent message; wrote empty content to codex.last
+exit 0
