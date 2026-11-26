@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.46.0 (2026-11-26)
+
+- qualitydirector's `book-skills` now books what each skill use cost: `input_tokens`, `output_tokens` and `cache_write_tokens` over the same window as the counts (from the load to the next typed turn or the 20th tool result), read from the usage on each Claude Code model response, each response once. Cursor rows stay empty. `summary --json` gains the token sums, `token_uses` and `tokens_per_use` per skill. A book on the earlier header keeps working unchanged until you run the new `migrate-skills`, which adds the columns and leaves the rows already booked with empty token cells; run it once the books' CI checks with this version.
+- Try: `Run quality.py migrate-skills on a scratch copy of the books, then book-skills, then summary --json.`
+
 ## bstack 0.45.0 (2026-11-26)
 
 - New waiting-on-me skill lists everything across your repos that waits on you, in one read-only pass: open `HUMAN_TASKS.md` items with blockers first and what each blocks, `gate` ledger entries with no later `gate-answer` in unsealed runs (worktrees included), open pull requests that are not drafts with their check state, and open questions in `questions.md`. Each item links to its source. Pass the repos, or a folder of repos, every time; `--github OWNER/NAME` adds a repo's pull requests without a clone, and `--json` is for a notifier. A source it cannot read is listed and the exit code is 1.
