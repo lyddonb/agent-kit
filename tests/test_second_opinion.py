@@ -208,9 +208,10 @@ class InvocationTest(SecondOpinionCase):
 
 class TimeoutTest(SecondOpinionCase):
     def assert_timeout_kills_the_grandchild(self, start_delay):
-        code, res, err = self.review("cli:claude:opus", "--timeout", "1", mode="sleep", timeout=20,
-                                     start_delay=start_delay, ready_gate=True)
-        self.assertEqual((code, res["status"]), (1, "timeout"), err)
+        code, out, err = self.run_so("--reviewer", "cli:claude:opus", "--prompt-file", str(self.prompt), "--json",
+                                     "--timeout", "1", mode="sleep", timeout=20, start_delay=start_delay, ready_gate=True)
+        self.assertTrue(out, err)
+        self.assertEqual((code, json.loads(out)["status"]), (1, "timeout"), err)
         pid, ready_at = (self.dir / "pid").read_text().split()
         self.assertLess(time.time() - float(ready_at), 10, "the timeout should fire long before the fake's 30s sleep ends")
         pid = int(pid)
