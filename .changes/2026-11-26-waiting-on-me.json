@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "goal": "Make step 1 of choosing what to work on next one command: list everything across the repos that waits on the human (open human tasks with blockers first, open ledger gates, pull requests waiting for review or merge, open questions), each with a link, instead of reading five files and a PR list by hand (roadmap R47).",
+  "changed": [
+    "bstack gains the waiting-on-me skill and scripts/waiting.py: given repos, or a folder of repos, it lists open HUMAN_TASKS.md items (status tables, Done-checkbox tables and ## Open bullets) with blockers first and what each blocks, gate entries with no later gate-answer in unsealed runs under .audit/runs in each repo and its worktrees, open non-draft pull requests with their check state, and open questions.md bullets with no Answer: line. It reads only and sends nothing.",
+    "Every item links to its source: the GitHub URL at the line when the local file matches origin's default branch, else PATH:LINE. A file in no known shape, a torn ledger line, a missing gh or a gh failure is listed under Could not read and the exit code is 1.",
+    "ROADMAP.md marks R28, R44 and R47 done. bstack 0.45.0."
+  ],
+  "claims": [
+    {
+      "claim": "Run on this machine against the workspace folder, it listed every open human task in the five repos and every open pull request that gh pr list showed, each with a link, and nothing under Could not read.",
+      "verdict": "VERIFIED",
+      "check": "waiting.py on the workspace folder plus one --github repo, compared with a hand count of every HUMAN_TASKS.md and questions.md and with gh pr list per repo",
+      "commit": "cea0674",
+      "record": ".changes/2026-11-26-waiting-on-me/real-run.txt",
+      "remaining": "Private repos' names and counts are kept out of this record. The full output is kept outside the repo."
+    },
+    {
+      "claim": "Each rule holds on fixture repos: Done and Skipped rows and [x] rows close and nothing else does, bullets count only under ## Open, a gate is open only after the last gate-answer in a run with no seal (a worktree-only run included), drafts are left out, an answered question is left out, and a link points at its line.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m unittest -v tests.test_waiting (18 tests on four invented git repos and a fake gh)",
+      "commit": "cea0674",
+      "record": ".changes/2026-11-26-waiting-on-me/tests.txt",
+      "remaining": "Ledger gates were never open on the real workspace: every run was sealed, so gates are proven on fixtures only."
+    },
+    {
+      "claim": "The tests hold the rules: treating any status containing done as closed, keeping sealed runs, keeping answered questions, matching Answer anywhere in a question's text, or keeping drafts each turns tests red.",
+      "verdict": "VERIFIED",
+      "check": "five one-line mutants of waiting.py, each followed by python3 -m unittest tests.test_waiting, at cea0674",
+      "commit": "cea0674",
+      "record": ".changes/2026-11-26-waiting-on-me/mutants.txt",
+      "remaining": "Five rules mutated, not every rule."
+    },
+    {
+      "claim": "The five checklist items this diff fires pass: it never calls gh auth status, the skill loads in a clean Claude Code session, the diff adds no comments, the plugin files are in step, and no test is weakened.",
+      "verdict": "VERIFIED",
+      "check": "a gh wrapper whose auth status exits 1; verify-kit drive skills-load; comments.py --base origin/main; make check versions; test_guard.py --base origin/main",
+      "commit": "cea0674",
+      "record": ".changes/2026-11-26-waiting-on-me/probes.txt",
+      "remaining": "A model choosing the skill from its Use for phrases was not tried."
+    },
+    {
+      "claim": "The whole suite passes after rebasing on main with bstack 0.44.0 merged.",
+      "verdict": "VERIFIED",
+      "check": "make test and make versions",
+      "commit": "2936163",
+      "record": ".changes/2026-11-26-waiting-on-me/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "Point the workspace's 'Choosing what to work on next' step 1 at waiting.py",
+      "source": "inferred: the workspace's agent instructions build that list by hand from five files and a PR list",
+      "why_now": "The command exists now, but agents still follow the hand-built steps.",
+      "impact": "Every 'what's next' answer starts from the same complete list, and a blocker or open gate can't be missed."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.45.0"
+  }
+}

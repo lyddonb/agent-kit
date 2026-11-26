@@ -1,0 +1,10 @@
+make test at 2936163 (rebased on origin/main ffe87e5)
+kitgen: 26 generated files and 27 files with GENERATED blocks up to date
+uv run --no-project --quiet --python 3.12 --with pyyaml python tools/validate.py
+validate: 43 skills in 7 plugins, 84 script commands, 0 errors, 0 warnings
+uv run --no-project --quiet --python 3.12 --with pyyaml python -m unittest discover -s tests
+----------------------------------------------------------------------
+Ran 1432 tests in 508.412s
+
+OK (skipped=24)
+versions: 0 plugin(s) changed without a version bump
