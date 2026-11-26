@@ -1,0 +1,7 @@
+at 86ab9b8 (old message):
+AssertionError: 'every hour from Sunday 06:00 to Monday 23:59' not found in the install output, which said "brief PR every Sunday at 06:00."
+Ran 1 test in 0.704s
+FAILED (failures=1)
+at fbb88a8 (fix):
+Ran 1 test in 0.791s
+OK
