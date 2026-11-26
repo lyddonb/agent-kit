@@ -350,8 +350,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R31 and R33 are done, and so are R28's units 1 and 2 (its unit 3 waits on the
-books repo's H5). Next: R29, then R30. R32 waits on R6 and on Beau (H14). R34 waits on R23.
+Order: R27, R28, R30, R31 and R33 are done. Next: R29. R32 waits on R6 and on Beau (H14). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -388,9 +387,10 @@ request 52) and `by_kind` in pull request 56, where a kind comes from an optiona
 `books/kinds.csv` (the real books have none yet, so every test counts as a unit test). On the
 real books, `summary --json --week 2026-W46` lists
 `test_agentfiles.ConfigTests.test_cycle_detected` under agentfiles `caught_on_pr` and nothing
-under any `failed_on_main`. Unit 3 is open: the `briefs/TEMPLATE.md` rows wait on the books
-repo's H5.
-**Prioritize when:** unit 3 when the books repo's H5 is answered.
+under any `failed_on_main`. Unit 3 is built (2026-11-25): the books repo's brief template gains a cost-and-catches
+table by kind, lists `caught_on_pr` under Reliability, and holds a slow-test proposal to
+its kind and catches, with H5 (a) in its `AGENTS.md` and its first `books/kinds.csv`. It
+waits on the books repo's pull request. The first brief written from it is the last proof.
 
 ## P1
 
@@ -437,7 +437,9 @@ JSON) by prototype; the repo has no YAML parser to lean on at run time.
 the `gh` item; on a docs-only commit it prints nothing.
 **Why not done:** New idea. `correct`'s rule table pairs rules with enforcement but nothing
 selects rules by what a diff touches.
-**Prioritize when:** now. R27 is done, so items can name a `verify-<app>` drive as their check.
+**Done 2026-11-21** in pull requests 80, 82 and 86: `checklist.py --base`, the base copy of
+the checklist file, and a receipt per item. Its change record proves the done-when on 990c84f,
+02faa18 and a docs-only commit. Still unchecked: an agent following verify-work's step runs it.
 
 ### R31. Every commit says how it was verified
 **Done 2026-11-18** in bstack 0.15.0 (pull request 53). The Opening a PR playbook writes the
@@ -576,7 +578,7 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 
 Order: R38 is done and booking rows since 2026-11-21. agentfiles R17 can start, since the lint
 it runs has shipped.
-agentfiles R16 with its R0 or R11. R40 waits on R30. agent-ledger's M3 unit 1 waits on four
+agentfiles R16 with its R0 or R11. R40 can start: R30 has landed. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
 
