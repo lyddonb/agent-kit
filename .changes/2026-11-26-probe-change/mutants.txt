@@ -1,0 +1,10 @@
+Five one-line mutants of check-product.py, each followed by
+python3 -m unittest tests.test_check_product_probe_change tests.test_check_product_receipts
+
+no confirmation (drop the **Confirmed.** pass)          -> FAILED (failures=2)
+probe always same (probe comparison returns True)       -> FAILED (failures=5)
+new criteria skipped (a criterion absent at base passes) -> FAILED (failures=2)
+confirmed kept in claim (criterion_text keeps it)       -> OK on the first run; survived.
+    Added test_a_confirmation_written_before_the_evidence_keeps_the_receipt,
+    then the same mutant                                -> FAILED (failures=1)
+old confirmation counts (base's Confirmed lines count)  -> FAILED (failures=1)

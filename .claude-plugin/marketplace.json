@@ -67,7 +67,7 @@
     {
       "name": "bstack",
       "description": "Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; waiting-on-me lists what waits on you across your repos; skills for understanding (how, why, teach, recall), debugging (root-cause finds a bug's cause from facts, not from reading the code), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), closing out (debrief keeps a checked change record per PR and prints the brief and the release notes), improvement (reflect, correct, unslop, no-comments), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week; local-ci runs a repo's CI on this machine and posts it to the PR as a commit status) do the steps. Adapted from Lauren Tan's pstack to work in any agent.",
-      "version": "0.48.0",
+      "version": "0.49.0",
       "source": "./plugins/bstack",
       "category": "development",
       "keywords": [

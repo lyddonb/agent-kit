@@ -1,0 +1,33 @@
+import re, sys, unittest
+sys.path.insert(0, "tests")
+import receipt_helpers as h
+from test_check_product_receipts import ReceiptsBase, receipt_entry, SPEC
+
+
+class Unit2Replay(ReceiptsBase):
+    def rewritten(self):
+        line = next(l for l in self.base_spec.splitlines() if l.startswith("- [ ] **C1.**"))
+        new_line = re.sub(r"Probe:.*", "Probe: `true`.", line)
+        self.assertNotEqual(line, new_line, "the fixture's C1 has a probe to rewrite")
+        return self.base_spec.replace(line, new_line)
+
+    def test_probe_rewritten_and_box_checked_in_one_branch_with_receipts(self):
+        easier = self.rewritten()
+        self.write_spec(easier)
+        rewrite = h.commit(self.repo, "rewrite C1's probe")
+        self.write_ledger(receipt_entry("P1-C1", rewrite, easier))
+        self.write_spec(self.tick(easier))
+        h.commit(self.repo, "tick C1")
+        done = self.check()
+        print("\n--receipts --base:", done.returncode, done.stdout.strip(), done.stderr.strip() or "(no stderr)")
+
+    def test_same_branch_without_receipts(self):
+        easier = self.rewritten()
+        self.write_spec(self.tick(easier))
+        h.commit(self.repo, "rewrite C1's probe and tick it")
+        done = self.check(receipts=None)
+        print("\nno flags:", done.returncode, done.stdout.strip(), done.stderr.strip() or "(no stderr)")
+
+
+if __name__ == "__main__":
+    unittest.main()

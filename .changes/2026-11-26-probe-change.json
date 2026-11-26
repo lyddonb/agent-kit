@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "goal": "Stop a pull request from judging itself by loosening a criterion's probe and checking its box in the same diff, by making that visible on the pull request (roadmap R29, unit 2).",
+  "changed": [
+    "check-product.py --base REF compares each box the branch newly checked with REF. A criterion whose Probe: text changed, or that REF doesn't have, prints an `observe:` line unless the item gains a **Confirmed.** line it didn't have at REF. The exit code never changes.",
+    "--receipts makes the same comparison against its base. --base alone used to be a usage error; it now runs this check without receipts.",
+    "A **Confirmed.** line in an item no longer counts as part of the criterion's claim, so confirming a probe after its receipt doesn't make the receipt stale.",
+    "The Product phase playbook, the scaffold-product layout reference and the gate table in docs/ARCHITECTURE.md say so."
+  ],
+  "claims": [
+    {
+      "claim": "A fixture branch that rewrites C1's probe to `true`, takes a receipt and checks the box passed silently on origin/main and now prints one observe: line naming P1-C1, still exiting 0; with a new **Confirmed.** line on the item it prints nothing.",
+      "verdict": "VERIFIED",
+      "check": "python3 .changes/2026-11-26-probe-change/replay_test.py.txt on origin/main and on this branch; tests/test_check_product_probe_change.py",
+      "commit": "b17a3ae",
+      "record": ".changes/2026-11-26-probe-change/done-when.txt",
+      "remaining": "Fixture repos only; no real product repo has run it yet."
+    },
+    {
+      "claim": "Each rule is held by a test: five one-line mutants of the new code each turn a test red.",
+      "verdict": "VERIFIED",
+      "check": "five mutants, each followed by the probe-change and receipts test modules",
+      "commit": "b17a3ae",
+      "record": ".changes/2026-11-26-probe-change/mutants.txt",
+      "remaining": "One mutant survived the first run (a Confirmed line written before Evidence:); a test was added for it."
+    },
+    {
+      "claim": "The whole suite passes.",
+      "verdict": "VERIFIED",
+      "check": "make test",
+      "commit": "b17a3ae",
+      "record": ".changes/2026-11-26-probe-change/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "R43: ablate beau-mode's always-on load",
+      "source": "ROADMAP.md R43 (Prioritize when: R11 has merged)",
+      "why_now": "R11 merged today and Beau allowed its judge (H17); R29's three units are now built.",
+      "impact": "Decides whether every agent session keeps loading about 3,000 words before any work."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.49.0"
+  }
+}

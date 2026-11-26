@@ -347,7 +347,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's units 1 and 3 are built. Next: check R29 unit 2 against its done-when. R32 waits on R6 and on Beau (H14). R34 waits on R23.
+Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's three units are built. Next: R43 (its trigger, R11, has merged). R32 waits on R6 and on Beau (H14). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -407,8 +407,10 @@ and needs no dependency.
 (3) run against agent-kit's history it reports commit 990c84f (three tests renamed or
 replaced) and stays quiet on a docs-only commit. Units 2 and 3 print and exit 0 (observe).
 **Status (2026-11-26):** unit 1 is done (the gate table in `docs/ARCHITECTURE.md`, pull request 79).
-Unit 2 is not confirmed here: `check-product.py --receipts RUN_ID --base REF` reports a criterion
-rewritten after its receipt, which is close to it but not the same check. Unit 3 is built: verify-work's
+Unit 2 is built: `check-product.py --base REF` (and `--receipts`, against its base) prints an
+`observe:` line for a box checked in the diff that rewrote its `Probe:` or added the criterion, and
+exits 0. A new `**Confirmed.**` line in the item clears it. Before it, a fixture branch that
+rewrote C1's probe to `true`, took a receipt and ticked the box passed with no line at all. Unit 3 is built: verify-work's
 `scripts/test_guard.py --base REF` prints and exits 0, `verify-work` and agent-kit's checklist
 (`tests-weakened`) run it, and on 990c84f it reports the three tests that commit renamed or
 replaced. Left open: running it in CI from the base branch's copy, which edits workflow files (H13).

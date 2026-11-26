@@ -264,10 +264,12 @@ class ReceiptsUsageTest(ReceiptsBase):
         done = h.run([sys.executable, h.CHECK_PRODUCT_PY, str(self.repo), "--receipts", RUN], self.repo, self.bin)
         self.assertProblem(done, "P1-C1", "no receipt")
 
-    def test_base_without_receipts_is_a_usage_error(self):
+    def test_base_without_receipts_checks_no_receipts(self):
+        self.write_spec(self.tick(self.base_spec))
+        h.commit(self.repo, "tick C1 with no receipt")
         done = h.run([sys.executable, h.CHECK_PRODUCT_PY, str(self.repo), "--base", "main"], self.repo, self.bin)
-        self.assertEqual(done.returncode, 2)
-        self.assertIn("--base only goes with --receipts", done.stderr)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("receipts", done.stdout)
 
 
 @unittest.skipUnless(REAL, "needs agent-ledger 1.1.0 (set AGENT_LEDGER_SRC to its src folder)")
