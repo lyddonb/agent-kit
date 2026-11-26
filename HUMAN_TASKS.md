@@ -22,7 +22,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H14 | Allow hooks in agentfiles | 🚧 **BLOCKER** for ROADMAP R32 |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
-| H17 | Decide whether a judge model may score the context-loading evals | Scope **done**: R42 and R43 only, judged through R11. The judge model is yours to pick |
+| H17 | Decide whether a judge model may score the context-loading evals | **Done**: R42 and R43 only, judged by `cli:cursor-agent:gpt-5.6-sol-high` through R11 |
 
 ---
 
@@ -229,11 +229,11 @@ the pinned checker (951bae9) in each of the three repos. Wait for quality #39 an
    `trial/2026-11-21-no-comments` keeps that commit on GitHub. The claim now names the two changes
    in main's e548abb that were never tried.
 
-### H17. Decide whether a judge model may score the context-loading evals — scope done, model open
+### H17. Decide whether a judge model may score the context-loading evals — Done
 **Answer (2026-11-26):** A judge may score R42 and R43, and no other eval. It runs through R11's
 `second-opinion` script, not a pass run by hand in Cursor. Beau's words: "R42+R43 but build R11
-instead of relying on grok". Still open: which model judges (step 2 below). R42 and R43 run once
-it is named and R11 has merged.
+instead of relying on grok". The judge is `cli:cursor-agent:gpt-5.6-sol-high` (Beau's words:
+"GPT-5.6 Sol High"). R42 and R43 can run once R11 has merged.
 **Why a human:** Skill ops says verdicts come from rules and exit codes, with no judge model
 until you say so. R42 and R43 compare outputs on judgment tasks, which no exit code can score.
 Allowing a judge for these two evals, and on which model, is your call. It also costs model calls.
