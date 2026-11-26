@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "id": "bstack@0.47.1",
+      "date": "2026-11-26",
+      "plugin": "bstack",
+      "version": "0.47.1",
+      "changes": [
+        "second-opinion's reference says what it actually guarantees: it starts the CLI in that CLI's read-only mode, which is a permission setting and not a sandbox; `--timeout` kills the CLI's process group, so a child that started its own session survives; and the example command runs from the beau-mode skill's folder. A GPT-5.6 review run through the script found all three. The script is unchanged."
+      ]
+    },
+    {
       "id": "bstack@0.47.0",
       "date": "2026-11-26",
       "plugin": "bstack",

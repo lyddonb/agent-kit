@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "goal": "Name the judge Beau picked for R42 and R43, and make second-opinion's reference claim only what the script does, so an agent reading it doesn't over-trust a reviewer's isolation or a timeout.",
+  "changed": [
+    "HUMAN_TASKS H17 is done and names cli:cursor-agent:gpt-5.6-sol-high as the judge; R42 and R43 depend on R11 only.",
+    "beau-mode's references/second-opinion.md says the CLI's read-only mode is a permission setting, not a sandbox; that --timeout kills one process group; and that the example command runs from the beau-mode skill's folder. bstack 0.47.1; the script is unchanged."
+  ],
+  "claims": [
+    {
+      "claim": "Each of the three corrected lines overstated the script: it passes permission modes, not a sandbox, and kills only the process group it started.",
+      "verdict": "VERIFIED",
+      "check": "a GPT-5.6 Sol review through second_opinion.py, each finding read against claude_argv, cursor_argv and run_cli in second_opinion.py",
+      "commit": "e1cee11",
+      "record": ".changes/2026-11-26-second-opinion-guarantees/review.txt",
+      "remaining": "That a detached child survives a timeout was read from the code, not reproduced."
+    }
+  ],
+  "next": [
+    {
+      "item": "Run R43 with the cli:cursor-agent:gpt-5.6-sol-high judge",
+      "source": "ROADMAP.md R43",
+      "why_now": "Its dependency, R11, has merged and the judge is named.",
+      "impact": "A keep-or-slim answer for the 3,000 words every beau-agent loads before any work."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.47.1"
+  }
+}

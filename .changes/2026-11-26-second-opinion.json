@@ -50,15 +50,9 @@
   ],
   "next": [
     {
-      "item": "Name the judge model for R42 and R43",
-      "source": "HUMAN_TASKS.md H17 step 2",
-      "why_now": "It is the last thing holding R43, which needs no KB.",
-      "impact": "R43 can run and say whether beau-mode's 3,000 always-on words help or distract."
-    },
-    {
       "item": "Run R43 with a cli: judge",
       "source": "ROADMAP.md R43",
-      "why_now": "Its dependencies are R11 and the judge model.",
+      "why_now": "Its dependency is R11, and Beau named the judge: cli:cursor-agent:gpt-5.6-sol-high.",
       "impact": "A keep-or-slim answer for the text every beau-agent loads before any work."
     }
   ],

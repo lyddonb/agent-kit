@@ -4,7 +4,8 @@
 answer. It gives a skill a model from a different family even inside a tool that only offers
 its own models: a Claude Code session can ask a GPT model through `cursor-agent`.
 
-It runs one read-only, one-shot call. It never edits files, and it never retries.
+It makes one call and never retries. It starts the CLI in that CLI's read-only mode (the table
+below), which is a permission setting, not a sandbox, and the script itself writes nothing.
 
 ## The spec
 
@@ -28,6 +29,9 @@ answer, so it needs its own real runs before it is trusted.
 
 ## Running it
 
+Run it from the beau-mode skill's folder, where `scripts/` is. From a checkout of agent-kit,
+that is `plugins/bstack/skills/beau-mode/`.
+
 ```
 python3 scripts/second_opinion.py --reviewer cli:cursor-agent:gpt-5.6-sol-high --prompt-file prompt.md --cwd ../worktree --json
 ```
@@ -36,7 +40,8 @@ python3 scripts/second_opinion.py --reviewer cli:cursor-agent:gpt-5.6-sol-high -
 - `--cwd DIR` is the folder the CLI starts in. It is not a sandbox: a reviewer can still read
   files outside it. Without it, the CLI starts in a new empty folder, so it finds no project
   files or project rules nearby. Pass the worktree when the reviewer must read code.
-- `--timeout SECONDS` (default 600) stops the CLI and everything it started.
+- `--timeout SECONDS` (default 600) kills the CLI's process group. A child that started its own
+  session leaves that group and is not killed.
 - `--json` prints the result object below. Without it, the answer goes to stdout and a
   failure goes to stderr.
 - `--list` prints each supported agent and whether its binary is on PATH, then exits.

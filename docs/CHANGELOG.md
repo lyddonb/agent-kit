@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.47.1 (2026-11-26)
+
+- second-opinion's reference says what it actually guarantees: it starts the CLI in that CLI's read-only mode, which is a permission setting and not a sandbox; `--timeout` kills the CLI's process group, so a child that started its own session survives; and the example command runs from the beau-mode skill's folder. A GPT-5.6 review run through the script found all three. The script is unchanged.
+
 ## bstack 0.47.0 (2026-11-26)
 
 - A reviewer or judge can now come from another agent's CLI, so a Claude Code session can get a GPT model's read. A roles-file entry `cli:<agent>:<model>` (for example `cli:cursor-agent:gpt-5.6-sol-high`) names one, and the beau-mode skill's `scripts/second_opinion.py` runs it: one read-only call to `claude` or `cursor-agent`, killed after `--timeout` seconds (600 by default), with a JSON result whose status is `ok`, `empty`, `error`, `timeout` or `missing`. A CLI that exits 0 with a blank or failed answer counts as a failure, not a review. No profile sets a `cli:` entry yet, so review panels are unchanged until you add one.

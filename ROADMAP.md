@@ -748,7 +748,8 @@ anything changes. Full analysis: the Agent Kit project's `plans/context-clutter.
 | The curator learns from PR trails, not docs | A line here until lyddonb/curator is in the workspace | curator's roadmap (knowledge factory K2) |
 | Rejections and flags name what misled the agent | R23 (edited in place) | agent-ledger's `rejection` type |
 
-Both evals need a judge model. Beau allowed one for these two only (H17, 2026-11-26), run through R11.
+Both evals need a judge model. Beau allowed one for these two only (H17, 2026-11-26):
+`cli:cursor-agent:gpt-5.6-sol-high`, run through R11.
 
 ## P1
 
@@ -762,7 +763,7 @@ both arm is not worse than trails alone. When step 4 reads a KB, it loads entrie
 by the chosen playbook or by the files the change touches, never by similarity to the task text.
 Change KNOWLEDGE.md's "no skill edit needed" to "needs a passing R42 eval".
 **Where:** `plugins/bstack/skills/beau-mode/SKILL.md` step 4, `docs/KNOWLEDGE.md`.
-**Depends on:** a KB with an MCP interface (R16's trigger), R11, and the judge model H17 leaves open.
+**Depends on:** a KB with an MCP interface (R16's trigger) and R11. The judge is `cli:cursor-agent:gpt-5.6-sol-high` (H17).
 **Playbook:** Eval.
 **Done when:** the eval's reply is in the PR with every arm's scores, and step 4 either loads by
 id or is removed.
@@ -780,13 +781,13 @@ identical runs, so a difference smaller than that noise band counts as none. Ube
 ablation (below) reports wins the same way. If the slim arm holds on every rubric item,
 propose moving playbook-only text out of `SKILL.md`, through R25's cut rules.
 **Where:** `plugins/bstack/skills/beau-mode/**`. Changes nothing until the eval passes.
-**Depends on:** R11, and the judge model H17 leaves open. A `cursor-agent` judge has the user's
+**Depends on:** R11. The judge is `cli:cursor-agent:gpt-5.6-sol-high` (H17). It has the user's
 rules loaded, beau-mode among them. Say so in the reply, or judge through a CLI that runs clean.
 **Playbook:** Eval.
 **Done when:** the eval's reply is in a PR with a keep or slim recommendation and the token
 count of each arm.
 **Why not done:** found 2026-11-23. It is the cheapest test of the claim above and needs no KB.
-**Prioritize when:** the judge model is named. Before R13's beau-mode comparison, which can reuse its tasks.
+**Prioritize when:** R11 has merged. Before R13's beau-mode comparison, which can reuse its tasks.
 
 # Knowledge factory
 
