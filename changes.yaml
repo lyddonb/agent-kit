@@ -15,6 +15,18 @@
   try: "Run weekly-claude-code.sh --repo OWNER/NAME --print-plist and check that it starts every hour and passes --scheduled."
 
 - date: 2026-11-25
+  plugin: cfo
+  version: 0.4.3
+  changes:
+    - "`weekly-claude-code.sh --install` now says the job runs every hour from Sunday 06:00 to Monday 23:59 local time until one run finishes without a failure. It said every Sunday at 06:00, the schedule 0.4.2 replaced. The installed agent is unchanged, so there is nothing to reinstall."
+
+- date: 2026-11-25
+  plugin: bstack
+  version: 0.43.2
+  changes:
+    - "beau-help lists cfo 0.4.3 and its corrected install message."
+
+- date: 2026-11-25
   plugin: bstack
   version: 0.43.1
   changes:

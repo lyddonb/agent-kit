@@ -478,6 +478,8 @@ class WeeklyJob(unittest.TestCase):
         self.env.update(CFO_BOOKS=str(books_dir), CFO_JOB_PATH=f"{bin_dir}:/usr/bin:/bin")
         r = subprocess.run(["bash", str(SCRIPT), "--install"], env=self.env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("every hour from Sunday 06:00 to Monday 23:59", r.stdout, "the install message states the schedule the plist has")
+        self.assertNotIn("every Sunday at 06:00", r.stdout, "the old once-a-week schedule is gone")
         plist = plistlib.loads((self.home / "Library/LaunchAgents/dev.agent-kit.cfo-claude-code.plist").read_bytes())
         self.assertEqual(plist["ProgramArguments"], ["/bin/bash", str(SCRIPT), "--repo", REPO, "--scheduled"],
                          "repo from the books' remote")

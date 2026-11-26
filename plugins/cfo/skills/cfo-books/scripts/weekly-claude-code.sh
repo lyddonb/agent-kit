@@ -141,7 +141,7 @@ else:
     print(f"Claude Code now keeps logs 120 days (was {current}); backup at {path}.bak" if os.path.exists(path + ".bak")
           else "Claude Code now keeps logs 120 days.")
 PYEOF
-    echo "Installed: Claude Code usage goes to $REPO's brief PR every Sunday at 06:00."
+    echo "Installed: Claude Code usage goes to $REPO's brief PR. The job runs every hour from Sunday 06:00 to Monday 23:59 local time, until one run finishes without a failure."
     [ -z "$QUALITY_REPO" ] || echo "Skill uses go to $QUALITY_REPO's brief PR; skill versions come from ${LOCK:-nowhere: no agentfiles.lock was given, so they stay empty}."
     echo "Log: $LOGFILE   Check it: --status   Run it now: --run-now   Remove it: --uninstall"
     exit 0 ;;
