@@ -745,7 +745,7 @@ anything changes. Full analysis: the Agent Kit project's `plans/context-clutter.
 
 | Item | Entry | Other repos |
 |---|---|---|
-| Knowledge base lookup only behind a passing eval, by id not similarity | R42 | R16 depends on it |
+| Knowledge base lookup only behind a passing eval, by id not similarity | R42 (done 2026-11-26: step 4 removed) | R16 depends on it |
 | Ablate beau-mode's always-on load | R43 | Feeds R25's cuts |
 | The curator learns from PR trails, not docs | A line here until lyddonb/curator is in the workspace | curator's roadmap (knowledge factory K2) |
 | Rejections and flags name what misled the agent | R23 (edited in place) | agent-ledger's `rejection` type |
@@ -757,9 +757,11 @@ Both evals need a judge model. Beau allowed one for these two only (H17, 2026-11
 
 ### R42. Knowledge base lookup only behind a passing eval
 **Done 2026-11-26** in bstack 0.50.0. Step 4 is removed. With the KB MCP server installed as it is,
-none of 30 runs called it, including 10 told to by Beau's own kb instruction, so the KB arms were
-replicates of no KB. Naming related change records lost to no KB (0.35 win share overall). The
-scores, the noise band and token counts are in `.changes/2026-11-26-r42-kb-eval/`, and
+none of 30 runs called it, so the KB arms were replicates of no KB. That includes an arm given
+Beau's own kb instruction, which applies clearly to 2 of the 10 tasks (t9, t10): neither searched.
+Removal rests on the amendment made before any judge call (a KB arm with no KB call is noise); the
+rule as first written would have read "keep". Naming related change records lost to no KB (0.35
+win share overall). The scores, the noise band and token counts are in `.changes/2026-11-26-r42-kb-eval/`, and
 [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) says what R42 measured. A KB lookup returns only as entries
 loaded by id behind a passing eval like this one.
 **What:** beau-mode step 4 ("Check for team knowledge") reads a knowledge base before design.
@@ -781,9 +783,6 @@ drops both), or the arms don't differ.
 **Playbook:** Eval.
 **Done when:** the eval's reply is in the PR with every arm's scores, and step 4 either loads by
 id or is removed.
-**Why not done:** found 2026-11-23; the KB to test was named 2026-11-26.
-**Prioritize when:** now. Reuse R43's 8 tasks for the first 8, and add up to two that touch
-areas the KB covers. R16 does not ship before this.
 
 ### R43. Ablate beau-mode's always-on load
 **What:** beau-mode's `SKILL.md` is about 3,000 words, and beau-agent loads it and the

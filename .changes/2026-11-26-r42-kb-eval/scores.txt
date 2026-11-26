@@ -8,6 +8,7 @@ reply      0.05   0.50   0.45   0.47   0.60   0.65   0.55
 overall    0.05   0.62   0.35   0.45   0.60   0.75   0.47
 mean overall: {'full1': 4.24, 'full2': 4.26, 'kb': 4.42, 'trails': 4.0, 'both': 4.3, 'kbr': 4.28}
 KB beats no KB: True; both not worse than trails: True; trails beats no KB: False
+NOTE: rule as first written. Amendment 2 (prereg.md, before any judge call): kb made 0 kb calls, so it is a replicate of no KB and 'KB beats no KB' is noise. Decision: KB does not beat no KB; trails does not beat no KB; remove step 4.
 per task overall:
   t1 {'full1': 4.8, 'full2': 3.6, 'kb': 4.4, 'trails': 4.6, 'both': 4.6, 'kbr': 3.2}
   t2 {'full1': 4.4, 'full2': 4.2, 'kb': 4.8, 'trails': 4.4, 'both': 4.4, 'kbr': 4.8}

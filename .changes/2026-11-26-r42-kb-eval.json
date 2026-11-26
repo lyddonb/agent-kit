@@ -8,15 +8,15 @@
   ],
   "claims": [
     {
-      "claim": "With the kb server connected, no candidate called it: 0 kb tool calls in 30 runs across the kb, both and instructed-kb arms, on all ten tasks.",
+      "claim": "With the kb server connected, no candidate called it or searched for it: 0 kb tool calls and 0 kb tool searches in 30 runs across the kb, both and instructed-kb arms. The instructed arm applies clearly to 2 tasks (t9, t10), and neither searched.",
       "verdict": "VERIFIED",
-      "check": "every run's stream-json transcript read for mcp__kb__ tool_use events and for the kb server's connected status in the init event",
+      "check": "every run's stream-json transcript read for mcp__kb__ tool_use events, ToolSearch queries and the kb server's connected status; a positive control asked outright to search made one mcp__kb__ call, which the counter read as 1",
       "commit": "a67bbaa",
       "record": ".changes/2026-11-26-r42-kb-eval/step-following.txt",
-      "remaining": "One model (Claude Sonnet) through claude -p with no user settings. An interactive session, another model, or the rule placed where Beau's rules really load could behave differently."
+      "remaining": "The control's call was refused: claude -p in acceptEdits mode does not grant MCP tools, so a call would have failed in every arm. It shows the lookup was never attempted, not what a successful lookup adds. One model (Claude Sonnet), no user settings; an interactive session or the rule loaded where Beau's rules really load could differ."
     },
     {
-      "claim": "By the pre-registered rule the step is removed: the KB arm did not beat no KB, because with no kb call it is a replicate of no KB, and naming related change records did not beat no KB either (0.35 win share overall).",
+      "claim": "The step is removed by the pre-registered rule as amended before any judge call: a KB arm with no kb call is a replicate of no KB, so it did not beat no KB, and naming related change records did not beat no KB either (0.35 win share overall). The rule as first written reads keep (0.62 against a 0.05 band).",
       "verdict": "VERIFIED",
       "check": "score.py over the judge's verdicts for all ten tasks (status ok for each), against the rule and amendments in prereg.md, which were written before any judge call",
       "commit": "a67bbaa",
@@ -42,7 +42,7 @@
   ],
   "next": [
     {
-      "item": "Decide whether the agentfiles rule that tells every agent to search the kb before design work stays, since 10 runs given that rule verbatim never called the server",
+      "item": "Decide whether the agentfiles rule that tells every agent to search the kb before design work stays, since the runs given that rule verbatim never searched, including the 2 tasks it clearly covers",
       "source": "inferred from this eval's instructed-kb arm",
       "why_now": "The rule is live on every agent today and this is the first measurement of it.",
       "impact": "Either the rule earns its context cost with a lookup that happens, or every session stops carrying text it ignores."
