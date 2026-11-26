@@ -23,7 +23,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
 | H17 | Decide whether a judge model may score the context-loading evals | **Done**: R42 and R43 only, judged by `cli:cursor-agent:gpt-5.6-sol-high` through R11 |
-| H18 | Choose where this machine keeps flags | Steps 1 to 3 **done** on the first Mac; step 4 to do. 🚧 **BLOCKER** for ROADMAP R48 |
+| H18 | Choose where this machine keeps flags | **Done** on the first Mac (2026-11-26); repeat steps 1 and 2 on each new machine |
 
 ---
 
@@ -248,7 +248,7 @@ identical runs, and a human-annotated set to check the judge. It reports most sk
 sessions better and cheaper, and the least help from skills that teach tool discovery. R43
 now asks for the noise band. Its numbers are Uber's own.
 
-### H18. Choose where this machine keeps flags — 🚧 BLOCKER for R48 (steps 1 to 3 done on the first Mac)
+### H18. Choose where this machine keeps flags — Done
 **Why a human:** R45's rule writes a flag outside a governed run only when `~/.agents/flags.yaml`
 names the repo that keeps them. Flags can name private context, so that repo is a private repo
 you choose, and agents must not pick it. Until the file exists, agents list the flag in their
@@ -273,9 +273,6 @@ reply instead and nothing reaches the weekly pass, so R48 never gets its two wee
    several sessions append to one file. Once a week, whoever reads the flags (you, later the R48
    pass) commits on `flags/rolling`, pushes with an explicit refspec
    (`git push origin refs/heads/flags/rolling:refs/heads/flags/rolling`) and opens a PR.
-4. Move agentfiles' `ledger` pin to a release with the flag checks. agentfiles pins agent-ledger
-   to a tag (`ref:` in `sources.yaml`), so `agentfiles update` alone never moves it, and no tag
-   up to v1.2.1 has the checks (19e2d8f). Merge agent-ledger's v1.3.0 release PR and tag its
-   merge commit `v1.3.0`, then merge agentfiles' pin PR (`ref: v1.3.0` and the lock) and run
-   `agentfiles sync`. `ledger --version` then prints `ledger 1.3.0`. Until then the pinned
-   `ledger` writes a flag but doesn't refuse one missing its target, fix or evidence.
+4. ~~Move agentfiles' `ledger` pin to a release with the flag checks.~~ Done (2026-11-26): agent-ledger
+   v1.3.0 (agent-ledger PR 46, tagged on its merge commit) and agentfiles PR 36 pin it, and after
+   `agentfiles sync` the installed `ledger --version` prints `ledger 1.3.0`.

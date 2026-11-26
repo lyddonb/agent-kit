@@ -826,7 +826,7 @@ separate weekly pass reads the flags and proposes at most three skill edits, eac
 shows the flag's evidence failing before and a probe passing after. Beau merges every PR.
 Flag entries hold no transcript text.
 
-Order: agent-ledger's Flags unit and R45 are done. R48 after two weeks of flags, once H18 is. R47 is done. R46 any time.
+Order: agent-ledger's Flags unit and R45 are done. R48 after two weeks of flags (H18 is done, so flags land from 2026-11-26). R47 is done. R46 any time.
 
 ## P1
 
