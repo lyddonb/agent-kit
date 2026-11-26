@@ -23,7 +23,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
 | H17 | Decide whether a judge model may score the context-loading evals | **Done**: R42 and R43 only, judged by `cli:cursor-agent:gpt-5.6-sol-high` through R11 |
-| H18 | Choose where this machine keeps flags | 🚧 **BLOCKER** for ROADMAP R48 |
+| H18 | Choose where this machine keeps flags | Steps 1 to 3 **done** on the first Mac; step 4 to do. 🚧 **BLOCKER** for ROADMAP R48 |
 
 ---
 
@@ -248,20 +248,34 @@ identical runs, and a human-annotated set to check the judge. It reports most sk
 sessions better and cheaper, and the least help from skills that teach tool discovery. R43
 now asks for the noise band. Its numbers are Uber's own.
 
-### H18. Choose where this machine keeps flags — 🚧 BLOCKER for R48
+### H18. Choose where this machine keeps flags — 🚧 BLOCKER for R48 (steps 1 to 3 done on the first Mac)
 **Why a human:** R45's rule writes a flag outside a governed run only when `~/.agents/flags.yaml`
 names the repo that keeps them. Flags can name private context, so that repo is a private repo
 you choose, and agents must not pick it. Until the file exists, agents list the flag in their
 reply instead and nothing reaches the weekly pass, so R48 never gets its two weeks of flags.
-**Steps:**
-1. Pick a private repo that you have cloned on this machine to keep the flags.
-2. Write `~/.agents/flags.yaml` with two lines: `root: '<absolute path to that clone>'` and
-   `machine: '<a slug for this machine>'`, such as `mac`. Repeat on each machine you run agents on,
-   with a different slug.
-3. Decide who commits the week's flags run. The rule leaves it uncommitted in the flags repo's
-   working tree, because several sessions append to one file and a commit on a PR-only repo's
-   main would make it diverge. The default is that the weekly pass commits it; change the
-   reference if agents should.
-4. Move agentfiles' `ledger` pin to an agent-ledger commit at or after 19e2d8f with
-   `agentfiles update`, then `agentfiles sync`. The pinned `ledger` predates the flag checks: it
-   writes a flag but doesn't refuse one missing its target, fix or evidence.
+**Steps (once per machine, except step 4):**
+1. ~~Give the private repo a worktree of its own on a flags branch, so the week's uncommitted
+   file never dirties the checkout other jobs use, and drop the branch's upstream so a bare
+   `git push` can't reach main:~~ Done on the first Mac (2026-11-26).
+   ```bash
+   git -C <clone> worktree add <clone's .worktrees>/<repo>-flags -b flags/rolling origin/main
+   git -C <that worktree> branch --unset-upstream flags/rolling
+   ```
+2. ~~Write `~/.agents/flags.yaml`, exactly two lines, single-quoted (the reference reads them with
+   `sed`), with an absolute path (`~` isn't expanded) and a machine slug matching
+   `[a-z0-9]+(-[a-z0-9]+)*`, different on each machine:~~ Done on the first Mac.
+   ```yaml
+   root: '/absolute/path/to/that/worktree'
+   machine: 'macbook-air'
+   ```
+   Check it: `test -d "$(sed -n "s/^root: *'\(.*\)'$/\1/p" ~/.agents/flags.yaml)" && echo root-ok`.
+3. ~~Decide who commits the week's flags run.~~ Done: agents leave it uncommitted, because
+   several sessions append to one file. Once a week, whoever reads the flags (you, later the R48
+   pass) commits on `flags/rolling`, pushes with an explicit refspec
+   (`git push origin refs/heads/flags/rolling:refs/heads/flags/rolling`) and opens a PR.
+4. Move agentfiles' `ledger` pin to a release with the flag checks. agentfiles pins agent-ledger
+   to a tag (`ref:` in `sources.yaml`), so `agentfiles update` alone never moves it, and no tag
+   up to v1.2.1 has the checks (19e2d8f). Merge agent-ledger's v1.3.0 release PR and tag its
+   merge commit `v1.3.0`, then merge agentfiles' pin PR (`ref: v1.3.0` and the lock) and run
+   `agentfiles sync`. `ledger --version` then prints `ledger 1.3.0`. Until then the pinned
+   `ledger` writes a flag but doesn't refuse one missing its target, fix or evidence.
