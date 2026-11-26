@@ -14,7 +14,7 @@ Every skill is plain text an agent reads, so all of them work in Claude Code, Co
 |---|---|
 | Use for | Any non-trivial engineering task: a bug, a feature, a refactor, a perf problem, an investigation, a prototype, a skill edit, a plan, an unattended run. agentfiles' `builder` profile makes it always on. |
 | Needs | The **principles** plugin. |
-| Does | Restates the task, picks one of 13 playbooks and copies its steps into the todo list, reads the principles that apply, checks for team knowledge, then calls the skills below as the steps need them. |
+| Does | Restates the task, picks one of 13 playbooks and copies its steps into the todo list, reads the principles that apply, then calls the skills below as the steps need them. |
 | Returns | What the playbook's **Reply** line names. Every reply leads with who the work is for, labels each claim as measured, inferred or a guess, and names each principle with the decision it changed. |
 | Example | `/beau-mode the export writes duplicate rows when a retry lands mid-run. repro first, then fix and verify.` |
 

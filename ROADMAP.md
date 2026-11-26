@@ -756,6 +756,12 @@ Both evals need a judge model. Beau allowed one for these two only (H17, 2026-11
 ## P1
 
 ### R42. Knowledge base lookup only behind a passing eval
+**Done 2026-11-26** in bstack 0.50.0. Step 4 is removed. With the KB MCP server installed as it is,
+none of 30 runs called it, including 10 told to by Beau's own kb instruction, so the KB arms were
+replicates of no KB. Naming related change records lost to no KB (0.35 win share overall). The
+scores, the noise band and token counts are in `.changes/2026-11-26-r42-kb-eval/`, and
+[docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) says what R42 measured. A KB lookup returns only as entries
+loaded by id behind a passing eval like this one.
 **What:** beau-mode step 4 ("Check for team knowledge") reads a knowledge base before design.
 [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md) says it starts returning entries as soon as a KB MCP
 server is installed, with no skill edit. Before that happens, run the Eval playbook with four

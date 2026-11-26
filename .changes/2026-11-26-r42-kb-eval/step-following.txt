@@ -1,0 +1,11 @@
+arm     runs  kb_connected  kb_calls  read_a_playbook  read_a_principle  text_mentions_knowledge
+full1     10             0         0                7                 0                        0
+full2     10             0         0                7                 0                        0
+kb        10            10         0                6                 1                        0
+kbr       10            10         0                6                 0                        0
+trails    10             0         0                6                 0                        0
+both      10            10         0                9                 0                        0
+trails read (named records opened / named):
+  trails 9/15  t1:1/1 t2:1/1 t3:1/2 t4:1/1 t5:0/2 t6:0/1 t7:0/1 t8:2/2 t9:1/2 t10:2/2
+  both   10/15  t1:1/1 t2:1/1 t3:1/2 t4:1/1 t5:0/2 t6:0/1 t7:1/1 t8:2/2 t9:2/2 t10:1/2
+  full1  2/15  t1:1/1 t2:0/1 t3:0/2 t4:1/1 t5:0/2 t6:0/1 t7:0/1 t8:0/2 t9:0/2 t10:0/2

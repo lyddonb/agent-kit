@@ -1,0 +1,88 @@
+verdicts: 10 of 10 tasks (t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
+item      band  kb>no  tr>no  bo>no  bo>tr  kb>tr kbr>no
+cause      0.05   0.53   0.53   0.38   0.35   0.50   0.47
+fix        0.00   0.60   0.42   0.55   0.60   0.70   0.38
+proof      0.05   0.53   0.45   0.55   0.60   0.55   0.47
+scope      0.15   0.62   0.35   0.57   0.70   0.80   0.57
+reply      0.05   0.50   0.45   0.47   0.60   0.65   0.55
+overall    0.05   0.62   0.35   0.45   0.60   0.75   0.47
+mean overall: {'full1': 4.24, 'full2': 4.26, 'kb': 4.42, 'trails': 4.0, 'both': 4.3, 'kbr': 4.28}
+KB beats no KB: True; both not worse than trails: True; trails beats no KB: False
+per task overall:
+  t1 {'full1': 4.8, 'full2': 3.6, 'kb': 4.4, 'trails': 4.6, 'both': 4.6, 'kbr': 3.2}
+  t2 {'full1': 4.4, 'full2': 4.2, 'kb': 4.8, 'trails': 4.4, 'both': 4.4, 'kbr': 4.8}
+  t3 {'full1': 4.8, 'full2': 5.0, 'kb': 4.8, 'trails': 3.4, 'both': 4.6, 'kbr': 4.6}
+  t4 {'full1': 4.4, 'full2': 4.4, 'kb': 4.4, 'trails': 4.2, 'both': 4.4, 'kbr': 4.8}
+  t5 {'full1': 4.8, 'full2': 4.2, 'kb': 4.4, 'trails': 4.6, 'both': 4.8, 'kbr': 4.8}
+  t6 {'full1': 4.8, 'full2': 4.6, 'kb': 4.6, 'trails': 4.2, 'both': 4.8, 'kbr': 4.2}
+  t7 {'full1': 2.4, 'full2': 4.0, 'kb': 2.8, 'trails': 2.4, 'both': 5.0, 'kbr': 4.6}
+  t8 {'full1': 3.8, 'full2': 4.6, 'kb': 5.0, 'trails': 3.6, 'both': 3.0, 'kbr': 3.6}
+  t9 {'full1': 3.6, 'full2': 4.0, 'kb': 4.4, 'trails': 4.0, 'both': 3.4, 'kbr': 3.8}
+  t10 {'full1': 4.6, 'full2': 4.0, 'kb': 4.6, 'trails': 4.6, 'both': 4.0, 'kbr': 4.4}
+runs:
+  t1-full1     kb_calls= 0 tools= 23 tokens=   39803 total=  1412414 success
+  t1-full2     kb_calls= 0 tools= 15 tokens=   38756 total=   739192 success
+  t1-kb        kb_calls= 0 tools= 19 tokens=   28862 total=  1085416 success
+  t1-trails    kb_calls= 0 tools= 20 tokens=   33942 total=  1062770 success
+  t1-both      kb_calls= 0 tools= 21 tokens=   33382 total=  1101360 success
+  t1-kbr       kb_calls= 0 tools= 15 tokens=   41276 total=   939792 success
+  t2-full1     kb_calls= 0 tools= 27 tokens=   33882 total=  1691553 success
+  t2-full2     kb_calls= 0 tools=  7 tokens=   12631 total=   368187 success
+  t2-kb        kb_calls= 0 tools= 13 tokens=   17480 total=   697945 success
+  t2-trails    kb_calls= 0 tools= 20 tokens=   26892 total=  1229969 success
+  t2-both      kb_calls= 0 tools= 10 tokens=   21661 total=   624786 success
+  t2-kbr       kb_calls= 0 tools=  6 tokens=   22552 total=   312978 success
+  t3-full1     kb_calls= 0 tools= 11 tokens=   41379 total=   685377 success
+  t3-full2     kb_calls= 0 tools= 21 tokens=   60503 total=  1510359 success
+  t3-kb        kb_calls= 0 tools= 30 tokens=   55522 total=  1819081 success
+  t3-trails    kb_calls= 0 tools=  9 tokens=   29556 total=   548670 success
+  t3-both      kb_calls= 0 tools= 33 tokens=   58158 total=  2497085 success
+  t3-kbr       kb_calls= 0 tools=  4 tokens=   31282 total=   289053 success
+  t4-full1     kb_calls= 0 tools= 15 tokens=   42370 total=   892225 success
+  t4-full2     kb_calls= 0 tools= 19 tokens=   54447 total=  1315208 success
+  t4-kb        kb_calls= 0 tools= 20 tokens=   47114 total=  1318369 success
+  t4-trails    kb_calls= 0 tools= 16 tokens=   37693 total=  1066102 success
+  t4-both      kb_calls= 0 tools= 35 tokens=   68315 total=  2713355 success
+  t4-kbr       kb_calls= 0 tools= 30 tokens=   71645 total=  2246169 success
+  t5-full1     kb_calls= 0 tools= 25 tokens=   66748 total=  2083994 success
+  t5-full2     kb_calls= 0 tools= 26 tokens=   61394 total=  2042496 success
+  t5-kb        kb_calls= 0 tools= 14 tokens=   50509 total=   925638 success
+  t5-trails    kb_calls= 0 tools= 14 tokens=   56834 total=  1120688 success
+  t5-both      kb_calls= 0 tools= 18 tokens=   44874 total=   917444 success
+  t5-kbr       kb_calls= 0 tools= 18 tokens=   55147 total=  1328573 success
+  t6-full1     kb_calls= 0 tools=  3 tokens=   23236 total=   208681 success
+  t6-full2     kb_calls= 0 tools=  5 tokens=   24037 total=   263657 success
+  t6-kb        kb_calls= 0 tools=  4 tokens=   23779 total=   260944 success
+  t6-trails    kb_calls= 0 tools=  4 tokens=   23966 total=   263956 success
+  t6-both      kb_calls= 0 tools=  5 tokens=   24459 total=   264583 success
+  t6-kbr       kb_calls= 0 tools=  3 tokens=   21086 total=   206252 success
+  t7-full1     kb_calls= 0 tools= 15 tokens=   59761 total=   914883 success
+  t7-full2     kb_calls= 0 tools= 46 tokens=   94938 total=  3624110 success
+  t7-kb        kb_calls= 0 tools= 32 tokens=   75735 total=  1388130 success
+  t7-trails    kb_calls= 0 tools= 13 tokens=   55309 total=   779649 success
+  t7-both      kb_calls= 0 tools= 40 tokens=   77761 total=  1827192 success
+  t7-kbr       kb_calls= 0 tools= 36 tokens=   82055 total=  2171688 success
+  t8-full1     kb_calls= 0 tools= 18 tokens=   48968 total=  1158952 success
+  t8-full2     kb_calls= 0 tools= 22 tokens=   54304 total=  1376044 success
+  t8-kb        kb_calls= 0 tools= 29 tokens=   65913 total=  1846890 success
+  t8-trails    kb_calls= 0 tools= 22 tokens=   54077 total=  1305279 success
+  t8-both      kb_calls= 0 tools= 24 tokens=   77423 total=  1466298 success
+  t8-kbr       kb_calls= 0 tools= 23 tokens=   48782 total=  1348222 success
+  t9-full1     kb_calls= 0 tools= 29 tokens=   88957 total=  2068007 success
+  t9-full2     kb_calls= 0 tools= 61 tokens=  138933 total=  4765424 success
+  t9-kb        kb_calls= 0 tools= 48 tokens=  127167 total=  3262892 success
+  t9-trails    kb_calls= 0 tools= 62 tokens=  147223 total=  5684242 success
+  t9-both      kb_calls= 0 tools= 39 tokens=  125577 total=  3815776 success
+  t9-kbr       kb_calls= 0 tools= 55 tokens=  124984 total=  2969874 success
+  t10-full1    kb_calls= 0 tools= 55 tokens=  161927 total=  5805906 success
+  t10-full2    kb_calls= 0 tools= 68 tokens=  163940 total=  5206863 success
+  t10-kb       kb_calls= 0 tools= 37 tokens=  146782 total=  3732286 success
+  t10-trails   kb_calls= 0 tools= 62 tokens=  211818 total=  6529250 success
+  t10-both     kb_calls= 0 tools= 62 tokens=  141115 total=  4961063 success
+  t10-kbr      kb_calls= 0 tools= 37 tokens=  115208 total=  2594685 success
+  full1   n=10 tokens=607031 total=16921992 runs_with_kb_call=0 kb_calls=0 not_success=0
+  full2   n=10 tokens=703883 total=21211540 runs_with_kb_call=0 kb_calls=0 not_success=0
+  kb      n=10 tokens=638863 total=16337591 runs_with_kb_call=0 kb_calls=0 not_success=0
+  trails  n=10 tokens=677310 total=19590575 runs_with_kb_call=0 kb_calls=0 not_success=0
+  both    n=10 tokens=672725 total=20188942 runs_with_kb_call=0 kb_calls=0 not_success=0
+  kbr     n=10 tokens=614017 total=14407286 runs_with_kb_call=0 kb_calls=0 not_success=0
