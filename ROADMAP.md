@@ -756,7 +756,7 @@ Both evals need a judge model. Beau allowed one for these two only (H17, 2026-11
 ## P1
 
 ### R42. Knowledge base lookup only behind a passing eval
-**Done 2026-11-26** in bstack 0.50.0. Step 4 is removed. With the KB MCP server installed as it is,
+**Done 2026-11-26** in bstack 0.50.0 (pull request 132). Step 4 is removed. With the KB MCP server installed as it is,
 none of 30 runs called it, so the KB arms were replicates of no KB. That includes an arm given
 Beau's own kb instruction, which applies clearly to 2 of the 10 tasks (t9, t10): neither searched.
 Removal rests on the amendment made before any judge call (a KB arm with no KB call is noise); the
