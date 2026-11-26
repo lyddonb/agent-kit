@@ -350,7 +350,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R28, R30, R31, R33 and R44 are done, and R29's units 1 and 3 are built. Next: check R29 unit 2 against its done-when, then R40. R32 waits on R6 and on Beau (H14). R34 waits on R23.
+Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's units 1 and 3 are built. Next: check R29 unit 2 against its done-when. R32 waits on R6 and on Beau (H14). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -568,7 +568,7 @@ The work spans four repos. Each item has one full entry, in the repo where its c
 | Lint: a skill never names a command that doesn't exist | Done: `check_commands` in `tools/validate.py` | None |
 | Behavioral evals, deterministic half | agent-ledger M3 unit 1 | The criteria live here. R3 and R13 point at it |
 | Every skill loads in every target tool | agentfiles R16 | `verify-kit` (R27) calls it |
-| A breaking format change ships with its sweep | R40 | Reads the quality books' `watched.csv` |
+| A breaking format change ships with its sweep | R40. Done 2026-11-22 | Reads the quality books' `watched.csv` |
 | The prune brief covers skills | R41 | The profile half: agentfiles R18. The brief section: quality phase 1c |
 | Cuts are proposed by ablation | R25 (edited in place) | The always-on block is agentfiles' |
 | Upstream skills pass the same lint | agentfiles R17 | Uses the lint above (was R39) |
@@ -587,7 +587,7 @@ commit, or on a planted fault with that said in the PR. Six more hold across all
 
 Order: R38 is done and booking rows since 2026-11-21. agentfiles R17 can start, since the lint
 it runs has shipped.
-agentfiles R16 with its R0 or R11. R40 can start: R30 has landed. agent-ledger's M3 unit 1 waits on four
+agentfiles R16 with its R0 or R11. R40 is done. agent-ledger's M3 unit 1 waits on four
 weeks of R38 rows and two answers from Beau (agent-ledger H8 and H9). R41 waits on 60 days of
 rows.
 
@@ -673,6 +673,13 @@ checklist file, tests.
 **Why not done:** 0.12.0's spec change was breaking for product repos, and no step lists the
 repos that hold an affected artifact.
 **Prioritize when:** R30 lands, or the next breaking format change.
+**Done 2026-11-22** in bstack 0.33.0 (pull request 84): `beau-mode/scripts/sweep.py`, the
+Authoring a skill playbook's sweep step, and the `generated-artifact-format` checklist item.
+Replayed read-only on 2026-11-26 against 088cd28, the 0.12.0 spec change, reading each repo as
+it was the day before: 1 of 4 watched repos held a spec in the old `## Acceptance` format. On
+the repos as they are today, 0 do. Still open: the script lists the repos that hold an artifact,
+but nothing names or proposes the upgrade pull request for each. No repo is waiting for one, so
+take it up at the next breaking format change.
 
 ## P2
 
