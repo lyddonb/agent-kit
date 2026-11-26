@@ -3,10 +3,15 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
-## bstack 0.48.0 (2026-11-26)
+## bstack 0.49.0 (2026-11-26)
 
 - `check-product.py --base REF` now catches a box checked in the same diff that wrote its probe. When a branch rewrites a criterion's `Probe:` (or adds the criterion) and checks the box in one go, it prints an `observe:` line naming it, unless the item gains a `**Confirmed.**` line saying who accepted the new probe. It only observes: the exit code is unchanged. `--receipts` makes the same comparison against its base. `--base` used to be an error without `--receipts`; it now runs this check alone.
 - Try: `Run check-product.py --base origin/main in a product repo on a branch that ticks a box.`
+
+## bstack 0.48.0 (2026-11-26)
+
+- When a skill's text, a reference or a pointer turns out wrong or missing mid-task (a command that doesn't exist, a step that no longer works, a path that moved), beau-mode and beau-agent now append a flag and carry on with what worked, instead of fixing the skill in the same task. A flag is agent-ledger's `lesson` entry with `data.kind: "flag"`: it names the skill, what was wrong, what the agent did instead, a suggested fix, and the command and output lines that showed it. Inside a governed run it goes in that run. Otherwise it goes in this week's `flags-<machine>` run in the repo `~/.agents/flags.yaml` names (`root:` and `machine:`). With no such file the agent lists the flag in its reply. `references/flags.md` in beau-mode has the commands.
+- Try: `Plant a wrong flag in a scratch skill's command, then ask an agent in beau mode to use the skill.`
 
 ## bstack 0.47.1 (2026-11-26)
 

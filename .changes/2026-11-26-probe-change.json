@@ -42,6 +42,6 @@
     }
   ],
   "release": {
-    "see": "changes.yaml bstack@0.48.0"
+    "see": "changes.yaml bstack@0.49.0"
   }
 }

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "goal": "Let an agent that finds a skill's text, a reference or a pointer wrong or missing record it as an agent-ledger flag and finish its task, so a separate weekly pass can propose the fix with evidence, instead of the agent editing the skill mid-task or working around it silently (roadmap R45).",
+  "changed": [
+    "beau-mode's Non-negotiable 'A skill is broken mid-task: fix it in its own change' is replaced by one line: append a flag per references/flags.md, carry on with what worked, and never edit that skill in the same task. beau-agent carries the same line.",
+    "New beau-mode references/flags.md holds agent-ledger S3's Flag entries commands: in a governed run the flag goes in that run; otherwise in this week's flags-<machine> run in the repo that ~/.agents/flags.yaml names (root and machine); with no such file, or when a step fails or is denied, the agent lists the flag under 'Flags not written' in its reply. Evidence holds only the command and the output lines that show the fault. The agent leaves the flags repo uncommitted, since several sessions append to one file; who commits it is H18.",
+    "HUMAN_TASKS.md adds H18: choose the private repo that keeps flags, write ~/.agents/flags.yaml on each machine, and move agentfiles' ledger pin past the flag checks. ROADMAP.md marks R45 done. bstack 0.48.0."
+  ],
+  "claims": [
+    {
+      "claim": "In a real session in a scratch repo, a skill whose command had a planted wrong flag produced one flag that passes ledger verify and holds no transcript text, and the task still finished.",
+      "verdict": "VERIFIED",
+      "check": "claude -p with this branch's beau-mode copied into a scratch repo's .claude/skills and a prompt that names only the task; then ledger verify, ledger show and the flag entry's JSON in the scratch flags repo, and the task repo's log and result.txt",
+      "commit": "a001788",
+      "record": ".changes/2026-11-26-flag-rule/planted-run.txt",
+      "remaining": "One run, one model (Opus 5.5), one kind of fault, on an empty flags repo. The skills were loaded as project skills, not through the installed bstack plugin. The multi-line snippet was refused by Claude Code's permission check in headless mode, so the agent ran ledger init and ledger append with the values written in; an interactive session would prompt there. That run used the reference before its commit step was removed; the next claim covers the reference as merged."
+    },
+    {
+      "claim": "The reference's bash block, run verbatim, appends to this week's flags run when one exists, starts one when the repo has none or only last week's, and leaves a run that ledger verify passes.",
+      "verdict": "VERIFIED",
+      "check": "the block extracted from references/flags.md by awk and run with /bin/bash 3.2 on three scratch flags repos (this week's run, empty, only a 2026-11-20 run), each followed by ls .audit/runs and ledger verify",
+      "commit": "a001788",
+      "record": ".changes/2026-11-26-flag-rule/snippet.txt",
+      "remaining": "Two inits racing in one week was not tried; S3 says to append to the later run and both verify."
+    },
+    {
+      "claim": "The ledger the run used refuses a flag without data.target; the ledger agentfiles pins on this machine writes it unchecked.",
+      "verdict": "VERIFIED",
+      "check": "ledger append of a flag with no target on a copy of the scratch flags repo, with agent-ledger origin/main (1.2.1) and with the pinned ledger (1.2.0)",
+      "commit": "a001788",
+      "record": ".changes/2026-11-26-flag-rule/probes.txt",
+      "remaining": "Moving the pin is H18 step 3."
+    },
+    {
+      "claim": "With this branch installed as a plugin in a throwaway profile, the bstack skills still load, and this diff fires one reliability checklist item, plugins-in-step, which passes.",
+      "verdict": "VERIFIED",
+      "check": "control-kit drive skills-load (PASSED: 1/1 features); checklist.py --base origin/main; make check versions",
+      "commit": "a001788",
+      "record": ".changes/2026-11-26-flag-rule/make-test.txt",
+      "remaining": "Whether a model routes to the flag rule from beau-mode when installed as a plugin, rather than as a project skill, was not driven."
+    },
+    {
+      "claim": "The kit's generated files, validation, plugin versions and tests pass with the change.",
+      "verdict": "VERIFIED",
+      "check": "make test, make check versions, make claude-validate",
+      "commit": "7209a7a",
+      "record": ".changes/2026-11-26-flag-rule/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "H18: choose the private repo that keeps flags and write ~/.agents/flags.yaml",
+      "source": "HUMAN_TASKS.md H18",
+      "why_now": "Until the file exists, flags outside a governed run only appear in replies, and nothing reaches the weekly pass.",
+      "impact": "R48 starts collecting its two weeks of flags, and wrong skill text gets fixed from evidence instead of being worked around."
+    },
+    {
+      "item": "A one-command way to write a flag, such as a ledger flag subcommand that finds or starts the week's run",
+      "source": "inferred: in the planted run Claude Code's permission check refused the multi-line S3 snippet, so the agent had to rewrite it by hand",
+      "why_now": "Every flag outside a governed run goes through this snippet, and each refusal is a prompt or a rewrite mid-task.",
+      "impact": "Agents write a flag with one approved command, and fewer flags are dropped or malformed."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.48.0"
+  }
+}

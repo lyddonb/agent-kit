@@ -765,12 +765,19 @@ both arm is not worse than trails alone. When step 4 reads a KB, it loads entrie
 by the chosen playbook or by the files the change touches, never by similarity to the task text.
 Change KNOWLEDGE.md's "no skill edit needed" to "needs a passing R42 eval".
 **Where:** `plugins/bstack/skills/beau-mode/SKILL.md` step 4, `docs/KNOWLEDGE.md`.
-**Depends on:** a KB with an MCP interface (R16's trigger) and R11. The judge is `cli:cursor-agent:gpt-5.6-sol-high` (H17).
+**Depends on:** R11. The judge is `cli:cursor-agent:gpt-5.6-sol-high` (H17).
+**The KB under test (Beau, 2026-11-26):** the KB MCP server already installed on Beau's machine, as it
+is: a personal library of saved reading, searched by similarity, not R16's conventions KB keyed by
+id. Beau's words: "Yes, test kb as is". His agent setup already tells every agent to search it
+before design work, so the lookup this item gates is live today. The no-KB arm must run with that
+server and that instruction off (`claude -p` with `--strict-mcp-config` and `--setting-sources ""`
+drops both), or the arms don't differ.
 **Playbook:** Eval.
 **Done when:** the eval's reply is in the PR with every arm's scores, and step 4 either loads by
 id or is removed.
-**Why not done:** there is no KB to test yet.
-**Prioritize when:** R16 is picked up. R16 does not ship before this.
+**Why not done:** found 2026-11-23; the KB to test was named 2026-11-26.
+**Prioritize when:** now. Reuse R43's 8 tasks for the first 8, and add up to two that touch
+areas the KB covers. R16 does not ship before this.
 
 ### R43. Ablate beau-mode's always-on load
 **What:** beau-mode's `SKILL.md` is about 3,000 words, and beau-agent loads it and the
@@ -819,7 +826,7 @@ separate weekly pass reads the flags and proposes at most three skill edits, eac
 shows the flag's evidence failing before and a probe passing after. Beau merges every PR.
 Flag entries hold no transcript text.
 
-Order: agent-ledger's Flags unit, then R45. R48 after two weeks of flags. R47 is done. R46 any time.
+Order: agent-ledger's Flags unit and R45 are done. R48 after two weeks of flags, once H18 is. R47 is done. R46 any time.
 
 ## P1
 
@@ -838,6 +845,12 @@ generated files.
 passes `ledger verify`, holds no transcript text, and the task still finishes.
 **Why not done:** the convention it writes doesn't exist yet.
 **Prioritize when:** agent-ledger's Flags unit has merged.
+**Done 2026-11-26** in bstack 0.48.0: one Non-negotiable in beau-mode and the same line in
+beau-agent point at beau-mode's `references/flags.md`, which holds S3's commands. It replaces
+the old rule to fix a broken skill in its own change. Outside a governed run, flags go to the
+repo `~/.agents/flags.yaml` names; choosing it is H18. In a real session in a scratch repo, a
+skill with a wrong flag in its command produced one flag that passed `ledger verify` and held
+only the command and its error line, and the task finished. The change record has the run.
 
 ### R47. One list of what waits on Beau
 **What:** A read-only command that lists everything waiting on Beau across the repos: open

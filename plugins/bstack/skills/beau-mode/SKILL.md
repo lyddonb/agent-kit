@@ -32,7 +32,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 - **A gated action** (see Policy under Autonomy): stop that thread and ask, even mid-run and even under "don't stop".
 - **Any prose (replies, docs, PR bodies, commit messages):** write it per **Writing the reply** and the **unslop** skill.
 - **The same mistake twice:** stop patching it by hand. Run the **correct** skill so the repo makes the mistake impossible.
-- **A skill is broken mid-task:** fix it in its own change, not tangled into the task. Don't silently work around it.
+- **A skill's text, reference or pointer is wrong or missing:** append a flag per `references/flags.md` and carry on with what worked. Never edit that skill in the same task.
 
 ## Skills to call
 
