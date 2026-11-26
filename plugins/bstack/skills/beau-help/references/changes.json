@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.47.0",
+      "date": "2026-11-26",
+      "plugin": "bstack",
+      "version": "0.47.0",
+      "changes": [
+        "A reviewer or judge can now come from another agent's CLI, so a Claude Code session can get a GPT model's read. A roles-file entry `cli:<agent>:<model>` (for example `cli:cursor-agent:gpt-5.6-sol-high`) names one, and the beau-mode skill's `scripts/second_opinion.py` runs it: one read-only call to `claude` or `cursor-agent`, killed after `--timeout` seconds (600 by default), with a JSON result whose status is `ok`, `empty`, `error`, `timeout` or `missing`. A CLI that exits 0 with a blank or failed answer counts as a failure, not a review. No profile sets a `cli:` entry yet, so review panels are unchanged until you add one."
+      ],
+      "try": "Run second_opinion.py --list, then ask cli:cursor-agent:gpt-5.6-sol-high to review a diff."
+    },
+    {
       "id": "bstack@0.46.0",
       "date": "2026-11-26",
       "plugin": "bstack",
