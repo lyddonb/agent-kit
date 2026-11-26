@@ -562,6 +562,7 @@ The work spans four repos. Each item has one full entry, in the repo where its c
 | The prune brief covers skills | R41 | The profile half: agentfiles R18. The brief section: quality phase 1c |
 | Cuts are proposed by ablation | R25 (edited in place) | The always-on block is agentfiles' |
 | Upstream skills pass the same lint | agentfiles R17 | Uses the lint above (was R39) |
+| Tokens per skill use | R49 | The book's new columns: quality |
 
 **How to work these.** The rules under Verification loops apply: one PR per entry or unit, its
 own worktree and branch, stop at merge-ready, and a new check is proven to fail on a real past
@@ -642,7 +643,8 @@ booked; and a `Read` counts once per session and skill. Two things to know when 
 Sunday brief is for never has skill rows yet, so the brief's Skills section reads the latest booked week from a
 second `summary --week` run; and a skill outside the lock (cfo's, until agentfiles H13 is answered) is booked with
 its plugin name and an empty version.
-**Still open:** no rule fills `verdict`. Pick a threshold from a few weeks of rows first.
+**Still open:** no rule fills `verdict`. Pick a threshold from a few weeks of rows first. The first rule that
+needs no threshold is R48: a skill use with an agent's flag in its window.
 **Feeds:** agent-ledger's M3 unit 1 (after four weeks of rows), R41 (after 60 days) and R3.
 
 ## P1
@@ -682,6 +684,27 @@ more than three, proposes none marked `rare`, and every number matches `summary 
 **Why not done:** R35 unit 3 prunes rules and checklist items. No skill has ever been retired
 on evidence, since there is none.
 **Prioritize when:** R38 has 60 days of rows.
+
+### R49. Tokens per skill use
+**What:** `quality.py book-skills` books what each skill use cost: input, output and cache-write
+tokens over the window R38 already counts (the first 20 tool results after the skill loads),
+read from the usage each Claude Code assistant record carries. Cursor rows stay empty, since
+Cursor records no usage. `summary --json` gains tokens per use per skill. This is the method in
+Uber's "[How Uber Evals 1 Million Agent Skill Invocations a Month](https://www.uber.com/us/en/blog/optimizing-ubers-agent-skills/)"
+(read 2026-11-25): the session's cost just after a skill call minus the cost just before,
+averaged per call. R41 prices a skill's always-on cost; this gives the cost of using it, which
+R25 and R43 need to show a cut saves anything.
+**Where:** `plugins/bstack/skills/qualitydirector/**` (`book-skills`, `check`, `summary`), tests,
+generated files. The book's new columns land in the books repo.
+**Depends on:** R38.
+**Playbook:** Feature.
+**Done when:** a run over four weeks of real transcripts into a scratch copy of the books fills
+the token columns, `check` passes, a second run changes nothing, and five rows picked at random
+match the transcripts' usage by hand.
+**Why not done:** R38 booked counts first. Uber's post shows the cost per use is the number
+its cuts were judged on (one skill 46% cheaper after a change, another unchanged).
+**Prioritize when:** now. It costs one more read in a pass that already runs, and R41, R25 and
+R43 all assume a cost column.
 
 # Context loading
 
@@ -726,7 +749,10 @@ id or is removed.
 principles index before any work. Nothing has tested whether that much text helps or distracts.
 Run the Eval playbook on 8 past tasks with two arms: beau-mode as it is, and a slim router that
 restates the task, picks a playbook and loads only that playbook and the principles it names.
-Judge on a different model from the candidates. If the slim arm holds on every rubric item,
+Judge on a different model from the candidates, blind to which arm wrote which answer. Run the
+full arm twice and report each rubric item's win share beside the gap between those two
+identical runs, so a difference smaller than that noise band counts as none. Uber's skill
+ablation (below) reports wins the same way. If the slim arm holds on every rubric item,
 propose moving playbook-only text out of `SKILL.md`, through R25's cut rules.
 **Where:** `plugins/bstack/skills/beau-mode/**`. Changes nothing until the eval passes.
 **Depends on:** H17.
@@ -735,3 +761,97 @@ propose moving playbook-only text out of `SKILL.md`, through R25's cut rules.
 count of each arm.
 **Why not done:** found 2026-11-23. It is the cheapest test of the claim above and needs no KB.
 **Prioritize when:** H17 is answered. Before R13's beau-mode comparison, which can reuse its tasks.
+
+# Knowledge factory
+
+From Harrison Chase's "[The Knowledge Factory](https://www.langchain.com/blog/knowledge-factory)"
+(LangChain, read 2026-11-23), with evidence from Uber's
+"[How Uber Evals 1 Million Agent Skill Invocations a Month](https://www.uber.com/us/en/blog/optimizing-ubers-agent-skills/)"
+(read 2026-11-25). The kit has skills as procedural memory and the rule that agents propose
+and a human decides. What it lacks is the agent-raised flag: a call any agent makes mid-task
+when a skill, reference or pointer is wrong or missing, with what it did instead and a
+suggested fix. R38 could not get a correction signal from the next user turn (it matched 2 of
+1,158 turns). Uber runs exactly this as an always-on skill and reports thousands of reports in
+three months and hundreds fixed, among them bugs no review caught: concurrent sessions
+overwriting one temp file, seconds passed where milliseconds were needed. Both posts' numbers
+are their authors' own.
+
+| Item | Entry | Other repos |
+|---|---|---|
+| The flag convention and how to append one | agent-ledger, Flags unit | Entries go in a weekly flags run per machine |
+| Agents flag a wrong skill and carry on | R45 | Uses the agent-ledger convention |
+| Flags fill a verdict | R48 | The books' `verdict` column (R38) |
+| Data access as pointers | R46 | None |
+| One list of what waits on Beau | R47 | Reads every repo's `HUMAN_TASKS.md` and the ledger |
+| A narrow profile for the agent that reads flags and proposes edits | agentfiles R19 | None |
+
+**How to work these.** A flag is never edited and no agent edits a skill because of one. A
+separate weekly pass reads the flags and proposes at most three skill edits, each a PR that
+shows the flag's evidence failing before and a probe passing after. Beau merges every PR.
+Flag entries hold no transcript text.
+
+Order: agent-ledger's Flags unit, then R45. R48 after two weeks of flags. R46 and R47 any time.
+
+## P1
+
+### R45. Agents flag a wrong or missing skill and carry on
+**What:** One rule in beau-mode's Non-negotiables and the same line in beau-agent: when a
+skill's text, a reference or a pointer was wrong or missing (a command that doesn't exist, a
+step that no longer works, a path that moved), append a flag with agent-ledger's convention and
+carry on with the task. Never edit the skill in the same task. The flag names the skill, what
+was wrong, what the agent did instead, a suggested fix, and the command and output that showed
+it.
+**Where:** `plugins/bstack/skills/beau-mode/SKILL.md`, `plugins/bstack/agents/beau-agent.md`,
+generated files.
+**Depends on:** agent-ledger's Flags unit.
+**Playbook:** Authoring a skill.
+**Done when:** in a real session, a planted wrong command in a skill produces one flag that
+passes `ledger verify`, holds no transcript text, and the task still finishes.
+**Why not done:** the convention it writes doesn't exist yet.
+**Prioritize when:** agent-ledger's Flags unit has merged.
+
+### R47. One list of what waits on Beau
+**What:** A read-only command that lists everything waiting on Beau across the repos: open
+`HUMAN_TASKS.md` items and blockers, pull requests waiting for his merge, open ledger gates,
+and proposals from the weekly briefs. One place to look instead of five files and a PR list.
+It sends nothing. A notifier can read its output later.
+**Where:** a script in `plugins/bstack/skills/`, with a short skill or a `beau-help` section,
+tests, generated files.
+**Depends on:** nothing.
+**Playbook:** Feature.
+**Done when:** run on this machine, it lists every open human task in the five repos and every
+open PR waiting on review, and each item links to its source.
+**Why not done:** it was an idea (a notifier for scheduled jobs) waiting for three jobs to run
+on a schedule. That trigger is met: the CFO and skill-use weekly job, local-ci, and the weekly
+quality brief.
+**Prioritize when:** now, or the next time a human task waits more than a week unnoticed.
+
+## P2
+
+### R46. Data access as pointers
+**What:** One reference file per area whose data an agent reads (the quality books, the CFO
+books, ledger runs) that says where each fact lives and the command that reads it, owned by
+the skill that writes the data. `docs/KNOWLEDGE.md` gains a `pointer` entry type beside
+`reference`. A pointer never copies the data.
+**Where:** `plugins/bstack/skills/qualitydirector/references/`, `plugins/cfo/skills/cfo-books/references/`,
+`docs/KNOWLEDGE.md`.
+**Depends on:** nothing.
+**Playbook:** Authoring a skill.
+**Done when:** an agent asked three factual questions about the books answers each by running
+the command its pointer names, with no file search.
+**Why not done:** agents find the books by reading the skills today. Nothing has shown that to
+fail, so this waits for a flag that says it did.
+**Prioritize when:** a flag names a wrong or missing path to data.
+
+### R48. Flags fill a verdict
+**What:** R38 left every `verdict` as `unjudged` because no count could decide one. A skill use
+with a flag on that skill in its window is `partially effective`, and `harmful` when the flag
+names a command or path that doesn't exist (checked with `tools/validate.py`'s
+`check_commands`). That is the first verdict the books fill without a judge model.
+**Where:** `plugins/bstack/skills/qualitydirector/**`, tests.
+**Depends on:** R45, R38.
+**Playbook:** Feature.
+**Done when:** on fixture books and flags, every use with a flag in its window gets the rule's
+verdict, every other use stays `unjudged`, and a second run changes nothing.
+**Why not done:** there are no flags yet.
+**Prioritize when:** R45 has two weeks of flags.
