@@ -115,7 +115,7 @@ evidence would overfit.
 ## P1
 
 ### R11. Cross-model reviewers through other agents' CLIs
-**Done 2026-11-26** in bstack 0.47.0. The beau-mode skill's `scripts/second_opinion.py` sends one
+**Done 2026-11-26** in bstack 0.47.0 (pull request 121). The beau-mode skill's `scripts/second_opinion.py` sends one
 prompt, read-only, to `claude` or `cursor-agent` and returns a checked answer or a named failure.
 A roles-file entry `cli:<agent>:<model>` names one, and the roles rules say how to run it. The
 contract is `plugins/bstack/skills/beau-mode/references/second-opinion.md`. It came ahead of its
