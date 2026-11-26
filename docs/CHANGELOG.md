@@ -13,6 +13,14 @@ What changed in each plugin release, newest first. In an agent, ask for `beau-he
 - The weekly Mac job no longer loses its week when the Mac is asleep on Sunday morning. The launch agent now starts it every hour, and the job (`--scheduled`) works only from Sunday 06:00 to Monday 23:59 local time: it skips a brief dark wake and tries again the next hour, retries a failed run every hour until Monday night, and stops after the first run that finishes without a failure. Plain runs and `--dry-run` behave as before. Install the job again to pick it up.
 - Try: `Run weekly-claude-code.sh --repo OWNER/NAME --print-plist and check that it starts every hour and passes --scheduled.`
 
+## cfo 0.4.3 (2026-11-25)
+
+- `weekly-claude-code.sh --install` now says the job runs every hour from Sunday 06:00 to Monday 23:59 local time until one run finishes without a failure. It said every Sunday at 06:00, the schedule 0.4.2 replaced. The installed agent is unchanged, so there is nothing to reinstall.
+
+## bstack 0.43.2 (2026-11-25)
+
+- beau-help lists cfo 0.4.3 and its corrected install message.
+
 ## bstack 0.43.1 (2026-11-25)
 
 - beau-help lists cfo 0.4.2 and what changed in it: the weekly Mac job retries hourly through Sunday and Monday instead of losing its week to one dark wake.

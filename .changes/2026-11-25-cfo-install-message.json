@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "goal": "Make --install's message match the schedule it installs: 0.4.2 made the job hourly from Sunday 06:00 to Monday 23:59, but the message still said every Sunday at 06:00.",
+  "changed": [
+    "weekly-claude-code.sh --install prints the hourly Sunday-to-Monday window instead of every Sunday at 06:00."
+  ],
+  "claims": [
+    {
+      "claim": "--install prints the hourly window and no longer says every Sunday at 06:00.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_weekly_claude_code.py WeeklyJob.test_install_status_uninstall: fails with the old message, passes with the fix",
+      "commit": "fbb88a8",
+      "record": ".changes/2026-11-25-cfo-install-message/tests.txt",
+      "remaining": "Only the printed text changed; the plist and the job are as in 0.4.2."
+    }
+  ],
+  "next": [],
+  "release": {
+    "see": "changes.yaml cfo@0.4.3"
+  }
+}

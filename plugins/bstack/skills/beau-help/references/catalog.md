@@ -81,7 +81,7 @@ Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the
 - subagent `beau-agent` (Claude Code)
 - subagent `comment-sicko` (Claude Code)
 
-## cfo 0.4.2
+## cfo 0.4.3
 
 A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and provider billing data, separates cash cost from API-equivalent cost, estimates runs before they start, writes a weekly brief, and proposes budgets and cuts for you to approve. Never pays, cancels or deletes anything itself.
 
