@@ -1,0 +1,5 @@
+# At 18c2a16, the slow-start test with start_delay=16, past the gate's 15s liveness bound:
+FAIL: test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed (tests._gate16.TimeoutTest.test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed)
+AssertionError: '' is not true : the fake CLI never wrote its pid file
+Ran 1 test in 15.044s
+FAILED (failures=1)

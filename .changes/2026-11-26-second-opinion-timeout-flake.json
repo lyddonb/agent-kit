@@ -4,7 +4,8 @@
   "changed": [
     "tests/test_second_opinion.py runs the timeout tests through a launcher whose Popen returns only once the fake CLI has written its pid file, so the script's 1s timeout starts after the grandchild exists instead of racing the fake's interpreter start-up.",
     "The fake starts its child before reading stdin (so the gate can't deadlock on the prompt) and writes the pid file atomically with the time it became ready; the 'returns quickly' bound is measured from that time.",
-    "A new test makes the fake wait 2s before starting its child, longer than --timeout, and still requires the grandchild to be killed."
+    "A new test makes the fake wait 2s before starting its child, longer than --timeout, and still requires the grandchild to be killed.",
+    "When the fake never becomes ready within the gate's 15s liveness bound, the test fails with the gate's message instead of a bare JSONDecodeError."
   ],
   "claims": [
     {
@@ -21,7 +22,15 @@
       "check": "TimeoutTest at 0c83998, three runs, then 20 runs beside a full make unit at load 40 to 90",
       "commit": "0c83998",
       "record": ".changes/2026-11-26-second-opinion-timeout-flake/loop.txt",
-      "remaining": "Start-up slower than the gate's 15s liveness bound still fails, with the message 'the fake CLI never wrote its pid file'."
+      "remaining": "A start-up slower than the gate's 15s liveness bound still fails the test, by design; see the next claim."
+    },
+    {
+      "claim": "A fake that never becomes ready within 15s fails the test with 'the fake CLI never wrote its pid file', not a JSONDecodeError.",
+      "verdict": "VERIFIED",
+      "check": "the slow-start test with start_delay=16 in a temporary copy, under uv Python 3.12; before 18c2a16 the same run ended in JSONDecodeError",
+      "commit": "18c2a16",
+      "record": ".changes/2026-11-26-second-opinion-timeout-flake/gate-bound.txt",
+      "remaining": "None."
     },
     {
       "claim": "The gated tests still catch a broken group kill: signalling only the CLI instead of its process group turns both red.",
@@ -35,7 +44,7 @@
       "claim": "The whole suite passes.",
       "verdict": "VERIFIED",
       "check": "make gen and make test on the branch",
-      "commit": "0c83998",
+      "commit": "18c2a16",
       "record": ".changes/2026-11-26-second-opinion-timeout-flake/make-test.txt",
       "remaining": "CI on the pull request."
     }
