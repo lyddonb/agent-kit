@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.48.0 (2026-11-26)
+
+- When a skill's text, a reference or a pointer turns out wrong or missing mid-task (a command that doesn't exist, a step that no longer works, a path that moved), beau-mode and beau-agent now append a flag and carry on with what worked, instead of fixing the skill in the same task. A flag is agent-ledger's `lesson` entry with `data.kind: "flag"`: it names the skill, what was wrong, what the agent did instead, a suggested fix, and the command and output lines that showed it. Inside a governed run it goes in that run. Otherwise it goes in this week's `flags-<machine>` run in the repo `~/.agents/flags.yaml` names (`root:` and `machine:`). With no such file the agent lists the flag in its reply. `references/flags.md` in beau-mode has the commands.
+- Try: `Plant a wrong flag in a scratch skill's command, then ask an agent in beau mode to use the skill.`
+
 ## bstack 0.47.1 (2026-11-26)
 
 - second-opinion's reference says what it actually guarantees: it starts the CLI in that CLI's read-only mode, which is a permission setting and not a sandbox; `--timeout` kills the CLI's process group, so a child that started its own session survives; and the example command runs from the beau-mode skill's folder. A GPT-5.6 review run through the script found all three. The script is unchanged.
