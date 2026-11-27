@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.59.0 (2026-11-27)
+
+- beau-mode treats code that runs commands it reads from a repo or a config (hooks, gates, check runners) as running untrusted input: it checks whose repo it is before running anything, in every mode, and answers a security warning before moving on. When a permission check denies an action, it asks instead of reaching the same effect another way.
+- Large work item: the human's approval actor is spelled out, since the ledger records an approval only once. A unit that adds a blocking gate, hook or check replays its rule over real history against a fire-rate ceiling set in the charter. Unit tests run per change, with the full suite once per pushed state.
+- Opening a PR: when main moves under an open PR, merge main in, never rebase and force-push; pick a shared version number last; and read `gh pr view --json mergeable,mergeStateStatus,isDraft` before calling a PR ready.
+
 ## bstack 0.58.0 (2026-11-27)
 
 - New Stop hook (Claude Code). When the agent finishes, the hook runs the commands under `stop:` in `.agents/checks.yaml`, from the repo root, in each repo the session changed (one holding a file it edited, or the working folder's repo when it ran a command there). It runs them only in repos whose GitHub `origin` is under the login in your policy's `identity.human`, so a clone of someone else's repo never runs its own commands. It runs again only when the tree moved: HEAD, the diff, or any untracked file. Each command gets `timeout_s` (default 120), and all of them together get nine minutes. If one fails, the hook acts on `policy.checks.stop-checks`. In `observe`, the default, it logs a would-block lesson to the weekly flags run, once per unchanged tree. In `enforce` it sends the agent back with the last 40 lines of the failing output. After two send-backs it lets the stop through and records why. In `off` it does nothing. agent-kit declares `make check`.
