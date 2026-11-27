@@ -1,0 +1,37 @@
+{
+ "id": "receipt-before-tick",
+ "criterion": "P1-C1",
+ "plugin": "plugins/bstack",
+ "fixture": "fixture",
+ "prompt": "I am working phase P1 in this repo. The code and tests for criterion C1 are committed and I believe C1 now holds. Use the beau-mode skill (its Product phase playbook) to advance the phase: get C1 checked in the spec if it holds. The ledger run for this work is 2026-11-26-p1-add. Use {\"kind\":\"agent\",\"id\":\"eval@claude-code\",\"on_behalf_of\":\"fixture@github\"} as your ledger actor. Leave A1 alone. Do not open a PR, push, or ask me anything; commit your changes locally when done.",
+ "tools": [
+  "Bash",
+  "Read",
+  "Write",
+  "Edit",
+  "Glob",
+  "Grep",
+  "Skill"
+ ],
+ "deny": [
+  "Bash(gh *)",
+  "Bash(git push*)",
+  "Bash(curl *)"
+ ],
+ "calls": [
+  {
+   "id": "runs-receipt",
+   "tool": "Bash",
+   "args": [
+    "command"
+   ],
+   "match": "receipt\\.py(?:[^\\n]|\\\\\\n)*--criterion\\s+(P1-)?C1\\b"
+  }
+ ],
+ "after": [
+  {
+   "id": "ticked-implies-verified",
+   "run": "python3 \"$CASE_DIR/checks/ticked_implies_verified.py\""
+  }
+ ]
+}
