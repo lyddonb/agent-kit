@@ -54,6 +54,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] <PR id> and <PR id> are independent and first. Both branch from `main`.
   - [ ] <PR id> after <PR id>.
 - [ ] Hold the file boundaries. <PR id> touches only `<glob>`.
+- [ ] When parallel PRs edit the same plan or phase-spec files, rebase onto trunk continuously (and onto the sibling if stacked). Do not serialize those PRs.
 - [ ] Hold the review gate. <PR ids> change an interaction and wait for the human's review before merge.
 
 ### For every PR
@@ -99,11 +100,13 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Baseline. Record the trunk <value> first.
 - [ ] Rule. <Head against trunk, with the number that fails.>
 
-**Review gate.** The human reviews before merge.
+**Review gate.** The human reviews before merge. Merge-ready means the review-gate artifacts are posted, every in-flight interrogate has finished, and no code fixes are pending.
 
 - [ ] Copy the lane screenshots to `<media path>/<pr-id>-review-<slug>.png`.
 - [ ] Record a 30 to 60 second video of the change. Save it as `<media path>/<pr-id>-review.mp4`.
-- [ ] Post the screenshots and the video to the human. Stop at merge-ready.
+- [ ] Post the screenshots and the video to the human.
+- [ ] Finish any in-flight interrogate. If interrogate (or any review) changes the code after the media was shot, reshoot the review-gate media, then stop.
+- [ ] Stop at merge-ready.
 
 **Merge.**
 

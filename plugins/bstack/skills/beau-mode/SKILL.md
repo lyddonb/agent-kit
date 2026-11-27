@@ -4,7 +4,7 @@ description: Beau's way of doing engineering work with an agent. It picks a play
 license: MIT
 metadata:
   author: lyddonb
-  version: "0.3.0"
+  version: "0.4.0"
   upstream: "pstack poteto-mode @ ccb5507, playbooks updated from 11713c6, goal handoff from 246bc50 (MIT, Lauren Tan)"
 ---
 
@@ -17,6 +17,8 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 1. **Restate the task.** In one or two plain sentences, say the user's goal, the problem it solves, and what done looks like. If the task ships a change, name the smallest change you expect to meet the goal. When the request points at a thread, ticket or log, read all of it first. Don't wait for confirmation: this catches a wrong reading before it costs anything, and the user can redirect. If the evidence rules out the change the user asked for, show it and stop. Carry the goal forward: restate it in every subagent brief, at the top of each PR's `## Why`, and at the top of your final reply (skip that for a fully specified one-line edit).
 2. **Match a playbook.** Pick one from the list at the end. Open its file and copy its steps into your todo list word for word, before any task-specific todos. If a todo list already exists, replace it with these steps. When a step names another playbook (for example Opening a PR), open that file now and expand its steps in place: its commit rules apply from your first commit. A step you skip stays in the list as `skip: <reason>`. Work that spans several PRs, runs while the human is away, or touches a default gate goes to **Large work item** first: a human approves its charter before any work starts. If no playbook fits, or the work is large and cross-cutting with no standard shape, use the **figure-it-out** skill, which frames itself with Large work item.
 3. **Read the principles that apply.** Scan the index below. For each principle you will apply, read its full file in the **principles** skill (`references/<id>.md`). In the reply, name each principle that shaped a decision and the choice it changed. Cite only principles you read this session.
+4. **Read Project preferences.** When a Project `preferences.md` exists, read it and follow it for placement and cleanup choices.
+5. **Place the work.** When choosing where to run, list self-hosted workers. Treat a shared local checkout as a mutex: only one agent holds it, and post-merge cleanup returns it (checkout main, pull, delete the merged branch, prune).
 
 ## Non-negotiables
 
@@ -24,7 +26,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 - **Nontrivial change, architecture question, or "are we sure?":** run the **how** skill on the affected code first. For why it's built that way, run **why**.
 - **A "which approach" or "what should this do" question you are about to ask:** if the answer is a fact you could observe by running something (behavior, timing, layout, output, performance), don't ask. Settle it with the Prototype playbook. Ask the human only for product or preference calls that no experiment can settle.
 - **Done means proven:** run the **verify-work** skill before you say a task is done. "It compiles" and "tests pass" are not proof of behavior. Verification is infrastructure: when a project has no `verify-<app>` skill, offer **create-verification-skill**.
-- **Green means every check:** a task isn't done until every test and every CI check passes, including a failure your diff didn't cause. A flaky test is a bug: run it in a loop to measure how often it fails, find the root cause, fix the code or the test, and add a test that fails every time without the fix. Never re-run CI hoping for green, never skip, retry or loosen a test to hide a flake, and never call a red check unrelated.
+- **Green means every check:** a task isn't done until every test and every CI check passes, including a failure your diff didn't cause. A flaky test is a bug: run it in a loop to measure how often it fails, find the root cause, fix the code or the test, and add a test that fails every time without the fix. Never re-run CI hoping for green, never skip, retry or loosen a test to hide a flake, and never call a red check unrelated. After a merge to main, check the repo's deploy (or its post-merge workflow) once. Do not call the tree green if that deploy is red.
 - **A one-way door or a design with no precedent:** run the **architect** skill. Plan with code (prototypes, sketches), not long documents, and don't adversarially review an abstract plan: reviewers invent risks for code that doesn't exist.
 - **Contested design or risky diff:** run the **interrogate** skill before shipping.
 - **Long, unattended or multi-phase work:** keep a decision trail in the project's ledger with the **show-me-your-work** skill.
@@ -181,7 +183,7 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - **Opening a PR** (`playbooks/opening-a-pr.md`). The last step of every playbook that changes code.
 - **Pause safely** (`playbooks/pause-safely.md`). An explicit request to pause, going offline, a restart, or imminent context compaction. Never on "keep going".
 - **Perf issue** (`playbooks/perf-issue.md`). A measured slowness to trace and improve against a baseline.
-- **Product phase** (`playbooks/product-phase.md`). Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, adding a feature to a phase that is done, or closing it at its gate. Also the entry point for starting a product.
+- **Product phase** (`playbooks/product-phase.md`). Product work in a repo with docs/VISION.md and docs/phases/: specifying the next phase, advancing one, adding a feature to a phase that is done, or closing it at its gate. Also the entry point for starting a product. After merges land, or when asked what's next, orient on live PR state and continue from there.
 - **Prototype** (`playbooks/prototype.md`). A throwaway sketch to make a design or behavior decision cheaply, or to settle a factual question by observing it instead of asking.
 - **Refactoring** (`playbooks/refactoring.md`). A behavior-preserving change to structure: rename, extract, inline, dedupe, move, reshape an API.
 - **Session pickup** (`playbooks/session-pickup.md`). Resuming or taking over another agent's in-flight work from a transcript, a handoff note, or a pushed branch.

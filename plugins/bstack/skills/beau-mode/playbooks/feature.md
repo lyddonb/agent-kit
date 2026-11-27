@@ -19,7 +19,7 @@ source: pstack/skills/poteto-mode/playbooks/feature.md @ ccb5507
 4. Delegate implementation to `code` subagents with precise briefs: file paths, the named shape, and what done means. Review every diff yourself.
 5. Verify on the real surface with **verify-work**. A check that still fails after a fix is one round: count it, and follow **Round cap** below.
 6. Rebase into small ordered commits, each verified before the next (`sequence-verifiable-units`).
-7. If the design is contested or the diff is risky, run **interrogate** before shipping.
+7. If the design is contested or the diff is risky, run **interrogate** before shipping. If interrogate changes the code after review-gate media was shot, reshoot that media, then stop at merge-ready.
 8. Run **Opening a PR**.
 
 <!-- BEGIN GENERATED: snippet:round-cap (tools/kitgen.py; edit plugins/bstack/snippets/round-cap.md) -->
