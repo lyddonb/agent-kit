@@ -4,16 +4,25 @@
   "changed": [
     "bstack ships a Claude Code PreToolUse hook on Bash, hooks/commit_gate.py. A git commit (with -C, -c, env prefixes or after && included; commit-tree not) in a session that ran no verify-work, verify-<app> skill, interrogate, code-review, review subagent or second opinion since its last commit that went through is judged.",
     "The mode comes from policy.checks.commit-gate in ~/.agents/policy.yaml and the repo's .agents/policy.yaml, the stricter of the two, observe when neither names it. Observe logs a would-block lesson to the weekly flags run and allows. Enforce denies twice per commit, then lets the next through and logs why. Off does nothing. Any error allows and prints one line.",
-    "hooks/checks.py holds the mode reader, the per-session state and the flags-run logger, for the Stop hook to share. bstack 0.52.0."
+    "hooks/checks.py holds the mode reader, the per-session state and the flags-run logger, for the Stop hook to share. bstack 0.52.0.",
+    "From the two-model review: a verification counts only once its result arrives without error; quoted text, heredoc bodies and --dry-run are not commits, while a commit on its own line or behind sudo, env, command or a path to git is; modes may be single-quoted, double-quoted, bare or a flow map; ledger calls time out at 8 s; and a repo's own .agents/policy.yaml counts only when its GitHub origin is under identity.human's login."
   ],
   "claims": [
     {
-      "claim": "Run as Claude Code runs it, the hook logs and allows in observe, denies twice then lets through with the reason in enforce, does nothing in off, counts each kind of verification and no other, restarts its count after a commit lands, judges only git commit, takes the stricter of the two policy files, and fails open on a broken event.",
+      "claim": "Run as Claude Code runs it, the hook logs and allows in observe, denies twice then lets through with the reason in enforce, does nothing in off, counts each kind of verification once it finishes without error and no other, ignores an untrusted repo's policy,, restarts its count after a commit lands, judges only git commit, takes the stricter of the two policy files, and fails open on a broken event.",
       "verdict": "VERIFIED",
-      "check": "python3 -m unittest tests.test_commit_gate (14 tests, system Python 3.9, a fake ledger on PATH)",
-      "commit": "5d0a098",
+      "check": "python3 -m unittest tests.test_commit_gate (16 tests, system Python 3.9, a fake ledger on PATH)",
+      "commit": "89fcb7f",
       "record": ".changes/2026-11-27-commit-gate/make-test.txt",
       "remaining": "No real Claude Code session has hit it yet: the run's unit 5 drives real headless sessions after units 2 and 4 merge."
+    },
+    {
+      "claim": "In real headless Claude Code sessions loading this hook, observe logged one would-block and the commit landed; enforce denied twice, let the third through with the reason logged, and the commit landed.",
+      "verdict": "VERIFIED",
+      "check": "scratchpad probe.sh commit-observe and commit-enforce: claude -p --model haiku --settings pointing PreToolUse at this hook, scratch policy, flags run and state",
+      "commit": "5d0a098",
+      "record": ".changes/2026-11-27-commit-gate/probe.txt",
+      "remaining": "Run on the first version of the hook; the review fixes since are covered by the unit tests and the run's close re-runs the probes."
     },
     {
       "claim": "The tests hold the rules: counting a denied commit as a commit, a third stop, dropping verify-<app> skills, blocking in observe, the weaker mode winning, verification before the last commit counting, and commit-tree counting each turn them red.",
