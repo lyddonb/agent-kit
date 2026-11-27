@@ -1,0 +1,4 @@
+RecordsTest.test_nothing_scripts_ci_leaves_running_outlives_the_run, alone: 10 of 10 pass
+The same test with local_ci's final killpg replaced by pass: fails ("the background process was killed with its group")
+make record RECORD_WORKERS=4, two runs: each exit 0, complete, 1538 rows, 1538 unique ids, 0 fail or error
+make check, make validate, make versions: pass
