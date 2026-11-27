@@ -55,6 +55,7 @@ Go deep before going fast. The goal is less code of higher quality, with proof t
 | A decision trail for long or unattended work | **show-me-your-work** |
 | Closing out work for the human: what's proven, what's next and why, the release note | **debrief** |
 | Work no playbook fits | **figure-it-out** |
+| More sessions in parallel: the next work that won't collide with work in flight | **parallel-next** |
 | Comments in a diff, or code that leans on a comment to be understood | **no-comments** |
 | Lessons from a session; a repeated mistake | **reflect**; **correct** |
 | What the kit can do, or what changed | **beau-help** |
