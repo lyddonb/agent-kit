@@ -3,6 +3,13 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.53.0 (2026-11-27)
+
+- beau-mode's first steps now replace a todo list written before it loaded, and expand any playbook the matched one names (Opening a PR) into its own steps at once, so its commit rules apply from the first commit.
+- Opening a PR now says a PR is opened only after every check and review is done, because a human may merge it at once, and that a later fix goes in a new PR. In a public repo it runs `leak-check` and removes figures and paths from your own machine before pushing.
+- The Prototype playbook raises a done-when the evidence shows can't be met before the build starts, with a proposed rewording.
+- verify-work checks a checker (a lint, doctor or validator) on a case it must pass and a hand-built case it must fail.
+
 ## bstack 0.52.0 (2026-11-27)
 
 - verify-work's `receipt.py` takes `--inconclusive-exit N`, repeatable, for a probe with an exit code that means the run said nothing. A listed code is recorded as INCONCLUSIVE instead of NOT VERIFIED, with the exit code kept in the receipt and named in the entry's `why`. Pass `--inconclusive-exit 2` when the probe is harness-lab, whose exit 2 (UNJUDGEABLE) means the plugin didn't load, the budget ran out or the stream had no calls, so a broken setup no longer reads as a broken skill in `ledger receipts`. No code is inconclusive by default, and exit 0 can't be listed.
