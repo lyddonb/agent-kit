@@ -1,0 +1,18 @@
+PASS 1 merge-ready definition: 'Merge-ready means the review-gate artifacts' in multi-phase-plan.md
+PASS 1 reshoot after interrogate: 'reshoot the review-gate media' in multi-phase-plan.md
+PASS 2 re-fetch before claim: 'Before any merge-ready or ready-to-merge claim' in opening-a-pr.md
+PASS 3 continuous rebase mpp: 'rebase onto trunk continuously' in multi-phase-plan.md
+PASS 3 continuous rebase pp: 'rebase onto trunk continuously' in product-phase.md
+PASS 3 no serialize: 'Do not serialize those PRs' in multi-phase-plan.md
+PASS 4 tracker link: 'linked to an active tracker task' in opening-a-pr.md
+PASS 5 deploy after merge opening: 'after a merge to main, check that deploy once' in opening-a-pr.md
+PASS 5 deploy green means: "check the repo's deploy (or its post-merge workflow) once" in SKILL.md
+PASS 7 check-plan before push: 'check-plan.py' in product-phase.md
+PASS 7 punctuation cross-ref: 'punctuation `check-plan.py` allows' in product-phase.md
+PASS 8 preferences: 'Project `preferences.md`' in SKILL.md
+PASS 8 workers mutex: 'shared local checkout as a mutex' in SKILL.md
+PASS 9 subscribe merges: 'observed PR merge events (subscribe)' in product-phase.md
+PASS 9 when after merges: "After merges land, or when asked what's next" in product-phase.md
+PASS 10 restamp receipt: 'restamp its receipt before rechecking' in product-phase.md
+PASS 11 feature reshoot: 'reshoot that media, then stop at merge-ready' in feature.md
+PASS 12 post-merge debt: 'Land post-merge review debt' in product-phase.md
