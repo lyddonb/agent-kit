@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "goal": "Encode so agents cannot recur the studyhall P3/P8 mistake: product-phase Evidence: copied into docs/plans boxes fails check-plan mid-sentence colon and gets hand-patched to Evidence.",
+  "changed": [
+    "check-plan.py strips a leading Evidence: on a line before the mid-sentence colon check, so plan boxes may use the same evidence label product specs require.",
+    "A real mid-sentence colon still fails; the message names the rewrite or the Evidence: form.",
+    "Unit test replays the studyhall P3 Evidence: lines (pass) and Note: (fail).",
+    "bstack 0.55.0."
+  ],
+  "claims": [
+    {
+      "claim": "origin/main check-plan fails the past P3 Evidence: plan line as mid-sentence colon; this branch passes the same line and still fails a Note: mid-sentence colon with a fix-naming message.",
+      "verdict": "VERIFIED",
+      "check": "python proof comparing origin/main check-plan.py vs this branch on fixtures/plan-good.md with the P3 Evidence: snippet and a Note: control",
+      "commit": "9e30743",
+      "record": ".changes/2026-11-27-check-plan-evidence-colon/proof.txt",
+      "remaining": "check-product.py was not re-run against a product repo; its Evidence: require is untouched."
+    },
+    {
+      "claim": "The new unit test and the rest of test_check_plan pass.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m unittest tests.test_check_plan",
+      "commit": "9e30743",
+      "record": ".changes/2026-11-27-check-plan-evidence-colon/proof.txt",
+      "remaining": "Full make test / CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "agentfiles update mine so synced beau-mode picks up check-plan 0.55.0",
+      "source": "inferred: agentfiles pins agent-kit; studyhall CI uses synced or vendored check-plan",
+      "why_now": "Until the pin moves, product repos keep the old checker that rejects Evidence: in plans.",
+      "impact": "Studyhall and other product repos stop failing local-ci on plan Evidence: lines."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.55.0"
+  }
+}
