@@ -25,9 +25,11 @@ A case is the probe of its criterion, so record it with verify-work's `receipt.p
 
 ```sh
 python3 plugins/bstack/skills/verify-work/scripts/receipt.py --run RUN_ID --actor ACTOR_JSON \
-  --spec docs/phases/P1-harness-lab.md --criterion C1 \
+  --spec docs/phases/P1-harness-lab.md --criterion C1 --inconclusive-exit 2 \
   -- python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3
 ```
+
+`--inconclusive-exit 2` records an UNJUDGEABLE run (the plugin didn't load, the budget ran out, the stream had no calls) as INCONCLUSIVE instead of NOT VERIFIED, so a broken setup doesn't read as a broken skill. The receipt still shows `(exit 2)`. Neither verdict ticks the box.
 
 ## The rule-removed copy
 
