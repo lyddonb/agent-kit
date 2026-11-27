@@ -1,19 +1,22 @@
-$ probe.sh <hooks> commit-observe
+=== commit-observe
 claude exit 0
 --- commits:
-add mul
-init
+<sha> add mul
+<sha> init
 --- would-block entries:
 commit-gate observe | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit
-
-$ probe.sh <hooks> commit-enforce
+--- hook messages the agent saw:
+--- tests now:
+OK
+=== commit-enforce
+claude exit 0
 --- commits:
-add mul
-init
+<sha> add mul
+<sha> init
 --- would-block entries:
 commit-gate deny | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit
 commit-gate deny | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit
 commit-gate let-through | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit; let through after 2 stops
 --- hook messages the agent saw:
-   2 ... This is stop 1 of 2; after that the gate lets the commit through and records why.
-   2 ... This is stop 2 of 2; after that the gate lets the commit through and records why.
+--- tests now:
+OK

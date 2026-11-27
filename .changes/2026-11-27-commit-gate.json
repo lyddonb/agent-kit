@@ -19,10 +19,10 @@
     {
       "claim": "In real headless Claude Code sessions loading this hook, observe logged one would-block and the commit landed; enforce denied twice, let the third through with the reason logged, and the commit landed.",
       "verdict": "VERIFIED",
-      "check": "scratchpad probe.sh commit-observe and commit-enforce: claude -p --model haiku --settings pointing PreToolUse at this hook, scratch policy, flags run and state",
-      "commit": "5d0a098",
+      "check": "scratchpad probe.sh commit-observe and commit-enforce: claude -p --model haiku --settings pointing PreToolUse at this hook, a scratch repo whose origin is under the policy's login, scratch policy, flags run and state",
+      "commit": "607e876",
       "record": ".changes/2026-11-27-commit-gate/probe.txt",
-      "remaining": "Run on the first version of the hook; the review fixes since are covered by the unit tests and the run's close re-runs the probes."
+      "remaining": "The Stop hook's probe is in the stop-checks record; the run's close re-runs both after the plugin update."
     },
     {
       "claim": "The tests hold the rules: counting a denied commit as a commit, a third stop, dropping verify-<app> skills, blocking in observe, the weaker mode winning, verification before the last commit counting, and commit-tree counting each turn them red.",
