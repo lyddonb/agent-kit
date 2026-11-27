@@ -1,0 +1,24 @@
+$ codex --version
+codex-cli 0.39.0
+$ codex plugin marketplace add lyddonb/agent-kit
+error: unexpected argument 'marketplace' found
+
+Usage: codex [OPTIONS] [PROMPT]
+       codex [OPTIONS] [PROMPT] <COMMAND>
+
+For more information, try '--help'.
+exit=2
+
+$ codex mcp list   (config.toml per INSTALL.md by-hand section)
+Error: failed to load configuration
+
+Caused by:
+    missing field `command`
+    in `mcp_servers.context7`
+    
+exit=1
+
+$ strings $(brew --prefix codex)/bin/codex | grep -ciE "SKILL\.md"
+0
+$ strings ... | grep -ciE "streamable_http|streamable-http"
+0

@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "goal": "Find out which of INSTALL.md's claims hold in real clients beyond Claude Code, so nobody installing agent-kit in Codex or Cursor is misled, and record what was run and seen per tool (R1).",
+  "changed": [
+    "docs/INSTALL.md: a dated Tested installs table (Codex CLI 0.172.0, Codex CLI 0.39.0, Cursor CLI 2026.11.22, and not verified rows for the rest), and a column in the top table saying which rows were exercised.",
+    "docs/INSTALL.md fixes: Codex needs a CLI with `codex plugin` (0.39.0 has none), `codex plugin add` installs and enables each plugin, uninstall is `codex plugin remove`; the by-hand url MCP entry needs a newer Codex; Cursor's marketplace add is per account and has no CLI install, `--plugin-dir` loads from a clone, with a context7 already in ~/.cursor/mcp.json the plugin's server can't be told apart, and Cursor also lists Claude Code's plugin skills.",
+    "HUMAN_TASKS.md H4 has exact steps for the Cursor app, the Codex app, Copilot in VS Code, pi and OpenCode; ROADMAP.md R1 has its status."
+  ],
+  "claims": [
+    {
+      "claim": "Codex CLI 0.172.0 installs all 7 agent-kit plugins from the published GitHub repo, and all 44 skills reach the model's prompt.",
+      "verdict": "VERIFIED",
+      "check": "Scratch HOME and CODEX_HOME, no credentials: codex plugin marketplace add lyddonb/agent-kit, codex plugin add for each plugin, codex plugin list (7 installed, enabled), codex debug prompt-input (44 <plugin>:<skill> entries, matching the repo's skill folders).",
+      "commit": "1819b59",
+      "record": ".changes/2026-11-27-r1-install-check/codex-0.172.0.txt",
+      "remaining": "No model turn ran a skill, and the Codex app and IDE extension were not tried."
+    },
+    {
+      "claim": "In Codex CLI 0.172.0, research-tools' context7 MCP server connects.",
+      "verdict": "VERIFIED",
+      "check": "codex app-server over stdio, initialize then mcpServerStatus/list: context7 with pluginId research-tools@agent-kit, serverInfo Context7 4.9.1, tools resolve-library-id and query-docs.",
+      "commit": "1819b59",
+      "record": ".changes/2026-11-27-r1-install-check/codex-0.172.0.txt",
+      "remaining": "No tool call was made through a model turn."
+    },
+    {
+      "claim": "Codex CLI 0.39.0 can't follow INSTALL.md: it has no plugin command and rejects a url MCP server.",
+      "verdict": "VERIFIED",
+      "check": "codex plugin marketplace add exits 2 (unexpected argument 'marketplace'); codex mcp list with the by-hand url entry fails (missing field `command`).",
+      "commit": "1819b59",
+      "record": ".changes/2026-11-27-r1-install-check/codex-0.39.0.txt",
+      "remaining": "Whether 0.39.0 loads skills at all wasn't run; its binary has no SKILL.md string, which suggests it doesn't (inferred)."
+    },
+    {
+      "claim": "Cursor CLI 2026.11.22 loads all 44 agent-kit skills from a clone of the published repo.",
+      "verdict": "VERIFIED",
+      "check": "One signed-in cursor-agent -p --mode ask prompt with --plugin-dir for each of the 7 plugins in a fresh clone; the 44 skill paths inside the clone match the repo's skill folders exactly.",
+      "commit": "1819b59",
+      "record": ".changes/2026-11-27-r1-install-check/cursor-2026.11.22.txt",
+      "remaining": "This is a local plugin load, not a marketplace install: the CLI has no install command, so the app install is in HUMAN_TASKS H4."
+    },
+    {
+      "claim": "In Cursor, research-tools' context7 MCP server connects.",
+      "verdict": "NOT VERIFIED",
+      "check": "Same prompt: a server named context7 connected, but the user's ~/.cursor/mcp.json already defines context7 and no server appeared under the plugin's name, so the two can't be told apart; in a scratch home, --plugin-dir with mcp list listed no servers; the resolve-library-id call was refused in -p mode.",
+      "commit": "1819b59",
+      "record": ".changes/2026-11-27-r1-install-check/cursor-2026.11.22.txt",
+      "remaining": "Needs a run without the user's own context7 entry, or the app check in HUMAN_TASKS H4 step 1."
+    },
+    {
+      "claim": "The Codex app and IDE, the Cursor app, Copilot in VS Code, pi and OpenCode install agent-kit as INSTALL.md says.",
+      "verdict": "UNCHECKED",
+      "check": "Not run: pi and OpenCode are not installed on the test machine, and the apps need Beau.",
+      "commit": "1819b59",
+      "record": "",
+      "remaining": "HUMAN_TASKS H4 steps 1 to 5."
+    }
+  ],
+  "next": [
+    {
+      "item": "Beau runs the remaining install checks and fills in their rows.",
+      "source": "HUMAN_TASKS.md H4",
+      "why_now": "Those rows still claim support that nobody has run, and Copilot and the Cursor app are the most likely clients for someone new.",
+      "impact": "Anyone installing outside Claude Code and the Codex CLI gets steps that someone has actually run."
+    },
+    {
+      "item": "Update the Codex CLI on the test machine: Homebrew's codex formula and the npm copy are both 0.39.0, and the cask has 0.172.0.",
+      "source": "HUMAN_TASKS.md H4 step 2",
+      "why_now": "On that machine, any agentfiles or agent-kit check that uses `codex` hits the 0.39.0 failures above.",
+      "impact": "Codex picks up agent-kit's plugins there, and agentfiles' Codex checks run against a version that has plugins."
+    }
+  ],
+  "release": {
+    "note": "INSTALL.md now says which clients were tested and how, gives Codex CLI and Cursor CLI steps that were run, and marks the untested clients as not verified."
+  }
+}
