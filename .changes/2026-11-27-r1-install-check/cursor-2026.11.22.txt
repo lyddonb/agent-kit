@@ -1,0 +1,107 @@
+$ cursor-agent -p --mode ask --trust --approve-mcps --workspace <scratch>/ws-cursor --plugin-dir <clone>/plugins/{essentials,eng-leadership,research-tools,principles,bstack,cfo,video} '<prompt>'
+PROMPT: Do not edit any files or run shell commands. Three tasks. (1) List every skill available to you in this session, one per line, as "name<TAB>path to its SKILL.md". (2) List every MCP server available to you, one per line, with the server name and whether it connected. (3) If a context7 server is available, call its resolve-library-id tool with libraryName "react" and report the first library ID it returns, or the exact error. End with a line "SKILLS=<count>".
+2026.11.22-e9042b2
+(redacted: the skill lines from the user's other skills and plugins, not agent-kit; the user's other MCP server names)
+Skills
+
+```text
+architect	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/architect/SKILL.md
+arena	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/arena/SKILL.md
+beau-help	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/beau-help/SKILL.md
+beau-mode	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/beau-mode/SKILL.md
+correct	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/correct/SKILL.md
+create-formal-verification-skill	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/create-formal-verification-skill/SKILL.md
+create-verification-skill	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/create-verification-skill/SKILL.md
+debrief	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/debrief/SKILL.md
+figure-it-out	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/figure-it-out/SKILL.md
+how	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/how/SKILL.md
+interrogate	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/interrogate/SKILL.md
+local-ci	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/local-ci/SKILL.md
+maintain-formal-verification-skill	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/maintain-formal-verification-skill/SKILL.md
+maintain-verification-skill	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/maintain-verification-skill/SKILL.md
+no-comments	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/no-comments/SKILL.md
+parallel-next	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/parallel-next/SKILL.md
+qualitydirector	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/qualitydirector/SKILL.md
+recall	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/recall/SKILL.md
+reflect	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/reflect/SKILL.md
+root-cause	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/root-cause/SKILL.md
+scaffold-product	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/scaffold-product/SKILL.md
+show-me-your-work	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/show-me-your-work/SKILL.md
+state-machines	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/state-machines/SKILL.md
+swarm	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/swarm/SKILL.md
+teach	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/teach/SKILL.md
+technical-writing	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/technical-writing/SKILL.md
+unslop	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/unslop/SKILL.md
+verify-work	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/verify-work/SKILL.md
+waiting-on-me	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/waiting-on-me/SKILL.md
+why	~/.claude/plugins/cache/agent-kit/bstack/0.58.0/skills/why/SKILL.md
+principles	~/.claude/plugins/cache/agent-kit/principles/0.2.0/skills/principles/SKILL.md
+commit-message	~/.claude/plugins/cache/agent-kit/essentials/0.3.0/skills/commit-message/SKILL.md
+grilling	~/.claude/plugins/cache/agent-kit/essentials/0.3.0/skills/grilling/SKILL.md
+handoff-notes	~/.claude/plugins/cache/agent-kit/essentials/0.3.0/skills/handoff-notes/SKILL.md
+sharpen	~/.claude/plugins/cache/agent-kit/essentials/0.3.0/skills/sharpen/SKILL.md
+socratic-tutor	~/.claude/plugins/cache/agent-kit/essentials/0.3.0/skills/socratic-tutor/SKILL.md
+library-docs	~/.claude/plugins/cache/agent-kit/research-tools/0.1.0/skills/library-docs/SKILL.md
+design-review	~/.claude/plugins/cache/agent-kit/eng-leadership/0.1.0/skills/design-review/SKILL.md
+interview-kit	~/.claude/plugins/cache/agent-kit/eng-leadership/0.1.0/skills/interview-kit/SKILL.md
+explainer-video	~/.claude/plugins/cache/agent-kit/video/0.1.0/skills/explainer-video/SKILL.md
+commit-message	<scratch>/src/agent-kit/plugins/essentials/skills/commit-message/SKILL.md
+grilling	<scratch>/src/agent-kit/plugins/essentials/skills/grilling/SKILL.md
+handoff-notes	<scratch>/src/agent-kit/plugins/essentials/skills/handoff-notes/SKILL.md
+sharpen	<scratch>/src/agent-kit/plugins/essentials/skills/sharpen/SKILL.md
+socratic-tutor	<scratch>/src/agent-kit/plugins/essentials/skills/socratic-tutor/SKILL.md
+design-review	<scratch>/src/agent-kit/plugins/eng-leadership/skills/design-review/SKILL.md
+interview-kit	<scratch>/src/agent-kit/plugins/eng-leadership/skills/interview-kit/SKILL.md
+library-docs	<scratch>/src/agent-kit/plugins/research-tools/skills/library-docs/SKILL.md
+principles	<scratch>/src/agent-kit/plugins/principles/skills/principles/SKILL.md
+architect	<scratch>/src/agent-kit/plugins/bstack/skills/architect/SKILL.md
+arena	<scratch>/src/agent-kit/plugins/bstack/skills/arena/SKILL.md
+beau-help	<scratch>/src/agent-kit/plugins/bstack/skills/beau-help/SKILL.md
+beau-mode	<scratch>/src/agent-kit/plugins/bstack/skills/beau-mode/SKILL.md
+correct	<scratch>/src/agent-kit/plugins/bstack/skills/correct/SKILL.md
+create-formal-verification-skill	<scratch>/src/agent-kit/plugins/bstack/skills/create-formal-verification-skill/SKILL.md
+create-verification-skill	<scratch>/src/agent-kit/plugins/bstack/skills/create-verification-skill/SKILL.md
+debrief	<scratch>/src/agent-kit/plugins/bstack/skills/debrief/SKILL.md
+figure-it-out	<scratch>/src/agent-kit/plugins/bstack/skills/figure-it-out/SKILL.md
+how	<scratch>/src/agent-kit/plugins/bstack/skills/how/SKILL.md
+interrogate	<scratch>/src/agent-kit/plugins/bstack/skills/interrogate/SKILL.md
+local-ci	<scratch>/src/agent-kit/plugins/bstack/skills/local-ci/SKILL.md
+maintain-formal-verification-skill	<scratch>/src/agent-kit/plugins/bstack/skills/maintain-formal-verification-skill/SKILL.md
+maintain-verification-skill	<scratch>/src/agent-kit/plugins/bstack/skills/maintain-verification-skill/SKILL.md
+no-comments	<scratch>/src/agent-kit/plugins/bstack/skills/no-comments/SKILL.md
+parallel-next	<scratch>/src/agent-kit/plugins/bstack/skills/parallel-next/SKILL.md
+qualitydirector	<scratch>/src/agent-kit/plugins/bstack/skills/qualitydirector/SKILL.md
+recall	<scratch>/src/agent-kit/plugins/bstack/skills/recall/SKILL.md
+reflect	<scratch>/src/agent-kit/plugins/bstack/skills/reflect/SKILL.md
+root-cause	<scratch>/src/agent-kit/plugins/bstack/skills/root-cause/SKILL.md
+scaffold-product	<scratch>/src/agent-kit/plugins/bstack/skills/scaffold-product/SKILL.md
+show-me-your-work	<scratch>/src/agent-kit/plugins/bstack/skills/show-me-your-work/SKILL.md
+state-machines	<scratch>/src/agent-kit/plugins/bstack/skills/state-machines/SKILL.md
+swarm	<scratch>/src/agent-kit/plugins/bstack/skills/swarm/SKILL.md
+teach	<scratch>/src/agent-kit/plugins/bstack/skills/teach/SKILL.md
+technical-writing	<scratch>/src/agent-kit/plugins/bstack/skills/technical-writing/SKILL.md
+unslop	<scratch>/src/agent-kit/plugins/bstack/skills/unslop/SKILL.md
+verify-work	<scratch>/src/agent-kit/plugins/bstack/skills/verify-work/SKILL.md
+waiting-on-me	<scratch>/src/agent-kit/plugins/bstack/skills/waiting-on-me/SKILL.md
+why	<scratch>/src/agent-kit/plugins/bstack/skills/why/SKILL.md
+cfo-books	<scratch>/src/agent-kit/plugins/cfo/skills/cfo-books/SKILL.md
+cfo-brief	<scratch>/src/agent-kit/plugins/cfo/skills/cfo-brief/SKILL.md
+estimate-run	<scratch>/src/agent-kit/plugins/cfo/skills/estimate-run/SKILL.md
+spend-snapshot	<scratch>/src/agent-kit/plugins/cfo/skills/spend-snapshot/SKILL.md
+explainer-video	<scratch>/src/agent-kit/plugins/video/skills/explainer-video/SKILL.md
+```
+
+MCP servers
+
+```text
+context7	connected
+<another server from the user's own config>	connected
+<another server from the user's own config>	connected
+<another server from the user's own config>	not connected: authentication required
+```
+
+Context7 result: `Tool rejected: User rejected MCP: context7-resolve-library-id`
+
+SKILLS=<count, redacted: includes the user's own skills>
+exit=0
+cursor clone skills == expected (44)
