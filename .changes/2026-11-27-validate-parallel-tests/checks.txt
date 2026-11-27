@@ -1,0 +1,6 @@
+make check: pass
+make validate: pass (0 errors, 0 warnings)
+make versions BASE=origin/main: pass
+python -m unittest tests.test_quality: pass (173 tests)
+WorkersTest against three broken recorders (claims ignored, --workers ignored, "no tests ran" kept): each fails
+make record RECORD_WORKERS=4, five runs in a row: each exit 0, complete, 1504 rows, 1504 unique ids (1538 after rebasing on main), 0 fail or error
