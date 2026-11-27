@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "goal": "Make agent-kit's validate check finish sooner. Its runs don't queue (they start within seconds on a hosted runner); about 90% of each run is one serial unit-test step.",
+  "changed": [
+    "quality.py record --workers N runs the suite in N children; each claims the next free test through an O_EXCL file in a shared temporary folder, and the parent merges the rows, the completeness and the exit status.",
+    "WorkersTest in tests/test_quality.py: once-each recording, real concurrency, more children than tests, a child cut short, bad usage.",
+    "make record takes RECORD_WORKERS; validate.yml passes $(nproc).",
+    "bstack 0.59.0 in kit.yaml and changes.yaml, the qualitydirector SKILL.md, and the generated files."
+  ],
+  "claims": [
+    {
+      "claim": "With --workers the recorder records every test exactly once, with the same outcomes as one child, and keeps the completeness and exit rules.",
+      "verdict": "VERIFIED",
+      "check": "WorkersTest passes and fails on three broken recorders; five full parallel runs of this suite recorded each test id once with no failures.",
+      "commit": "803178131abb",
+      "record": ".changes/2026-11-27-validate-parallel-tests/checks.txt",
+      "remaining": ""
+    },
+    {
+      "claim": "One worker (the default) behaves as before.",
+      "verdict": "VERIFIED",
+      "check": "tests.test_quality passes, including ParityTest and InterpreterFlagsTest.",
+      "commit": "803178131abb",
+      "record": ".changes/2026-11-27-validate-parallel-tests/checks.txt",
+      "remaining": ""
+    },
+    {
+      "claim": "The validate unit-test step is faster on the hosted runner.",
+      "verdict": "UNCHECKED",
+      "check": "Needs this PR's validate run; baseline is the step's median of about 167 s over recent runs.",
+      "commit": "362e17e19527",
+      "record": "",
+      "remaining": "Read the step time on this PR's validate run and on the next few pushes to main."
+    }
+  ],
+  "next": [
+    {
+      "item": "Trim the slowest tests: test_weekly_claude_code.WeeklyJob, test_quality.ParityTest and test_quality.InterpreterFlagsTest.",
+      "source": "inferred from the CI test records",
+      "why_now": "With tests spread over every core, the longest single tests set the floor of the step.",
+      "impact": "Each agent-kit PR's validate check finishes sooner again, and keeps doing so as the suite grows."
+    }
+  ],
+  "release": {
+    "note": "bstack 0.59.0: quality.py record --workers N runs a unittest suite in N children that share the tests as they go, and agent-kit's validate check records its tests with one worker per core."
+  }
+}

@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.59.0",
+      "date": "2026-11-27",
+      "plugin": "bstack",
+      "version": "0.59.0",
+      "changes": [
+        "`quality.py record --workers N` runs a unittest suite in N children at once. Each child takes the next test no other child has taken, so the run ends when the work does, not when the slowest share does. The record file has the same form as with one child, and agent-kit's own CI now records its tests with one worker per core."
+      ],
+      "try": "Run `quality.py record tests --out run.jsonl --repo demo --workers 4` on a suite and compare its wall time with `--workers 1`."
+    },
+    {
       "id": "bstack@0.58.0",
       "date": "2026-11-27",
       "plugin": "bstack",
