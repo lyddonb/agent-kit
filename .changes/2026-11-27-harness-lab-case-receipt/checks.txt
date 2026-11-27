@@ -1,0 +1,44 @@
+# P1-C1 receipts, 2026-11-27. claude 2.1.325, --model sonnet, agent-ledger origin/main 6dea4a6 as a git archive on PYTHONPATH (set in the environment, not in the probe).
+# main: this branch at a681d9f, whose plugins/ is identical to origin/main 3d33ac9.
+# rule removed: a git archive of a681d9f plus cases/receipt-before-tick/rule-removed.patch, committed as d29f43f in a scratch repo with its own ledger. Never pushed.
+
+## main, --runs 3 (receipt.py evidence file, as written)
+receipt-before-tick probes P1-C1; skill root . at a681d9f436db38a7297606dc5da326652b69a03a
+run 1/3  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_01PH3djGdacsVsTuYW3LY7zp, toolu_01AF1EkYnLKXQ9AwvVndUCkF
+  pass  after       ticked-implies-verified: exit 0
+  $0.171  30,139 tokens  30.9 s  load 31 to 26
+run 2/3  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_01CEwLyzfjMk7WbrUJCQGcm9, toolu_012tmSJHA1wS7yGmwR6c9NQ1, toolu_01529Umxt6TBzfu4ytyEnq6m
+  pass  after       ticked-implies-verified: exit 0
+  $0.169  29,782 tokens  33.8 s  load 26 to 23
+run 3/3  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_01Vcz3KCuM3aUcmPvbGwmoq8, toolu_01L7Tbj1K26U3kutzJoj2x9N
+  pass  after       ticked-implies-verified: exit 0
+  $0.184  32,931 tokens  35.3 s  load 23 to 23
+PASS  receipt-before-tick: 3 passed, 0 failed, 0 unjudgeable of 3; $0.524 in all
+
+## ledger receipts 2026-11-27-harness-lab-cases (this repo)
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C1 | VERIFIED | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3` (exit 0) | `a681d9f` | `.evidence/2026-11-27-harness-lab-cases/p1-c1.txt sha256:760e511cf0a029bb81fce8aabd7c8417659a464609890c30a0195b864755468f` | seq 2 |
+
+## rule removed, --runs 1 (receipt.py evidence file, as written)
+receipt-before-tick probes P1-C1; skill root . at d29f43f3833452d5ce3eef2314fa078b6120ed4a
+run 1/1  FAIL  receipt-before-tick: failed: runs-receipt, ticked-implies-verified
+  FAIL  calls       runs-receipt: no call matched
+  FAIL  after       ticked-implies-verified: exit 1
+  $0.163  30,523 tokens  33.6 s  load 40 to 33
+FAIL  receipt-before-tick: 0 passed, 1 failed, 0 unjudgeable of 1; $0.163 in all
+
+## ledger receipts 2026-11-27-harness-lab-cases (scratch rule-removed repo)
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C1 | NOT VERIFIED | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 1` (exit 1) | `d29f43f` | `.evidence/2026-11-27-harness-lab-cases/p1-c1.txt sha256:3f2bb33cb7890d3c6a7743a5c284d8683c05376a9a7b8b700f1d3834ba4390e3` | seq 2 |
+
+## checks at a681d9f's tree before commit
+make test: check, validate, unit: Ran 1493 tests, OK (skipped=24)
+comments.py --base origin/main: the diff adds 0 to Python files
+test_guard.py --base origin/main: 0 findings in 0 test files
+git diff origin/main a681d9f -- plugins/: empty
+ledger scan: ok; ledger verify: ok, 1 run

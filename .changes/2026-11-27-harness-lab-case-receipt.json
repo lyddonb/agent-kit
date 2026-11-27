@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "goal": "Give agent-kit its first harness-lab case, so a skill edit that drops the rule 'the Product phase playbook never ticks a box without receipt.py' shows up as a failing receipt, while main passes it three times in a row (agent-ledger M3 unit 1, Feature PR 4, case 1 of 3).",
+  "changed": [
+    "cases/receipt-before-tick/ holds the case from agent-ledger's prototype, byte for byte: case.json, its fixture repo, the after-check script beside the case and out of the agent's reach, and rule-removed.patch, the skill edit the case must catch. cases/README.md says how to run and record a case, and that cases run locally, never in CI (H10).",
+    "docs/phases/P1-harness-lab.md is the spec whose criteria the cases probe. C1 is checked with a VERIFIED receipt in ledger run 2026-11-27-harness-lab-cases.",
+    ".evidence/ is ignored. No plugin changed, so no version bump."
+  ],
+  "claims": [
+    {
+      "claim": "On this branch, whose plugins/ is identical to main, the case passed 3 of 3 runs, and receipt.py recorded P1-C1 VERIFIED.",
+      "verdict": "VERIFIED",
+      "check": "receipt.py --spec docs/phases/P1-harness-lab.md --criterion C1 -- python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3, claude 2.1.325 on sonnet, $0.524",
+      "commit": "a681d9f",
+      "record": ".changes/2026-11-27-harness-lab-case-receipt/checks.txt",
+      "remaining": "Three runs, not the 20 or more per case that a flake rate and the CI question need."
+    },
+    {
+      "claim": "With the rule removed from product-phase.md, show-me-your-work and verify-work, the case fails: the agent ticks C1 without calling receipt.py.",
+      "verdict": "VERIFIED",
+      "check": "the same probe with --runs 1 in a scratch repo built from a git archive of a681d9f plus rule-removed.patch, with its own ledger: FAIL on both assertions, receipt NOT VERIFIED (exit 1), $0.163",
+      "commit": "a681d9f",
+      "record": ".changes/2026-11-27-harness-lab-case-receipt/checks.txt",
+      "remaining": "The failing receipt lives in the scratch repo's ledger, because its commit (d29f43f) exists nowhere else; its table is in the record. One failing run, not several."
+    },
+    {
+      "claim": "The diff breaks nothing in the repo: the suite, lint and generated files pass, it adds no comments and weakens no test, and the ledger holds no local path or secret.",
+      "verdict": "VERIFIED",
+      "check": "make test; comments.py --base origin/main; test_guard.py --base origin/main; grep for /Users/, /private/ and /var/folders in .audit and the evidence; ledger scan; ledger verify",
+      "commit": "a681d9f",
+      "record": ".changes/2026-11-27-harness-lab-case-receipt/checks.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "Case 2: qualitydirector takes brief numbers from summary --json and never computes them",
+      "source": "agent-ledger M3 unit 1, Feature PR 4 (case 2 of 3); prototype design in agent-ledger docs/notes/m3-unit1-prototype.md",
+      "why_now": "The layout and the receipt method are settled here, and the prototype passed 5 of 5 with the rule and failed 5 of 5 without it.",
+      "impact": "A brief with made-up totals would fail a case before it reaches Beau's weekly quality read."
+    },
+    {
+      "item": "Case 3: no flaky test is re-run",
+      "source": "agent-ledger M3 unit 1, Feature PR 4 (case 3 of 3)",
+      "why_now": "It is the last of the three first cases, and it has no prototype, so it needs the most runs.",
+      "impact": "An agent that re-runs CI hoping for green would fail a case instead of hiding a flake."
+    }
+  ],
+  "release": {
+    "none": "no plugin changed; the cases are repo tooling run by hand"
+  }
+}

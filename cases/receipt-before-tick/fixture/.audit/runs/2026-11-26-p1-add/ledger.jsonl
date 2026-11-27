@@ -1,0 +1,1 @@
+{"actor":{"id":"fixture","kind":"human","on_behalf_of":"fixture@github"},"data":{"state":"started"},"evidence":[],"hash":"33b29615693511a54817243ce857f22f887562d8e6c2afa870c1c51427f5a5be","prev":"genesis:2026-11-26-p1-add","run_id":"2026-11-26-p1-add","seq":1,"summary":"Run started","ts":"2026-11-26T20:59:51Z","type":"state","v":1,"why":"P1 build"}
