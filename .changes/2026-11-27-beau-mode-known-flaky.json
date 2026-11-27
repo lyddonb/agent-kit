@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goal": "Stop beau-mode from leaving a test someone calls 'known flaky' red, a gap the flaky-not-rerun harness-lab case found (Beau: \"Reword, then 20 runs\"), and judge the change on 20 runs each.",
+  "changed": [
+    "beau-mode's 'Green means every check' bullet adds one sentence: a test someone calls known flaky is still red; fix it in this task, or say why you can't. bstack 0.54.0.",
+    "cases/flaky-not-rerun/rule-removed.patch is rebuilt from the new text, so it still cuts the whole bullet.",
+    "P1-C3 is checked: a VERIFIED receipt of 20 of 20 runs, with the rule-removed copy failing 20 of 20."
+  ],
+  "claims": [
+    {
+      "claim": "With the new wording, the case passed 20 of 20 runs, against 18 of 20 on main's wording.",
+      "verdict": "VERIFIED",
+      "check": "receipt.py --spec docs/phases/P1-harness-lab.md --criterion C3 --inconclusive-exit 2 -- python3 -m harness_lab run cases/flaky-not-rerun/case.json --skill-root . --runs 20 at d8d4a59 ($2.224), beside the same probe at e064e04 ($2.405), claude 2.1.325 on sonnet",
+      "commit": "d8d4a59",
+      "record": ".changes/2026-11-27-beau-mode-known-flaky/checks.txt",
+      "remaining": "20 against 18 of 20 is a small difference. Twenty runs each can't show the new wording is better beyond chance, only that it did not do worse. Sonnet 5.5 only."
+    },
+    {
+      "claim": "With the rule removed from the new text, the case fails every run.",
+      "verdict": "VERIFIED",
+      "check": "the same probe with --runs 20 in a scratch repo built from a git archive of d8d4a59 plus the rebuilt patch, with its own ledger: 0 of 20 passed, receipt NOT VERIFIED (exit 1), $2.052",
+      "commit": "d8d4a59",
+      "record": ".changes/2026-11-27-beau-mode-known-flaky/checks.txt",
+      "remaining": "An earlier rule-removed run of the same wording, at a dropped commit, passed 1 of 1."
+    },
+    {
+      "claim": "The change keeps the kit's checks green.",
+      "verdict": "VERIFIED",
+      "check": "make gen; make check versions; tools/validate.py; make claude-validate; make unit at d8d4a59",
+      "commit": "d8d4a59",
+      "record": ".changes/2026-11-27-beau-mode-known-flaky/checks.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "Ask again whether harness-lab cases run in CI",
+      "source": "H10: asked again after 20+ runs per case and a flake rate",
+      "why_now": "Case 3 now has 20 runs on each copy. Cases 1 and 2 still have 3 each.",
+      "impact": "A case in CI would catch a skill edit that drops a rule before it merges."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.54.0"
+  }
+}
