@@ -3,6 +3,12 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.60.0 (2026-11-27)
+
+- beau-mode treats code that runs commands it reads from a repo or a config (hooks, gates, check runners) as running untrusted input: it checks whose repo it is before running anything, in every mode, and answers a security warning before moving on. When a permission check denies an action, it asks instead of reaching the same effect another way.
+- Large work item: the human's approval actor is spelled out, since the ledger records an approval only once. A unit that adds a blocking gate, hook or check replays its rule over real history against a fire-rate ceiling set in the charter. Unit tests run per change, with the full suite once per pushed state.
+- Opening a PR: when main moves under an open PR, merge main in, never rebase and force-push; pick a shared version number last; and read `gh pr view --json mergeable,mergeStateStatus,isDraft` before calling a PR ready.
+
 ## bstack 0.59.0 (2026-11-27)
 
 - `quality.py record --workers N` runs a unittest suite in N children at once. Each child takes the next test no other child has taken, so the run ends when the work does, not when the slowest share does. The record file has the same form as with one child, and agent-kit's own CI now records its tests with one worker per core.

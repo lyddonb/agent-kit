@@ -45,6 +45,18 @@ Promote one to [ROADMAP.md](ROADMAP.md) when there is a concrete need.
   used for a while.
 - **Mode for reviewing other people's PRs.** A playbook that reviews a teammate's PR the way
   you would, using `interrogate` plus your team's conventions from the KB.
+- **verify-kit drives the R32 hooks** (from the R32 run's reflect, 2026-11-27). The commit gate
+  and the Stop hook aren't in verify-kit's feature map, so the run wrote its own headless probes.
+  Those probes found two faults the unit tests missed: an origin URL rewritten by git's
+  `insteadOf` (`git@github.com:/owner`) and a probe whose own tool allowlist refused the
+  commit. Add both features through maintain-verification-skill, with those two cases.
+- **waiting.py shows a PR's merge state** (same source). Beau found two PR conflicts before the
+  agent did. Read `mergeable,mergeStateStatus` from `gh pr list` and list a conflicted PR as
+  waiting on its author, not on review.
+- **Plugin versions picked at merge, not per branch** (same source). Parallel sessions bumped
+  bstack to the same number twice in one day, each time costing a renumber and a full test
+  run. Either a check that fails when a PR's `kit.yaml` version isn't above main's, or a
+  merge-time step that renumbers the bump and its `changes.yaml` entry to main plus one.
 
 ## From "How to effectively debug with agents when you no longer read or understand the code" (2026-11-16)
 Cindy Sridharan's framework is built as the `root-cause` skill. Tuning it and default data

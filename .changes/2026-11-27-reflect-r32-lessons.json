@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "goal": "Turn what the R32 run (2026-11-27-r32-hook-gates) got wrong into beau-mode rules, so the next agent doesn't repeat it: a trust check before running repo-supplied commands, no working around a denied action, the exact approval actor, a replay before a blocking gate ships, and merging main instead of force-pushing.",
+  "changed": [
+    "beau-mode's Non-negotiables gain one rule: code that runs commands or paths it reads from a repo or a config is running untrusted input, so it checks whose repo it is before running anything, in every mode, and a security warning gets fixed or answered before moving on.",
+    "beau-mode's Always pause line adds: when a permission check or a classifier denies an action, don't reach the same effect another way; say what was denied and ask.",
+    "Large work item: step 3 asks a unit that adds a blocking gate, hook or check for a replay of its rule over real history against a fire-rate ceiling set before the replay; step 6 spells out the human approval actor and says an approval is recorded once; step 7 sets the test cadence (changed files while iterating, the full suite once per pushed state).",
+    "Opening a PR: step 9 says to merge origin/main into a PR when main moves, never rebase and force-push, and to pick a shared version number last; step 10 names gh pr view --json mergeable,mergeStateStatus,isDraft as the state to read before a ready claim.",
+    "IDEAS.md gains three mechanisms from the same reflect pass: verify-kit features for the two R32 hooks, merge state in waiting.py, and plugin versions picked at merge. bstack 0.60.0."
+  ],
+  "claims": [
+    {
+      "claim": "The generated files are current, the plugin manifests validate, the bstack bump is in step, and the whole suite passes with the edits.",
+      "verdict": "VERIFIED",
+      "check": "make gen validate claude-validate; make check versions; make test",
+      "commit": "cdef5bf",
+      "record": ".changes/2026-11-27-reflect-r32-lessons/make-test.txt",
+      "remaining": "No eval checks that an agent now follows the new rules; R13 owns behavioral evals for bstack."
+    }
+  ],
+  "next": [
+    {
+      "item": "verify-kit drives the commit gate and the Stop hook",
+      "source": "IDEAS.md, from this reflect pass",
+      "why_now": "The R32 hooks run in every Claude Code session from bstack 0.58.0 on, and only hand-run probes prove them.",
+      "impact": "The next change to either hook gets checked in a real session by a command, not by a probe someone rewrites."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.60.0"
+  }
+}
