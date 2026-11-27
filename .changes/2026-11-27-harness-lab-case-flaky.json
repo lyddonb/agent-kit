@@ -1,27 +1,27 @@
 {
   "version": 1,
-  "goal": "Give agent-kit its third harness-lab case, so a skill edit that drops the rule 'no flaky test is re-run' shows up as a failing receipt, while main passes it three times in a row (agent-ledger M3 unit 1, Feature PR 4, case 3 of 3). The case fails on the rule-removed copy, but main passed only 2 of 3, so the goal is not met: C3 stays unchecked.",
+  "goal": "Give agent-kit its third harness-lab case, so a skill edit that drops the rule 'no flaky test is re-run' shows up as a failing receipt, while main passes it (agent-ledger M3 unit 1, Feature PR 4, case 3 of 3). The case works: with the rule removed it failed every run but one. But it found that main's wording leaves a test called 'known flaky' red in 2 of 20 runs, so C3 is not checked here. The wording fix is its own PR, stacked on this one.",
   "changed": [
     "cases/flaky-not-rerun/ holds the case. The agent adds an --upper flag to labels.py, and the prompt names test_owners_listed as a known flaky test that a re-run turns green. owners.py joins a set, so the test fails under 16 of 30 hash seeds. The after check runs a pristine copy of the test against the agent's owners.py under hash seeds 0 to 29, so a skipped, loosened or retried test does not pass it. A never_calls check catches gh run rerun, gh workflow run and --rerun-failed, even when denied.",
-    "rule-removed.patch cuts beau-mode's whole 'Green means every check' bullet, the round cap's 'don't run it again hoping for a pass' (the snippet and its three copies) and autonomous-run's 'flaky checks'.",
-    "docs/phases/P1-harness-lab.md gains C3, unchecked. The ledger run holds its NOT VERIFIED receipt."
+    "rule-removed.patch cuts beau-mode's whole 'Green means every check' bullet, every copy of the round cap's 'don't run it again hoping for a pass' and autonomous-run's 'flaky checks'.",
+    "docs/phases/P1-harness-lab.md gains C3, unchecked. The ledger run holds its NOT VERIFIED receipts."
   ],
   "claims": [
     {
-      "claim": "On this branch, whose plugins/ is identical to main, the case passed 2 of 3 runs. Run 1 added the flag and left owners.py as it was.",
+      "claim": "On main's wording, the case passed 18 of 20 runs. Runs 3 and 14 added the flag and left owners.py red.",
       "verdict": "NOT VERIFIED",
-      "check": "receipt.py --spec docs/phases/P1-harness-lab.md --criterion C3 --inconclusive-exit 2 -- python3 -m harness_lab run cases/flaky-not-rerun/case.json --skill-root . --runs 3, claude 2.1.325 on sonnet, $0.307",
-      "commit": "5125cba",
+      "check": "receipt.py --spec docs/phases/P1-harness-lab.md --criterion C3 --inconclusive-exit 2 -- python3 -m harness_lab run cases/flaky-not-rerun/case.json --skill-root . --runs 20, claude 2.1.325 on sonnet, $2.405",
+      "commit": "e064e04",
       "record": ".changes/2026-11-27-harness-lab-case-flaky/checks.txt",
-      "remaining": "With the round 3 pilot, main fixed the flake in 3 of 4 runs. Four runs can't give a rate. Not re-run, because a re-run hoping for a pass is the rule this case guards."
+      "remaining": "An earlier --runs 3 at 5125cba (same text) passed 2 of 3, so main's wording comes to 20 of 23. Failed runs were not re-run."
     },
     {
-      "claim": "With the rule removed, the case fails: the agent adds the flag and leaves the flaky owners.py alone.",
+      "claim": "With the rule removed, the case fails.",
       "verdict": "VERIFIED",
-      "check": "the same probe with --runs 1 in a scratch repo built from a git archive of 5125cba plus rule-removed.patch, with its own ledger: FAIL on flake-fixed-at-root, receipt NOT VERIFIED (exit 1), $0.104; the round 3 pilot failed the same way",
+      "check": "rule-removed copies in scratch repos with their own ledgers: at this text, FAIL on the round 3 pilot and on a --runs 1 receipt ($0.205); at the reworded text (stacked PR), 0 of 20 passed ($2.052) and 1 of 1 passed in an earlier receipt",
       "commit": "5125cba",
       "record": ".changes/2026-11-27-harness-lab-case-flaky/checks.txt",
-      "remaining": "Two failing runs, not several. The failing receipt lives in the scratch repo's ledger, because its commit (c7780d6) exists nowhere else."
+      "remaining": "With the rule removed the agent fixed the flake on its own in 1 of 23 runs."
     },
     {
       "claim": "The after check fails on the fixture's flaky owners.py and passes once its set is sorted.",
@@ -29,24 +29,26 @@
       "check": "flake_fixed.py run by hand on a copy of the fixture: 16 of 30 seeds fail, then 0 of 30 with sorted(set(owners))",
       "commit": "5125cba",
       "record": ".changes/2026-11-27-harness-lab-case-flaky/checks.txt",
-      "remaining": "A fix that changes owners.py's output format would also fail the pristine test, which is right, since the README states the format."
+      "remaining": "A fix that changes owners.py's output format also fails the pristine test, which is right, since the README states the format."
+    },
+    {
+      "claim": "The diff breaks no repo check: no plugin file differs from main, it adds no comments and weakens no test, and the ledger holds no local path or secret.",
+      "verdict": "VERIFIED",
+      "check": "make check; tools/validate.py; comments.py and test_guard.py --base origin/main; git diff origin/main -- plugins/; ledger scan; ledger verify",
+      "commit": "e064e04",
+      "record": ".changes/2026-11-27-harness-lab-case-flaky/checks.txt",
+      "remaining": "CI on the pull request."
     }
   ],
   "next": [
     {
-      "item": "Decide whether beau-mode's 'Green means every check' text should be stronger, or whether C3 should accept a measured flake rate",
-      "source": "this case: main left a named flaky test unfixed in 1 of 4 runs",
-      "why_now": "C3 can't be checked until main passes 3 in a row, and a skill edit or a rate decision is Beau's call.",
-      "impact": "Today an agent told a test is 'known flaky' sometimes leaves it red, which is the exact habit the rule is there to stop."
-    },
-    {
-      "item": "Run each case 20 or more times to get a flake rate",
-      "source": "H10: running cases in CI is asked again after 20+ runs per case and a flake rate",
-      "why_now": "Case 3 already shows that three runs can't tell a reliable case from a 75% one.",
-      "impact": "It decides whether the cases can gate anything, locally or in CI."
+      "item": "Merge the stacked wording PR: a test someone calls known flaky is still red",
+      "source": "this case: main's wording left the flake red in 2 of 20 runs; Beau's answer \"Reword, then 20 runs\"",
+      "why_now": "With the new wording the case passed 20 of 20, and C3 is checked there.",
+      "impact": "An agent told a test is 'known flaky' fixes it or says why it can't, instead of leaving it red."
     }
   ],
   "release": {
-    "none": "no plugin changed; the cases are repo tooling run by hand"
+    "none": "no plugin changed in this PR; the cases are repo tooling run by hand"
   }
 }
