@@ -347,7 +347,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's three units are built. Next: R43 (its trigger, R11, has merged). R32 waits on R6 and on Beau (H14). R34 waits on R23.
+Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's three units are built. Next: R43 (its trigger, R11, has merged). R32 waits on R6 (Beau allowed its hooks in H14). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -461,7 +461,7 @@ commit whose session ran neither `verify-work` nor a review. After two blocks in
 session it lets the next commit through and records why. That anti-stall rule never applies
 to a policy gate (`deploy`, `secrets`, `spend` and the rest): those wait for a person.
 **Depends on:** R6 (the neutral hook definition; this is its concrete case), R31, and H14
-(Beau allows hooks in agentfiles). Spans agent-kit and agentfiles: charter first.
+(done 2026-11-27: Beau allowed the Stop hook and commit gate). Spans agent-kit and agentfiles: charter first.
 **Playbook:** Large work item.
 **Done when:** in observe mode a session that commits without verifying logs one
 would-have-blocked line and the commit succeeds; in enforce mode the same session is blocked
