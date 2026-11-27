@@ -11,7 +11,7 @@
   plugin: bstack
   version: 0.52.0
   changes:
-    - "New commit gate (Claude Code hook). When a session runs `git commit` without having run verify-work, a `verify-<app>` skill, interrogate or a review since its last commit, the gate acts on the mode `policy.checks.commit-gate` sets in `~/.agents/policy.yaml` or the repo's `.agents/policy.yaml`. In `observe`, the default, it lets the commit through and appends a would-block lesson to this machine's weekly flags run (`~/.agents/flags.yaml`). In `enforce` it denies the commit with the reason. After two denials since the last commit it lets the next one through and records why. In `off` it does nothing. Any error inside the hook lets the commit through."
+    - "New commit gate (Claude Code hook). When a session runs `git commit` without having run verify-work, a `verify-<app>` skill, interrogate or a review since its last commit, the gate acts on the mode `policy.checks.commit-gate` sets in `~/.agents/policy.yaml` or the repo's `.agents/policy.yaml`. In `observe`, the default, it lets the commit through and appends a would-block lesson to this machine's weekly flags run (`~/.agents/flags.yaml`). In `enforce` it denies the commit with the reason. After two denials since the last commit it lets the next one through and records why. In `off` it does nothing. Any error inside the hook lets the commit through. A verification counts once it finishes without error. Quoted text and heredoc bodies are not read as commits. A repo's own `.agents/policy.yaml` counts only when its GitHub `origin` is yours."
   try: "Set `checks: {commit-gate: enforce}` under `policy:` in a profile, run agentfiles sync, and commit without verifying."
 
 - date: 2026-11-26
