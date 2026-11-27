@@ -6,7 +6,7 @@
     "beau-mode's Always pause line adds: when a permission check or a classifier denies an action, don't reach the same effect another way; say what was denied and ask.",
     "Large work item: step 3 asks a unit that adds a blocking gate, hook or check for a replay of its rule over real history against a fire-rate ceiling set before the replay; step 6 spells out the human approval actor and says an approval is recorded once; step 7 sets the test cadence (changed files while iterating, the full suite once per pushed state).",
     "Opening a PR: step 9 says to merge origin/main into a PR when main moves, never rebase and force-push, and to pick a shared version number last; step 10 names gh pr view --json mergeable,mergeStateStatus,isDraft as the state to read before a ready claim.",
-    "IDEAS.md gains three mechanisms from the same reflect pass: verify-kit features for the two R32 hooks, merge state in waiting.py, and plugin versions picked at merge. bstack 0.59.0."
+    "IDEAS.md gains three mechanisms from the same reflect pass: verify-kit features for the two R32 hooks, merge state in waiting.py, and plugin versions picked at merge. bstack 0.60.0."
   ],
   "claims": [
     {
@@ -27,6 +27,6 @@
     }
   ],
   "release": {
-    "see": "changes.yaml bstack@0.59.0"
+    "see": "changes.yaml bstack@0.60.0"
   }
 }

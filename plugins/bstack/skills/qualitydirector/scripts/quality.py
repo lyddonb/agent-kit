@@ -4,7 +4,7 @@ book them into the quality books, check the books, and summarize a week. `audit-
 workflow files, not the books.
 
 Usage:
-    uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA]
+    uv run --python 3.12 quality.py record TESTS_DIR --out FILE --repo NAME [--sha SHA] [--workers N]
     uv run python quality.py record-junit --junit FILE --out OUT --repo NAME [--sha SHA] -- COMMAND [ARG ...]
     uv run --python 3.12 quality.py fetch BOOKS_DIR OUT_DIR [--since YYYY-MM-DD] [--repo SLUG]
     uv run --python 3.12 quality.py ingest BOOKS_DIR FETCH_DIR [--dry-run] [--json] [--only jobs|visibility]
@@ -50,6 +50,19 @@ trace in those and is not carried (PYTHONUNBUFFERED is, through the environment)
 `--sha SHA` (40 lowercase hex, exit 2 otherwise) sets the header's sha and wins over GITHUB_SHA
 and git: on pull_request events GITHUB_SHA is a temporary merge commit, so a workflow passes
 `--sha "${{ github.event.pull_request.head.sha || github.sha }}"`.
+
+`--workers N` (1 to 64, exit 2 otherwise; default 1, the single child above) starts N children at
+once. Each discovers the whole suite and walks it in order, and runs a test only once it has claimed
+it: a file named for the test's place, created in a temporary folder the children share, which only
+one child can create. A child that finishes a slow test simply claims the next free one, so the
+children stay busy to the end. A class's tests can land in several children, so its setUpClass (and a
+module's setUpModule) runs once in each child that runs one of them; a fixture that fails gives an
+`error` row in each, and the books count one test id once. Each child writes its own pipe and the
+parent keeps its rows apart, then lists them in child order. The run is complete only when every
+child says so, and the exit status is the first nonzero one in child order; a child that claimed no
+test exits 0. `wall_ms` is the whole run, so the rows' milliseconds can add up to more. The children
+share the terminal, so their output interleaves, and tests that touch the same path, port or setting
+outside their own temporary directory can collide.
 
 The books are four CSV files under BOOKS_DIR: books/runs.csv (one row per recorded CI run, append
 only), books/failures.csv (one row per failing test in a run, append only), books/tests-weekly.csv
@@ -274,6 +287,8 @@ import signal
 import stat
 import subprocess
 import tarfile
+import tempfile
+import threading
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -339,13 +354,14 @@ DEFAULT_KIND = "unit"
 YEAR_MIN, YEAR_MAX = 2020, 2099  # the years a stamp or a week in the books may have
 MAX_CELL = 1000  # characters in one cell, a test id included; the csv module's own field limit (131072) is never reached
 FAILING = ("fail", "error")  # the outcomes failures.csv holds
+MAX_WORKERS = 64  # children `record --workers` may start
 SUITE_MEDIAN_THRESHOLD_MS = 300_000  # a suite whose median wall time is above this is over threshold
 
 # ---------------------------------------------------------------------------
 # record: the child
 # ---------------------------------------------------------------------------
 
-# The child is `python <flags> -c CHILD FD TESTS_DIR ARGV0 [FLAG...]`. It must look to a test
+# The child is `python <flags> -c CHILD FD TESTS_DIR CLAIMS ARGV0 [FLAG...]`. It must look to a test
 # like `python -m unittest discover -s TESTS_DIR`, so it imports only what that imports
 # (runpy comes with `-m`) and encodes events by hand: no json, no codec lookup. `os.write`,
 # the clock and the fd are bound once, so a test that stubs them cannot redirect the stream.
@@ -357,12 +373,17 @@ SUITE_MEDIAN_THRESHOLD_MS = 300_000  # a suite whose median wall time is above t
 #   C               unittest's run finished normally (it is the last thing the runner does, so
 #                   SystemExit, KeyboardInterrupt, os._exit or a signal never get to send it)
 # Only the process that started the run writes: a forked copy of it stays silent.
+# CLAIMS is empty for one child. With several, it is a folder they share: each child walks the whole
+# discovered suite and runs a test only after creating the file named for its place in that order,
+# which only one child can do. A child that claimed nothing exits 0 after C, not with "no tests ran".
 CHILD = r'''
-def _quality_child(fd, tests_dir, argv0, flags):
+def _quality_child(fd, tests_dir, claims, argv0, flags):
     import os, sys, time
     import runpy
     import unittest
     write, clock, getpid = os.write, time.perf_counter, os.getpid
+    open_fd, close_fd, join = os.open, os.close, os.path.join
+    exclusive = os.O_CREAT | os.O_EXCL | os.O_WRONLY
     owner = getpid()
     os.set_inheritable(fd, False)
 
@@ -458,17 +479,45 @@ def _quality_child(fd, tests_dir, argv0, flags):
         def run(self, test):
             result = super().run(test)  # returns only after the last test and the module teardown
             emit("C")
+            if claims and not result.testsRun:
+                raise SystemExit(0)
             return result
+
+    def claim(place):
+        try:
+            close_fd(open_fd(join(claims, "%d" % place), exclusive))
+        except FileExistsError:
+            return False
+        return True
+
+    class Claimed(unittest.TestSuite):
+        _cleanup = False  # run() would drop tests by their place in this suite, not in the walk
+
+        def __iter__(self):
+            for place, case in enumerate(self._tests):
+                if claim(place):
+                    yield case
+
+    def cases(suite):
+        for test in suite:
+            if isinstance(test, unittest.TestSuite):
+                yield from cases(test)
+            else:
+                yield test
+
+    class Loader(unittest.TestLoader):
+        def discover(self, *args, **kwargs):
+            return Claimed(cases(super().discover(*args, **kwargs)))
 
     if not (sys.flags.isolated or getattr(sys.flags, "safe_path", False)):
         sys.path[0] = os.getcwd()
     sys.argv = [os.path.basename(sys.executable) + " -m unittest", "discover", "-s", tests_dir]
     sys.orig_argv = [argv0] + flags + ["-m", "unittest", "discover", "-s", tests_dir]
-    unittest.main(module=None, testRunner=Runner)
+    unittest.main(module=None, testRunner=Runner, testLoader=Loader() if claims else unittest.defaultTestLoader)
 
 
 import sys
-_quality_child(int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4:])
+_quality_child(int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
 '''
 
 
@@ -672,6 +721,12 @@ def _sha_arg(text: str) -> str:
     return text
 
 
+def _workers_arg(text: str) -> int:
+    if not (text.isdecimal() and text.isascii() and 1 <= int(text) <= MAX_WORKERS):
+        raise argparse.ArgumentTypeError(f"must be a whole number from 1 to {MAX_WORKERS}, got {text!r}")
+    return int(text)
+
+
 def _shell_code(returncode: int) -> int:
     """subprocess says -N for death by signal N; a shell says 128+N."""
     return returncode if returncode >= 0 else 128 - returncode
@@ -706,24 +761,26 @@ def _read_events(fd: int, proc: subprocess.Popen, tally: Tally) -> None:
             return
 
 
-def _start_child(tests_dir: str, flags: list[str], write_fd: int) -> subprocess.Popen:
+def _start_child(tests_dir: str, claims: str, flags: list[str], write_fd: int) -> subprocess.Popen:
     argv0 = getattr(sys, "orig_argv", [sys.executable])[0]
     return subprocess.Popen(
-        [sys.executable, *flags, "-c", CHILD, str(write_fd), tests_dir, argv0, *flags],
+        [sys.executable, *flags, "-c", CHILD, str(write_fd), tests_dir, claims, argv0, *flags],
         pass_fds=(write_fd,))
 
 
-def _run_child(tests_dir: str, tally: Tally) -> int:
-    """Run the suite in a child and return its exit status as a shell reports it."""
+def _run_children(tests_dir: str, tallies: list[Tally], claims: str) -> int:
+    """Run the suite in one child per tally, sharing its tests through the CLAIMS folder when there
+    are several, and return the first nonzero exit status (as a shell reports it) in child order, or 0."""
     flags = interpreter_flags()
-    read_fd, write_fd = os.pipe()
-    box: list[subprocess.Popen] = []
+    procs: list[subprocess.Popen] = []
+    read_fds: list[int] = []
 
     def relay(signum, frame):
-        # Ctrl-C reaches the child through the terminal's process group; SIGTERM and SIGHUP only
+        # Ctrl-C reaches the children through the terminal's process group; SIGTERM and SIGHUP only
         # reach this process, so pass them on and still write the file.
-        if signum != signal.SIGINT and box:
-            box[0].send_signal(signum)
+        if signum != signal.SIGINT:
+            for proc in procs:
+                proc.send_signal(signum)
 
     saved = {}
     try:
@@ -731,21 +788,34 @@ def _run_child(tests_dir: str, tally: Tally) -> int:
             if signal.getsignal(sig) == signal.SIG_IGN:
                 continue  # as for plain unittest: under nohup SIGHUP, after `cmd &` in a script SIGINT
             saved[sig] = signal.signal(sig, relay)
-        try:
-            box.append(_start_child(tests_dir, flags, write_fd))
-        except OSError as e:
-            print(f"quality.py: cannot start {sys.executable}: {e}", file=sys.stderr)
-            return 127
-        finally:
-            os.close(write_fd)
-        proc = box[0]
-        _read_events(read_fd, proc, tally)
-        return _shell_code(proc.wait())
+        for i in range(len(tallies)):
+            read_fd, write_fd = os.pipe()
+            read_fds.append(read_fd)
+            try:
+                procs.append(_start_child(tests_dir, claims, flags, write_fd))
+            except OSError as e:
+                print(f"quality.py: cannot start {sys.executable}: {e}", file=sys.stderr)
+                for proc in procs:
+                    proc.kill()
+                    proc.wait()
+                return 127
+            finally:
+                os.close(write_fd)
+        readers = [threading.Thread(target=_read_events, args=(fd, proc, tally))
+                   for fd, proc, tally in zip(read_fds, procs, tallies)]
+        for reader in readers:
+            reader.start()
+        for reader in readers:
+            reader.join()
+        codes = [_shell_code(proc.wait()) for proc in procs]
+        return next((code for code in codes if code), 0)
     finally:
         for sig, old in saved.items():
             signal.signal(sig, old)
-        os.close(read_fd)
-        tally.finish()
+        for fd in read_fds:
+            os.close(fd)
+        for tally in tallies:
+            tally.finish()
 
 
 def _write_record(out: str, label: str, header: dict, records: list[dict]) -> bool:
@@ -772,13 +842,17 @@ def cmd_record(args: argparse.Namespace) -> int:
     env = dict(os.environ)
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     sha = args.sha or env.get("GITHUB_SHA") or _git_head(os.getcwd())
-    tally = Tally()
+    tallies = [Tally() for _ in range(args.workers)]
     t0 = time.perf_counter()
-    child_code = _run_child(args.tests_dir, tally)
+    with contextlib.ExitStack() as stack:
+        claims = stack.enter_context(tempfile.TemporaryDirectory(prefix="quality-claims-")) if args.workers > 1 else ""
+        child_code = _run_children(args.tests_dir, tallies, claims)
     wall_ms = max(0, round((time.perf_counter() - t0) * 1000))
-    header = run_header(args.repo, tally.rows, started, wall_ms, child_code, tally.complete, sha, env)
-    code = exit_code(child_code, tally.rows, tally.complete)
-    wrote = _write_record(out, args.out, header, tally.rows)
+    rows = [row for tally in tallies for row in tally.rows]
+    complete = all(tally.complete for tally in tallies)
+    header = run_header(args.repo, rows, started, wall_ms, child_code, complete, sha, env)
+    code = exit_code(child_code, rows, complete)
+    wrote = _write_record(out, args.out, header, rows)
     return code if wrote or code else 1
 
 
@@ -6282,6 +6356,8 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--repo", required=True, metavar="NAME")
     record.add_argument("--sha", type=_sha_arg, metavar="SHA",
                         help="the commit the run tests, 40 lowercase hex (wins over GITHUB_SHA and git)")
+    record.add_argument("--workers", type=_workers_arg, default=1, metavar="N",
+                        help="run the suite in N children at once, each taking the next test no other child took (default 1)")
     record.set_defaults(func=cmd_record)
     junit = sub.add_parser("record-junit", help="run a command (pytest) and write per-test time and outcome from its JUnit XML file",
                            usage="quality.py record-junit --junit FILE --out OUT --repo NAME [--sha SHA] -- COMMAND [ARG ...]")

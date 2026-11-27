@@ -1980,5 +1980,65 @@ class LifecycleSummaryTest(unittest.TestCase):
             walk(repo["lifecycle"])
 
 
+
+class WorkersTest(RecordCase):
+    MIXED = case_source(
+        "def test_a(self):\n    pass\n"
+        "def test_b(self):\n    self.fail('no')\n"
+        "@unittest.skip('later')\ndef test_c(self):\n    pass\n"
+        "def test_d(self):\n    raise RuntimeError('boom')\n")
+
+    def workers(self, n: int, **kw) -> Recorded:
+        return self.run_record(args=["record", "tests", "--out", "out.jsonl", "--repo", "demo", "--workers", str(n)], **kw)
+
+    def test_every_test_is_recorded_once_as_with_one_child(self):
+        self.write("tests/test_one.py", self.MIXED)
+        self.write("tests/test_two.py", self.MIXED)
+        one = self.workers(1)
+        three = self.workers(3)
+        self.assertEqual(sorted(r["id"] for r in three.rows), sorted(r["id"] for r in one.rows), three.proc.stderr)
+        self.assertEqual(three.outcomes(), one.outcomes())
+        self.assertEqual((three.exit, three.header["exit_code"], three.header["complete"]), (1, 1, True), three.proc.stderr)
+        self.assertEqual({k: three.header[k] for k in ("tests", "failed", "skipped")}, {"tests": 8, "failed": 4, "skipped": 2})
+
+    def test_the_children_run_tests_at_the_same_time(self):
+        marker = self.work / "b-started"
+        self.write("tests/test_case.py", case_source(
+            "def test_a_waits_for_b(self):\n"
+            "    deadline = time.monotonic() + 30\n"
+            "    while not os.path.exists(MARKER) and time.monotonic() < deadline:\n"
+            "        time.sleep(0.01)\n"
+            "    self.assertTrue(os.path.exists(MARKER), 'test_b never ran beside test_a')\n"
+            "def test_b(self):\n"
+            "    open(MARKER, 'w').close()\n",
+            f"import os, time\nMARKER = {str(marker)!r}\n"))
+        rec = self.workers(2)
+        self.assertEqual(rec.outcomes(), {"test_case.T.test_a_waits_for_b": "pass", "test_case.T.test_b": "pass"}, rec.proc.stderr)
+        self.assertEqual(rec.exit, 0, rec.proc.stderr)
+
+    def test_more_children_than_tests_is_still_green(self):
+        self.write("tests/test_case.py", case_source("def test_x(self):\n    pass\n"))
+        rec = self.workers(4)
+        self.assertEqual(rec.outcomes(), {"test_case.T.test_x": "pass"}, rec.proc.stderr)
+        self.assertEqual((rec.exit, rec.header["exit_code"], rec.header["complete"]), (0, 0, True), rec.proc.stderr)
+
+    def test_a_child_cut_short_makes_the_run_incomplete(self):
+        self.write("tests/test_case.py", case_source(
+            "def test_a(self):\n    pass\n"
+            "def test_b(self):\n    os._exit(0)\n"
+            "def test_c(self):\n    pass\n", "import os\n"))
+        rec = self.workers(2)
+        self.assertEqual(rec.outcomes()["test_case.T.test_b"], "error", rec.proc.stderr)
+        self.assertEqual((rec.exit, rec.header["complete"]), (1, False), rec.proc.stderr)
+
+    def test_a_bad_count_is_usage(self):
+        self.write("tests/test_case.py", case_source("def test_x(self):\n    pass\n"))
+        for text in ("0", "65", "-1", "two", "\u0663"):
+            with self.subTest(workers=text):
+                rec = self.run_record(args=["record", "tests", "--out", "out.jsonl", "--repo", "demo", "--workers", text])
+                self.assertEqual(rec.exit, 2, rec.proc.stderr)
+                self.assertIsNone(rec.raw, "no file is written on bad usage")
+
+
 if __name__ == "__main__":
     unittest.main()

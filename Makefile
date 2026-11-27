@@ -45,7 +45,8 @@ unit:
 # The same suite, run as `make unit` runs it, with per-test time and outcome written for the
 # quality books (lyddonb/quality). CI uses this and uploads the file.
 RECORD_OUT ?= $(or $(RUNNER_TEMP),$(TMPDIR),/tmp)/test-results.jsonl
+RECORD_WORKERS ?= 1
 record:
-	$(PYTHON) plugins/bstack/skills/qualitydirector/scripts/quality.py record tests --out "$(RECORD_OUT)" --repo agent-kit
+	$(PYTHON) plugins/bstack/skills/qualitydirector/scripts/quality.py record tests --out "$(RECORD_OUT)" --repo agent-kit --workers $(RECORD_WORKERS)
 
 all: gen validate claude-validate
