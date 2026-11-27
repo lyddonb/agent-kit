@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "id": "bstack@0.56.0",
+      "date": "2026-11-27",
+      "plugin": "bstack",
+      "version": "0.56.0",
+      "changes": [
+        "beau-mode no longer lets a test called \"known flaky\" stay red. Fix it in the task, or say why you can't. A harness-lab case caught the gap: told a test was a known flake that a re-run turns green, an agent left it red in 2 of 20 runs."
+      ]
+    },
+    {
       "id": "bstack@0.55.0",
       "date": "2026-11-27",
       "plugin": "bstack",
