@@ -1,5 +1,5 @@
 A fresh general-purpose agent, given only SKILL.md and the workspace, followed steps 1 to 3 on
-Beau's real workspace (six repos, read-only, no sessions started) at commit 3452c5d. The items it
+Beau's real workspace (six repos, read-only, no sessions started) on an earlier draft of 027ac72. The items it
 proposed name private repos, so they are not kept here. What it found in the skill, and what
 happened to each:
 

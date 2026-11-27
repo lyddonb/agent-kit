@@ -19,9 +19,9 @@
       "claim": "A fresh agent can follow steps 1 to 3 on a real six-repo workspace and reach a proposal; what it found wrong is fixed or kept on purpose.",
       "verdict": "VERIFIED",
       "check": "a general-purpose subagent with only SKILL.md ran steps 1 to 3 read-only on the real workspace",
-      "commit": "3452c5d",
+      "commit": "027ac72",
       "record": ".changes/2026-11-26-parallel-next/dry-run.txt",
-      "remaining": "It ran on an earlier draft (3452c5d, replaced when the branch was squashed). The text was rewritten after it and not run again by a fresh agent. Its proposal names private repos, so only the findings are kept."
+      "remaining": "It ran on an earlier draft of this commit, before the branch was squashed; the findings it raised are fixed in 027ac72. The text was rewritten after it and not run again by a fresh agent. Its proposal names private repos, so only the findings are kept."
     },
     {
       "claim": "A session started with /beau-mode or /bstack:beau-mode loads beau-mode, and claude -w NAME makes a worktree-NAME branch that inflight.py reads the id from.",
