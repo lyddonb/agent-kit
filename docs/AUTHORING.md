@@ -152,10 +152,10 @@ Agent Plugins 1.0 standardizes only skills and MCP. Other components are per-too
 
 | Component | Where to put it | Who loads it |
 |---|---|---|
-| Hooks | `hooks/hooks.json` | Claude Code (Codex and Cursor have their own formats) |
-| Subagents | `agents/*.md` | Claude Code, Codex (format differs slightly) |
+| Hooks | `hooks/hooks.json` for Claude Code. `hooks/cursor.json` for Cursor. The generator points `.cursor-plugin/plugin.json` at the Cursor file so Cursor does not load the Claude one. | Claude Code and Cursor |
+| Subagents | `agents/*.md` | Claude Code, Codex (format differs slightly), and Cursor when the plugin has `.cursor-plugin/plugin.json` |
 | Slash commands | prefer a skill instead | — |
-| Cursor rules | `rules/*.mdc` | Cursor (the generator adds `.cursor-plugin/plugin.json` automatically) |
+| Cursor rules | `rules/*.mdc` | Cursor (the generator adds `.cursor-plugin/plugin.json` for rules, agents, commands, or hooks) |
 
 Treat these as optional enhancements: the plugin must still be useful through its
 skills alone. `docs/CATALOG.md` labels them "client-specific".

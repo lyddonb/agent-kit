@@ -77,6 +77,15 @@ class WhatsNewTest(unittest.TestCase):
         self.assertFalse(self.state.exists())
         self.assertIn("new a", self.run_script())
 
+    def test_cursor_hook_uses_additional_context(self):
+        self.state.parent.mkdir(parents=True)
+        self.state.write_text(json.dumps({"seen": []}))
+        with unittest.mock.patch.dict(os.environ, {"CURSOR_VERSION": "3.32.10"}):
+            payload = json.loads(self.run_script("--hook"))
+        self.assertIn("agent-kit updated: a 0.2.0", payload["additional_context"])
+        self.assertNotIn("systemMessage", payload)
+        self.assertNotIn("hookSpecificOutput", payload)
+
     def test_hook_reports_once_per_plugin_and_then_stays_silent(self):
         self.state.parent.mkdir(parents=True)
         self.state.write_text(json.dumps({"seen": []}))
