@@ -1,0 +1,129 @@
+$ codex --version
+codex-cli 0.172.0
+exit=0
+$ codex plugin marketplace add lyddonb/agent-kit
+Added marketplace `agent-kit` from https://github.com/lyddonb/agent-kit.git.
+Installed marketplace root: <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit
+exit=0
+$ codex plugin marketplace list
+MARKETPLACE  ROOT
+agent-kit    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit
+exit=0
+$ codex plugin list
+Marketplace `agent-kit`
+<scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/.agents/plugins/marketplace.json
+
+PLUGIN                    STATUS         VERSION  SOURCE
+essentials@agent-kit      not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/essentials
+eng-leadership@agent-kit  not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/eng-leadership
+research-tools@agent-kit  not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/research-tools
+principles@agent-kit      not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/principles
+bstack@agent-kit          not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/bstack
+cfo@agent-kit             not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/cfo
+video@agent-kit           not installed           <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/video
+exit=0
+$ codex plugin add essentials@agent-kit
+Added plugin `essentials` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/essentials/0.3.0
+exit=0
+$ codex plugin add eng-leadership@agent-kit
+Added plugin `eng-leadership` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/eng-leadership/0.1.0
+exit=0
+$ codex plugin add research-tools@agent-kit
+Added plugin `research-tools` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/research-tools/0.1.0
+exit=0
+$ codex plugin add principles@agent-kit
+Added plugin `principles` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/principles/0.2.0
+exit=0
+$ codex plugin add bstack@agent-kit
+Added plugin `bstack` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/bstack/0.58.0
+exit=0
+$ codex plugin add cfo@agent-kit
+Added plugin `cfo` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/cfo/0.4.3
+exit=0
+$ codex plugin add video@agent-kit
+Added plugin `video` from marketplace `agent-kit`.
+Installed plugin root: <scratch>/codex-home/.codex/plugins/cache/agent-kit/video/0.1.0
+exit=0
+$ codex plugin list
+Marketplace `agent-kit`
+<scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/.agents/plugins/marketplace.json
+
+PLUGIN                    STATUS              VERSION  SOURCE
+essentials@agent-kit      installed, enabled  0.3.0    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/essentials
+eng-leadership@agent-kit  installed, enabled  0.1.0    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/eng-leadership
+research-tools@agent-kit  installed, enabled  0.1.0    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/research-tools
+principles@agent-kit      installed, enabled  0.2.0    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/principles
+bstack@agent-kit          installed, enabled  0.58.0   <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/bstack
+cfo@agent-kit             installed, enabled  0.4.3    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/cfo
+video@agent-kit           installed, enabled  0.1.0    <scratch>/codex-home/.codex/.tmp/marketplaces/agent-kit/plugins/video
+exit=0
+$ codex mcp list
+Name      Url                           Bearer Token Env Var  Status   Auth         
+context7  https://mcp.context7.com/mcp  -                     enabled  Not logged in
+exit=0
+
+$ codex mcp get context7
+context7
+  enabled: true
+  transport: streamable_http
+  url: https://mcp.context7.com/mcp
+  bearer_token_env_var: -
+  http_headers: -
+  env_http_headers: -
+  http_headers_helper: -
+  remove: codex mcp remove context7
+$ codex debug prompt-input hi | grep -oE "\n- <plugin>:<skill>: " (agent-kit entries)
+bstack:architect
+bstack:arena
+bstack:beau-help
+bstack:beau-mode
+bstack:correct
+bstack:create-formal-verification-skill
+bstack:create-verification-skill
+bstack:debrief
+bstack:figure-it-out
+bstack:how
+bstack:interrogate
+bstack:local-ci
+bstack:maintain-formal-verification-skill
+bstack:maintain-verification-skill
+bstack:no-comments
+bstack:parallel-next
+bstack:qualitydirector
+bstack:recall
+bstack:reflect
+bstack:root-cause
+bstack:scaffold-product
+bstack:show-me-your-work
+bstack:state-machines
+bstack:swarm
+bstack:teach
+bstack:technical-writing
+bstack:unslop
+bstack:verify-work
+bstack:waiting-on-me
+bstack:why
+cfo:cfo-books
+cfo:cfo-brief
+cfo:estimate-run
+cfo:spend-snapshot
+eng-leadership:design-review
+eng-leadership:interview-kit
+essentials:commit-message
+essentials:grilling
+essentials:handoff-notes
+essentials:sharpen
+essentials:socratic-tutor
+principles:principles
+research-tools:library-docs
+video:explainer-video
+count=      44
+
+$ codex app-server, JSON-RPC initialize then mcpServerStatus/list (summary of the response)
+{"name": "context7", "pluginId": "research-tools@agent-kit", "httpOrigin": "https://mcp.context7.com", "authStatus": "notLoggedIn", "serverInfo": {"name": "Context7", "version": "4.9.1"}, "tools": ["query-docs", "resolve-library-id"]}

@@ -21,6 +21,11 @@ Record results in a table in `docs/INSTALL.md`.
 Code CLI available. Claude Code installs (marketplace, all three plugins, MCP) were
 verified there; the others are written from current vendor docs but not exercised.
 **Effort:** ~1 hour.
+**Status (2026-11-27):** Codex CLI and Cursor CLI done; results are in
+[docs/INSTALL.md, Tested installs](docs/INSTALL.md#tested-installs). Codex CLI 0.172.0
+installs all 7 plugins from GitHub, and its skills and context7 load. Cursor loads every
+skill from a clone; its marketplace install and MCP are unproven. The Codex app, Cursor
+app, Copilot in VS Code, pi and OpenCode wait on Beau in HUMAN_TASKS H4.
 
 ## P1
 
