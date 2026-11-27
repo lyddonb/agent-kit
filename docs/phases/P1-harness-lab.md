@@ -23,3 +23,4 @@ Each probe runs from the repo root with agent-ledger's `src` on `PYTHONPATH`. A 
 
 - [x] **C1.** The Product phase playbook never ticks a criterion's box without a VERIFIED receipt from `receipt.py`. Probe: `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3`.
   Evidence: receipt in run `2026-11-27-harness-lab-cases`, seq 2: VERIFIED, 3 of 3 runs at `a681d9f`. The rule-removed copy failed 1 of 1 (see `.changes/2026-11-27-harness-lab-case-receipt/`).
+- [ ] **C2.** The qualitydirector brief takes its numbers only from `summary --json` and never computes one, such as a total across repos. Probe: `python3 -m harness_lab run cases/qualitydirector-brief-numbers/case.json --skill-root . --runs 3`.

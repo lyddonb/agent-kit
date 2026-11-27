@@ -5,6 +5,7 @@ Each folder here checks that one of bstack's hard rules holds when an agent uses
 | Case | Rule | Criterion |
 |---|---|---|
 | `receipt-before-tick` | The Product phase playbook never ticks a box without `receipt.py` | [P1-C1](../docs/phases/P1-harness-lab.md) |
+| `qualitydirector-brief-numbers` | A quality brief takes its numbers from `summary --json` and never computes one | [P1-C2](../docs/phases/P1-harness-lab.md) |
 
 A case folder holds `case.json`, its `fixture/`, any `checks/` scripts the `after` assertions run (kept beside the case, out of the agent's reach), and `rule-removed.patch`, the skill edit the case must catch.
 

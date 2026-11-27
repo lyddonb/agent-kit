@@ -1,0 +1,5 @@
+started,repo,sha,event,workflow,python,tests,failed,skipped,wall_ms,exit_code,evidence
+2026-11-15T09:30:00Z,alpha,0123456789abcdef0123456789abcdef01234567,push,ci,3.12,79,0,1,4210,0,https://github.com/example/alpha/actions/runs/101/attempts/1
+2026-11-15T10:00:00Z,alpha,89abcdef0123456789abcdef0123456789abcdef,pull_request,ci,3.12,80,2,0,4380,1,https://github.com/example/alpha/actions/runs/102/attempts/1
+2026-11-13T08:00:00Z,beta,fedcba9876543210fedcba9876543210fedcba98,push,ci,3.12,40,0,0,3200,0,https://github.com/example/beta/actions/runs/201/attempts/1
+2026-11-14T08:00:00Z,beta,76543210fedcba9876543210fedcba9876543210,push,ci,3.12,41,0,0,3290,0,https://github.com/example/beta/actions/runs/202/attempts/1
