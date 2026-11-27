@@ -29,6 +29,11 @@ LANES = re.compile(r"(\d+) lanes at the PR head through `[^`<>]+`")
 BOX = re.compile(r"^\s*- \[[ xX]\] (.*)$")
 PLACEHOLDER = re.compile(r"<[A-Za-z][^<>]*>")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+# Product-phase specs require `Evidence:` (check-product). Agents copy that label into
+# plan boxes; strip a leading Evidence: on a line so it is not a mid-sentence colon.
+EVIDENCE_LABEL = re.compile(r"^\s*Evidence:\s+")
+MID_COLON_HINT = ('mid-sentence colon (rewrite without ": ", or put plan evidence on '
+                  'its own line starting with "Evidence: ")')
 MIN_LANES, MAX_LANES = 3, 10
 
 
@@ -82,8 +87,9 @@ def check(path: Path) -> tuple[list[str], list[str]]:
             fail(n, "long dash")
         if re.search("[‘’“”]", prose):
             fail(n, "curly quote")
-        if re.search(r": \S", prose):
-            fail(n, "mid-sentence colon")
+        colon_prose = EVIDENCE_LABEL.sub("", prose, count=1)
+        if re.search(r": \S", colon_prose):
+            fail(n, MID_COLON_HINT)
         if PLACEHOLDER.search(prose):
             fail(n, f"unfilled placeholder {PLACEHOLDER.search(prose).group(0)}")
 
