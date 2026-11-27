@@ -15,7 +15,8 @@ DEFAULT_MODE = "observe"
 MAX_BLOCKS = 2
 
 _TOP_KEY = re.compile(r"^[A-Za-z_][\w-]*:")
-_MODE_LINE = re.compile(r"^\s+([a-z][a-z0-9-]*):\s*'?([a-z]+)'?\s*(#.*)?$")
+_MODE_LINE = re.compile(r"^\s+([a-z][a-z0-9-]*):\s*['\"]?([a-z]+)['\"]?\s*(#.*)?$")
+_FLOW_PAIR = re.compile(r"([a-z][a-z0-9-]*)\s*:\s*['\"]?([a-z]+)['\"]?")
 _FLAGS_LINE = re.compile(r"^(root|machine):\s*'(.*)'\s*$")
 
 
@@ -47,7 +48,12 @@ def read_modes(path: Path) -> dict:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if _TOP_KEY.match(line):
-            inside = line.split("#", 1)[0].strip() == "checks:"
+            key, _, rest = line.split("#", 1)[0].partition(":")
+            inside = key == "checks" and not rest.strip()
+            if key == "checks" and rest.strip().startswith("{"):
+                for cid, value in _FLOW_PAIR.findall(rest):
+                    if value in MODES or value == "false":
+                        modes[cid] = "off" if value == "false" else value
             continue
         m = _MODE_LINE.match(line) if inside else None
         if m and m.group(2) in MODES:
@@ -148,7 +154,7 @@ def log(hook: str, check: str, outcome: str, reason: str, command: str, session:
             run = f"{today}-flags-{machine}"
             subprocess.run(["ledger", "init", f"flags-{machine}", "--root", root, "--date", str(today),
                             "--actor", actor, "--why", "the first flag this week"],
-                           capture_output=True, text=True, timeout=20, check=True)
+                           capture_output=True, text=True, timeout=8, check=True)
         repo = repo_root(cwd)
         data = {"kind": "would-block", "check": check, "outcome": outcome, "reason": reason,
                 "repo": repo.name if repo else "", "session": session}
@@ -156,7 +162,7 @@ def log(hook: str, check: str, outcome: str, reason: str, command: str, session:
                         "--summary", f"{check} {outcome}: {reason}",
                         "--why", f"bstack's {check} hook in {data['repo'] or 'a folder outside git'}",
                         "--evidence", command[:500], "--data", json.dumps(data)],
-                       capture_output=True, text=True, timeout=20, check=True)
+                       capture_output=True, text=True, timeout=8, check=True)
     except (OSError, subprocess.SubprocessError) as e:
         detail = getattr(e, "stderr", "") or e
         warn(hook, f"{outcome} not logged: {str(detail).strip()[:200]}")

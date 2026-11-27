@@ -11,10 +11,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import checks  # noqa: E402
 
 CHECK = "commit-gate"
-COMMIT = re.compile(r"(?:^|[;&|(`]|\$\()\s*(?:\w+=\S*\s+)*git(?:\s+-[Cc]\s+\S+|\s+--[\w-]+(?:=\S+)?)*\s+commit(?![\w-])")
+COMMIT = re.compile(r"(?:^|[;&|(`]|\$\()[ \t]*(?:(?:sudo|env|command|exec)[ \t]+)*(?:\w+=\S*[ \t]+)*"
+                    r"(?:\S*/)?git(?:[ \t]+-[Cc][ \t]+\S+|[ \t]+--[\w-]+(?:=\S+)?)*[ \t]+commit(?![\w-])", re.M)
 VERIFY_SKILLS = ("verify-work", "interrogate", "code-review", "review-pr", "review")
 VERIFY_BASH = re.compile(r"second_opinion\.py|test_guard\.py|checklist\.py")
+_QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
 REASON = "no verify-work, verify-<app>, interrogate or review ran in this session since its last commit"
+
+
+def is_commit(command: str) -> bool:
+    """A git commit in the command's own words: quoted text and heredoc bodies are data."""
+    lines, kept = command.splitlines(), []
+    for line in lines:
+        kept.append(line)
+        if "<<" in line:
+            break
+    masked = _QUOTED.sub("''", "\n".join(kept))
+    return bool(COMMIT.search(masked)) and "--dry-run" not in masked
 
 
 def _short(name: str) -> str:
@@ -42,37 +55,37 @@ def _typed_command(text: str) -> bool:
 
 
 def verified_since_last_commit(entries: list) -> tuple[bool, str]:
-    """Whether a verification ran after the last commit that went through, and that commit's id."""
-    results, uses = {}, []
+    """Whether a verification finished without error after the last commit that went through,
+    and that commit's id. A verification still running, or one that failed, doesn't count."""
+    last, verified, commits, checks_running = "start", False, set(), set()
     for e in entries:
         content = (e.get("message") or {}).get("content") if isinstance(e, dict) else None
         if isinstance(content, str):
-            uses.append(("text", content))
+            verified = verified or _typed_command(content)
             continue
         for block in content or []:
             if not isinstance(block, dict):
                 continue
-            if block.get("type") == "tool_use":
-                uses.append(("use", block))
-            elif block.get("type") == "tool_result":
-                results[block.get("tool_use_id")] = bool(block.get("is_error"))
-            elif block.get("type") == "text" and e.get("type") == "user":
-                uses.append(("text", block.get("text", "")))
-    last, verified = "start", False
-    for kind, item in uses:
-        if kind == "text":
-            verified = verified or _typed_command(item)
-        elif item.get("name") == "Bash" and COMMIT.search(str((item.get("input") or {}).get("command", ""))):
-            if results.get(item.get("id")) is False:
-                last, verified = item.get("id") or last, False
-        elif _verifies(item):
-            verified = True
+            kind = block.get("type")
+            if kind == "text" and e.get("type") == "user":
+                verified = verified or _typed_command(block.get("text", ""))
+            elif kind == "tool_use" and block.get("name") == "Bash" and \
+                    is_commit(str((block.get("input") or {}).get("command", ""))):
+                commits.add(block.get("id"))
+            elif kind == "tool_use" and _verifies(block):
+                checks_running.add(block.get("id"))
+            elif kind == "tool_result" and not block.get("is_error"):
+                uid = block.get("tool_use_id")
+                if uid in commits:
+                    last, verified = uid, False
+                elif uid in checks_running:
+                    verified = True
     return verified, last
 
 
 def decide(event: dict) -> dict | None:
     command = str((event.get("tool_input") or {}).get("command", ""))
-    if event.get("tool_name") != "Bash" or not COMMIT.search(command):
+    if event.get("tool_name") != "Bash" or not is_commit(command):
         return None
     cwd = event.get("cwd") or "."
     mode = checks.mode(CHECK, cwd)

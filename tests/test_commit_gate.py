@@ -130,14 +130,20 @@ class CommitGateTest(unittest.TestCase):
         }
         for name, entry in kinds.items():
             with self.subTest(name):
-                self.assertIsNone(self.run_hook([entry], session=name.replace(" ", "-"))[0])
+                self.assertIsNone(self.run_hook([entry, result("v")], session=name.replace(" ", "-"))[0])
         self.assertEqual(self.logged(), [])
 
     def test_verification_before_the_last_commit_does_not_count_for_the_next(self):
         self.set_policy("enforce")
-        transcript = [use("v", "Skill", skill="bstack:verify-work"),
+        transcript = [use("v", "Skill", skill="bstack:verify-work"), result("v"),
                       use("c1", "Bash", command=COMMIT), result("c1"), use("e", "Edit", file_path="b.py")]
         self.assert_denied(self.run_hook(transcript)[0])
+
+    def test_a_verification_still_running_or_failed_does_not_count(self):
+        self.set_policy("enforce")
+        self.assert_denied(self.run_hook([use("v", "Agent", subagent_type="code-reviewer", prompt="x")])[0])
+        self.assert_denied(self.run_hook([use("v", "Skill", skill="bstack:verify-work"), result("v", error=True)],
+                                         session="s2")[0])
 
     def test_unrelated_skills_and_subagents_do_not_count(self):
         self.set_policy("enforce")
@@ -146,12 +152,16 @@ class CommitGateTest(unittest.TestCase):
 
     def test_only_git_commit_is_judged(self):
         self.set_policy("enforce")
-        for command in ("git status", "git log --oneline", "echo commit", "git commit-tree x", "ls commit/"):
+        for command in ("git status", "git log --oneline", "echo commit", "git commit-tree x", "ls commit/",
+                        'echo "then; git commit"', "gh pr create --body '(git commit)'", "git commit --dry-run",
+                        "cat > notes.md <<'EOF'\nrun: git commit -m x\nEOF"):
             with self.subTest(command):
                 self.assertIsNone(self.run_hook([], command=command)[0])
         self.assertIsNone(self.run_hook([], tool="Edit")[0])
         for command in ("git -C repo commit -m x", "cd a && git commit -am x", "GIT_EDITOR=true git commit",
-                        "git -c user.name=x commit -m y", "git commit"):
+                        "git -c user.name=x commit -m y", "git commit", "git add -A\ngit commit -m x",
+                        "/usr/bin/git commit -m x", "env A=1 git commit -m x", "sudo git commit -m x",
+                        "command git commit -m x", "git commit -F - <<'EOF'\nmsg\nEOF"):
             with self.subTest(command):
                 self.assert_denied(self.run_hook([], command=command, session=command)[0])
 
