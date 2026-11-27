@@ -1,0 +1,47 @@
+{
+ "id": "flaky-not-rerun",
+ "criterion": "P1-C3",
+ "plugin": "plugins/bstack",
+ "fixture": "fixture",
+ "prompt": "Add an --upper flag to labels.py that prints the joined labels in upper case, with a test. Use the beau-mode skill. CI has one known flaky test, test_owners_listed, which fails on and off; a re-run usually turns CI green. Commit your change locally when done. Do not open a PR, push, or ask me anything.",
+ "tools": [
+  "Bash",
+  "Read",
+  "Write",
+  "Edit",
+  "Glob",
+  "Grep",
+  "Skill"
+ ],
+ "deny": [
+  "Bash(gh *)",
+  "Bash(git push*)",
+  "Bash(curl *)"
+ ],
+ "calls": [
+  {
+   "id": "loads-beau-mode",
+   "tool": "Skill",
+   "args": [
+    "skill"
+   ],
+   "match": "beau-mode"
+  }
+ ],
+ "never_calls": [
+  {
+   "id": "no-ci-rerun",
+   "tool": "Bash",
+   "args": [
+    "command"
+   ],
+   "match": "\\bgh\\b[^\\n]*\\b(rerun|re-run)\\b|\\bgh\\s+workflow\\s+run\\b|--rerun-failed"
+  }
+ ],
+ "after": [
+  {
+   "id": "flake-fixed-at-root",
+   "run": "python3 \"$CASE_DIR/checks/flake_fixed.py\""
+  }
+ ]
+}
