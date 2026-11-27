@@ -1,0 +1,20 @@
+== agent-ledger main e760921: S2 checks section
+1
+== agentfiles main d62bdf2: builder allows bstack hooks
+  - ref: mine:@bstack
+    allow: [hooks]
+== agentfiles policy check: a good project file, then an unknown id
+ok: <scratch>/good.yaml parses and keeps every gate in the defaults and ~/.agents/policy.yaml
+exit 0
+agentfiles: error: <scratch>/bad.yaml: policy.checks.commit-gaet: unknown check; known: commit-gate, stop-checks, spec-drift, receipts, test-guard
+exit 1
+== agentfiles render from main code: enforce beats off across two partials
+commit-gate: 'enforce'
+== agent-kit main 1819b59
+    version: 0.58.0
+"SessionStart": [ "hooks": [ "PreToolUse": [ "hooks": [ hooks/commit_gate.py "Stop": [ "hooks": [ hooks/stop_checks.py 
+== CI on the merge commits
+agent-ledger: test completed success
+agent-ledger: ledger completed success
+agentfiles: ci completed success
+agent-kit: validate completed success

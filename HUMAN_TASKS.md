@@ -19,7 +19,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H11 | Review and merge the verification and planning branch | **Done** |
 | H12 | Create a verification skill in one real app | Steps 1 and 2 **done** (R27); steps 3 and 4 to do |
 | H13 | Protect workflow files and checker pins | Fix A **done**, step 1 **done**; steps 2 to 7 are yours |
-| H14 | Allow bstack to ship R32's hooks | **Done** (yes); review each hook in R32's pull request |
+| H14 | Allow bstack to ship R32's hooks | Yes, and R32 shipped in observe; step 3 (enforce or not, after the observe week) to do |
 | H15 | Allow a weekly job to read local transcripts for skill use | **Done** (yes) |
 | H16 | Decide where the change record check enforces | **Done**: all four repos enforce |
 | H17 | Decide whether a judge model may score the context-loading evals | **Done**: R42 and R43 only, judged by `cli:cursor-agent:gpt-5.6-sol-high` through R11 |
@@ -169,7 +169,7 @@ approve a workflow change is yours.
    `main`'s copy, so a broken one also blocks the pull request that fixes it. Remove that check
    from the ruleset, merge the fix, and add the check back.
 
-### H14. Allow bstack to ship R32's hooks — Done
+### H14. Allow bstack to ship R32's hooks — step 3 open
 **Answer (2026-11-27):** Yes. Beau's words: "Yes. bstack may ship R32's Stop hook and commit
 gate". Every gate still starts in `observe` (R32's own rule).
 **Why a human:** A hook runs code on every matching event in every session. Turning that on is
@@ -188,8 +188,14 @@ request: its hooks run once it merges and the plugin updates.
    `profiles/personas/builder.yaml`, for machines that install Claude Code through agentfiles.
    Run `agentfiles sync` there after it merges.
 3. After a week of observe logs with no false block, decide whether to move each gate to
-   `enforce`. Setting a gate to `off`, or disabling bstack, turns it back off.
-**Unblocks:** R32's charter. R32 still waits on R6 and its own trigger.
+   `enforce`: `checks: {commit-gate: enforce}` under `policy:` in a profile, then `agentfiles sync`.
+   Setting a check to `off`, or disabling bstack, turns it back off. Read the week's would-block
+   lines with `ledger show` on the flags run. Before `commit-gate`, decide whether a test run
+   should count as verification: replayed over past transcripts, the rule as written fires on most
+   commits, and most of those followed a test run.
+**Status (2026-11-27):** steps 1 and 2 done: Beau merged agent-kit 139 and 145 and agentfiles 42.
+Step 3 waits for the observe week, which starts when this machine's Claude Code runs bstack 0.58.0.
+**Unblocked:** R32, done in run `2026-11-27-r32-hook-gates`.
 
 ### H15. Allow a weekly job to read local transcripts for skill use — Done
 **Answer (2026-11-19):** Yes. Beau's words: "yes to H15 and H6". The quality books' H6 got the same

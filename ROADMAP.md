@@ -69,8 +69,10 @@ Codex `hooks.json`, and Cursor `hooks/hooks.json`.
 (different events and payloads per tool), and they carry the most risk (they run code
 on every matching event).
 **Prioritize when:** there is a concrete hook worth having in at least two tools. R32 (a Stop
-hook for cheap checks and a commit gate) is the first concrete case; it needs the Claude Code
-half of this first.
+hook for cheap checks and a commit gate) was the first concrete case, and shipped without this:
+both of its hooks are Claude Code only, and Claude Code reads a plugin's hand-written
+`hooks/hooks.json`, so the Claude Code half would only regenerate that file. This waits for a hook
+worth having in a second tool, which also needs agentfiles R2 (native plugin installs there).
 
 ### R7. Bundled stdio MCP server example
 **What:** A plugin that ships its own small MCP server (e.g. an internal API
@@ -350,7 +352,7 @@ the repo's history shows no false failure, as the command lint did (PR 61: 137 c
 errors). An entry that spans repos gets a
 tier 2 charter (Large work item playbook) before the first PR.
 
-Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's three units are built. Next: R43 (its trigger, R11, has merged). R32 waits on R6 (Beau allowed its hooks in H14). R34 waits on R23.
+Order: R27, R28, R30, R31, R33, R40 and R44 are done, and R29's three units are built. Next: R43 (its trigger, R11, has merged). R32 is done (bstack 0.58.0). R34 waits on R23.
 R35's units are independent.
 
 ## P0
@@ -454,6 +456,19 @@ roadmap's phase 1b: the summary reporting the share of commits on main by stamp.
 gate reads the stamp.
 
 ### R32. Gates start in observe mode; two Claude Code hooks
+**Done 2026-11-27** in bstack 0.58.0, run `2026-11-27-r32-hook-gates` (agent-kit pull requests 139
+and 145, agent-ledger 55, agentfiles 42). S2 has a `checks:` map: a check id to `off`, `observe` or
+`enforce`, stricter wins, `observe` when nobody names it. agentfiles merges and writes it. bstack's
+commit gate (PreToolUse) and Stop hook (`.agents/checks.yaml`) read it. In observe they log a
+`would-block` lesson to the weekly flags run. In enforce they stop the action twice, then let it
+through and log why. A repo's own `.agents/` files count only when its GitHub `origin` is under
+`identity.human`'s login. Proven in real headless sessions with the merged plugin
+(`evidence/probes-merged-plugin.txt` in the run). R6 was not needed: both hooks are Claude Code
+only, and Claude Code reads the plugin's hand-written `hooks/hooks.json`.
+**Still open:** `spec-drift`, `receipts` and `test-guard` print their observe lines but don't read
+the mode yet (R29's trigger: before any gate moves to enforce). The quality brief doesn't count
+would-block lines yet. Replayed over past transcripts, the commit gate's rule fires on most commits,
+most of them after a test run, so what counts as verification needs deciding before enforce (H14).
 **What:** (1) Every verification gate has a mode: `off`, `observe` (log what it would have
 blocked, block nothing) or `enforce`. The agent policy carries the mode per gate (an
 agentfiles change), and observe logs go where the quality books can read them. This covers
