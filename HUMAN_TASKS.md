@@ -92,9 +92,9 @@ you have said, not from watching you work.
 investigation in cursor as well". In
 Claude Code, a feature (agentfiles R16) and an investigation ("what's next") were run under
 beau-mode, then `/reflect`; Beau approved all six edits, merged in bstack 0.53.0 (pull request
-141). In Cursor, every task in one private project ran under beau-mode, with `/reflect`. A bug
-run in Claude Code was not named on its own; the quality books show beau-mode in steady use
-there since week 43.
+141). A bug run followed under the Bug fix playbook: the agentfiles sync misreport, which
+reproduced as already fixed by agentfiles pull request 43, so it stopped with no change. In
+Cursor, every task in one private project ran under beau-mode, with `/reflect`.
 **Why a human:** Only real work shows what the skill gets wrong.
 **Steps:** Run `/beau-mode` on a real bug, a feature and an investigation in Claude Code and in
 Cursor. After each, run `/reflect` and approve or reject its proposals. Note anything that felt
