@@ -802,6 +802,13 @@ rules loaded, beau-mode among them. Say so in the reply, or judge through a CLI 
 count of each arm.
 **Why not done:** found 2026-11-23. It is the cheapest test of the claim above and needs no KB.
 **Prioritize when:** R11 has merged. Before R13's beau-mode comparison, which can reuse its tasks.
+**Done 2026-11-26: keep.** 8 tasks, beau-mode's full `SKILL.md` run twice against a slim
+router, judged blind by `cli:cursor-agent:gpt-5.6-sol-high`. The slim arm held on cause, fix and
+proof, and fell outside the noise band on scope and reply, so nothing is cut. The full arm adds
+7,505 tokens and the slim arm 2,169, with no measurable cost difference per run because the
+prompt is cached. The full arm skipped its playbook in 6 of 16 runs, and no run in either arm
+opened a principle file. The report, rubric, verdicts and harness are in
+`.changes/2026-11-26-beau-mode-ablation/`, and R13 can reuse its tasks.
 
 # Knowledge factory
 

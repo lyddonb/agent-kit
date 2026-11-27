@@ -1,0 +1,72 @@
+{
+ "tasks_scored": 8,
+ "missing": [],
+ "items": {
+  "cause": {
+   "full1_over_full2": 0.375,
+   "band": 0.125,
+   "slim_over_full1": 0.5,
+   "slim_over_full2": 0.375,
+   "slim_over_full": 0.4375,
+   "holds": true,
+   "mean_score": {
+    "full1": 4.625,
+    "full2": 4.875,
+    "slim": 4.375
+   }
+  },
+  "fix": {
+   "full1_over_full2": 0.4375,
+   "band": 0.0625,
+   "slim_over_full1": 0.5,
+   "slim_over_full2": 0.5,
+   "slim_over_full": 0.5,
+   "holds": true,
+   "mean_score": {
+    "full1": 3.75,
+    "full2": 4.375,
+    "slim": 4.0
+   }
+  },
+  "proof": {
+   "full1_over_full2": 0.3125,
+   "band": 0.1875,
+   "slim_over_full1": 0.4375,
+   "slim_over_full2": 0.3125,
+   "slim_over_full": 0.375,
+   "holds": true,
+   "mean_score": {
+    "full1": 4.125,
+    "full2": 4.375,
+    "slim": 3.875
+   }
+  },
+  "scope": {
+   "full1_over_full2": 0.5,
+   "band": 0.0,
+   "slim_over_full1": 0.375,
+   "slim_over_full2": 0.3125,
+   "slim_over_full": 0.34375,
+   "holds": false,
+   "mean_score": {
+    "full1": 4.375,
+    "full2": 4.375,
+    "slim": 4.0
+   }
+  },
+  "reply": {
+   "full1_over_full2": 0.375,
+   "band": 0.125,
+   "slim_over_full1": 0.375,
+   "slim_over_full2": 0.1875,
+   "slim_over_full": 0.28125,
+   "holds": false,
+   "mean_score": {
+    "full1": 4.0,
+    "full2": 4.375,
+    "slim": 3.375
+   }
+  }
+ },
+ "recommendation": "keep"
+}

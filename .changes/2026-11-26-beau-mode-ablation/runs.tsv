@@ -1,0 +1,25 @@
+run	cost_usd	turns	playbook_read	principles_read	diff_chars	merged_new_tests
+t1-full1	0.33	25	bug-fix.md	0	493	n/a
+t1-full2	0.26	16	bug-fix.md	0	1845	n/a
+t1-slim	0.29	25	bug-fix.md	0	1076	n/a
+t2-full1	0.35	31	bug-fix.md	0	754	n/a
+t2-full2	0.10	8	none	0	712	n/a
+t2-slim	0.26	25	bug-fix.md	0	898	n/a
+t3-full1	0.27	12	none	0	5461	Ran 6 tests in 4.987s FAILED (failures=3)
+t3-full2	0.46	22	none	0	22750	Ran 6 tests in 3.172s FAILED (failures=5)
+t3-slim	0.43	23	bug-fix.md	0	19386	Ran 6 tests in 3.260s FAILED (failures=5)
+t4-full1	0.30	16	none	0	16424	n/a
+t4-full2	0.41	20	feature.md	0	23247	n/a
+t4-slim	0.55	35	feature.md	0	18220	n/a
+t5-full1	0.53	27	bug-fix.md	0	4787	n/a
+t5-full2	0.51	28	bug-fix.md	0	8787	n/a
+t5-slim	0.32	17	bug-fix.md	0	4232	n/a
+t6-full1	0.13	4	none	0	0	n/a
+t6-full2	0.14	6	none	0	0	n/a
+t6-slim	0.13	6	investigation.md	0	0	n/a
+t7-full1	0.39	16	bug-fix.md	0	0	Ran 1 test in 0.041s FAILED (failures=1)
+t7-full2	0.87	50	bug-fix.md	0	11279	Ran 1 test in 0.024s FAILED (failures=1)
+t7-slim	0.68	40	bug-fix.md	0	14675	Ran 1 test in 0.051s FAILED (failures=1)
+t8-full1	0.36	20	bug-fix.md	0	5752	Ran 3 tests in 2.657s FAILED (failures=3)
+t8-full2	0.41	23	bug-fix.md	0	9481	Ran 3 tests in 9.086s FAILED (failures=1)
+t8-slim	0.38	20	bug-fix.md	0	8745	Ran 3 tests in 2.547s FAILED (failures=3)

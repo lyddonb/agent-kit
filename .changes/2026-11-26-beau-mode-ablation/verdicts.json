@@ -1,0 +1,282 @@
+{
+ "t1": {
+  "labels": {
+   "A": "full1",
+   "B": "full2",
+   "C": "slim"
+  },
+  "status": "ok",
+  "seconds": 35.2,
+  "scores": {
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 4,
+    "note": "Correct minimal atomic-write fix with strong stress evidence, though no deterministic regression test was added."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 5,
+    "scope": 3,
+    "reply": 4,
+    "note": "Good regression evidence, but the shared temporary filename can make concurrent stub writers fail and the harness change is unnecessary."
+   },
+   "slim": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 3,
+    "reply": 4,
+    "note": "The unique temporary file fixes torn reads and the reply is candid, but the harness edit is unnecessary and no regression test remains."
+   }
+  }
+ },
+ "t2": {
+  "labels": {
+   "A": "slim",
+   "B": "full1",
+   "C": "full2"
+  },
+  "status": "ok",
+  "seconds": 30.3,
+  "scores": {
+   "slim": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 4,
+    "reply": 4,
+    "note": "Correct diagnosis and reproduced fail-pass, though the raw QREPO check remains slightly brittle and the reply is noisy."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 5,
+    "reply": 3,
+    "note": "The targeted failure is correctly fixed and proven, but the reply is fragmented and includes unresolved speculation."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 2,
+    "scope": 5,
+    "reply": 5,
+    "note": "The minimal fix is sound, but it was only tested where the original path-dependent failure could not occur."
+   }
+  }
+ },
+ "t3": {
+  "labels": {
+   "A": "full2",
+   "B": "slim",
+   "C": "full1"
+  },
+  "status": "ok",
+  "seconds": 74.3,
+  "scores": {
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 4,
+    "note": "Complete, well-tested fix, though the reply overstates rejection of in-repo symlinked parent directories."
+   },
+   "slim": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 4,
+    "note": "Strongest symlink-path coverage and honest test reporting, but the opening background-status sentence contradicts the completed report."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 4,
+    "reply": 4,
+    "note": "The core holes are fixed and tested, but required release bookkeeping remains unfinished and path normalization adds unnecessary behavior."
+   }
+  }
+ },
+ "t4": {
+  "labels": {
+   "A": "full1",
+   "B": "full2",
+   "C": "slim"
+  },
+  "status": "ok",
+  "seconds": 61.4,
+  "scores": {
+   "full1": {
+    "cause": 4,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "Correct exception design with focused tests and honest verification limits, though it lacks a fail-before demonstration."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "Complete, well-tested fix with explicit root cause, before-and-after evidence, records, and accurate caveats."
+   },
+   "slim": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 3,
+    "scope": 4,
+    "reply": 2,
+    "note": "The targeted fix is sound, but unexplained suite failures and the unsupported claim that they are unrelated substantially weaken proof and reply reliability."
+   }
+  }
+ },
+ "t5": {
+  "labels": {
+   "A": "slim",
+   "B": "full1",
+   "C": "full2"
+  },
+  "status": "ok",
+  "seconds": 48.0,
+  "scores": {
+   "slim": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 3,
+    "scope": 5,
+    "reply": 4,
+    "note": "Correct, minimal fix with honest caveats, but tests only plist generation and never demonstrate the original behavioral failure."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "Best answer: a focused fix backed by a regression test that recreates launchd's environment and verifies booked versions end to end."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 4,
+    "reply": 5,
+    "note": "Correct and well verified, though copying both raw variables is broader and less robust than persisting one resolved lock path."
+   }
+  }
+ },
+ "t6": {
+  "labels": {
+   "A": "full1",
+   "B": "full2",
+   "C": "slim"
+  },
+  "status": "ok",
+  "seconds": 65.6,
+  "scores": {
+   "full1": {
+    "cause": 4,
+    "fix": 4,
+    "proof": 4,
+    "scope": 5,
+    "reply": 4,
+    "note": "Accurate and well-scoped, but asserts validate is the only PR check despite not inspecting repository settings."
+   },
+   "full2": {
+    "cause": 4,
+    "fix": 4,
+    "proof": 4,
+    "scope": 5,
+    "reply": 4,
+    "note": "Clearly identifies the self-judging workflow and trusted baseline, while appropriately disclosing that external checks were not confirmed."
+   },
+   "slim": {
+    "cause": 3,
+    "fix": 4,
+    "proof": 4,
+    "scope": 5,
+    "reply": 3,
+    "note": "Mostly accurate, but its opening \u201cNo\u201d contradicts its conclusion that every check is PR-controlled."
+   }
+  }
+ },
+ "t7": {
+  "labels": {
+   "A": "full1",
+   "B": "full2",
+   "C": "slim"
+  },
+  "status": "ok",
+  "seconds": 52.9,
+  "scores": {
+   "full1": {
+    "cause": 4,
+    "fix": 1,
+    "proof": 3,
+    "scope": 2,
+    "reply": 3,
+    "note": "It identifies the mechanism but makes an incorrect single-digit claim and leaves the requested fix unimplemented."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 4,
+    "reply": 4,
+    "note": "It implements a safe alternate representation with strong regression coverage, though the spec remains slightly contradictory and the reply is noisy."
+   },
+   "slim": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 3,
+    "reply": 4,
+    "note": "It provides a validated solution with strong tests, but broadens append with a special scan bypass and removes direct coverage of archived-entry refusal."
+   }
+  }
+ },
+ "t8": {
+  "labels": {
+   "A": "slim",
+   "B": "full1",
+   "C": "full2"
+  },
+  "status": "ok",
+  "seconds": 59.5,
+  "scores": {
+   "slim": {
+    "cause": 2,
+    "fix": 1,
+    "proof": 2,
+    "scope": 3,
+    "reply": 2,
+    "note": "It misreads the stack\u2019s base ref and therefore leaves the reported origin/main failure unchanged."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 2,
+    "proof": 4,
+    "scope": 4,
+    "reply": 4,
+    "note": "It reproduces the failure but unsafely trusts any unmerged origin branch as the ledger baseline."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 4,
+    "reply": 4,
+    "note": "It implements and tests the correct merge-base behavior, but adds an inaccurate, unrequested changes.yml follow-up."
+   }
+  }
+ }
+}

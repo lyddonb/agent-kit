@@ -1,0 +1,13 @@
+Input tokens of a one-word `claude -p` reply on Sonnet 5.5 (input + cache write + cache read), measured 2026-11-26 with harness/tok.py:
+none 3407
+full 10912  (arm adds 7505)
+slim 5576   (arm adds 2169)
+
+Cost per run, mean of total_cost_usd from each run transcript (runs.tsv):
+full 0.364 over 16 runs
+slim 0.381 over 8 runs
+all 24 runs: 8.88
+
+Replies with more than one result event (a background Monitor turn added a part):
+full 6 of 16 (t1-full1, t2-full1, t5-full1, t5-full2, t7-full2, t8-full1)
+slim 7 of 8 (all but t6-slim)
