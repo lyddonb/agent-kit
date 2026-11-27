@@ -12,7 +12,7 @@
       "claim": "origin/main check-plan fails the past P3 Evidence: plan line as mid-sentence colon; this branch passes the same line and still fails a Note: mid-sentence colon with a fix-naming message.",
       "verdict": "VERIFIED",
       "check": "python proof comparing origin/main check-plan.py vs this branch on fixtures/plan-good.md with the P3 Evidence: snippet and a Note: control",
-      "commit": "9e30743",
+      "commit": "2447327",
       "record": ".changes/2026-11-27-check-plan-evidence-colon/proof.txt",
       "remaining": "check-product.py was not re-run against a product repo; its Evidence: require is untouched."
     },
@@ -20,7 +20,7 @@
       "claim": "The new unit test and the rest of test_check_plan pass.",
       "verdict": "VERIFIED",
       "check": "python3 -m unittest tests.test_check_plan",
-      "commit": "9e30743",
+      "commit": "2447327",
       "record": ".changes/2026-11-27-check-plan-evidence-colon/proof.txt",
       "remaining": "Full make test / CI on the pull request."
     }

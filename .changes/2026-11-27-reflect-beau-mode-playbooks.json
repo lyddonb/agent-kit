@@ -14,7 +14,7 @@
       "claim": "Every Approved reflect row (1-5, 7-12) is present in the named playbook or SKILL.md text, and Rejected/STU-54 structural check-plan work is not in this diff.",
       "verdict": "VERIFIED",
       "check": "row-checklist.txt: 18 string probes across the five files, 0 FAIL",
-      "commit": "f333b2d",
+      "commit": "b28ae98",
       "record": ".changes/2026-11-27-reflect-beau-mode-playbooks/row-checklist.txt",
       "remaining": "No eval that an agent follows the new steps on a live task."
     },
@@ -22,7 +22,7 @@
       "claim": "make gen validate passes on this branch.",
       "verdict": "VERIFIED",
       "check": "make gen validate",
-      "commit": "f333b2d",
+      "commit": "b28ae98",
       "record": ".changes/2026-11-27-reflect-beau-mode-playbooks/make-gen-validate.txt",
       "remaining": "CI on the pull request."
     }
