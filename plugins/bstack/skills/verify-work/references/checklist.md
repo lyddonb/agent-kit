@@ -36,7 +36,7 @@ Standard output holds the matching items and nothing else. Empty output means th
 
 ## Recording an item in a ledger run
 
-In a run that keeps a ledger, `scripts/receipt.py --run RUN_ID --actor ACTOR_JSON --item ID` runs the item's check and appends a `verification` entry whose verdict comes from the exit code: 0 is VERIFIED, anything else NOT VERIFIED, and a dirty tree or `--not-run TEXT` makes a pass INCONCLUSIVE. A command item runs its own command, read from the checklist as HEAD has it, so an uncommitted edit cannot change what ran. A question item needs the command that answers its probe after `--`. The entry's `data.checklist` holds the item's id, the file and its hash, the command, the commit and the exit code, and the output is kept in `.evidence/<run-id>/checklist-<id>.txt`. `ledger show` lists the entry. `ledger receipts` does not: it lists spec criteria.
+In a run that keeps a ledger, `scripts/receipt.py --run RUN_ID --actor ACTOR_JSON --item ID` runs the item's check and appends a `verification` entry whose verdict comes from the exit code: 0 is VERIFIED, a code given with `--inconclusive-exit N` is INCONCLUSIVE, anything else NOT VERIFIED, and a dirty tree or `--not-run TEXT` makes a pass INCONCLUSIVE. A command item runs its own command, read from the checklist as HEAD has it, so an uncommitted edit cannot change what ran. A question item needs the command that answers its probe after `--`. The entry's `data.checklist` holds the item's id, the file and its hash, the command, the commit and the exit code, and the output is kept in `.evidence/<run-id>/checklist-<id>.txt`. `ledger show` lists the entry. `ledger receipts` does not: it lists spec criteria.
 
 ## The file
 
