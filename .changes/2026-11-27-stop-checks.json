@@ -12,7 +12,7 @@
       "claim": "In real headless Claude Code sessions loading both hooks from this branch: observe and enforce commits behave as the commit gate record says, and a session that left a test red was sent back twice with the failing test's output, then let through with the reason logged.",
       "verdict": "VERIFIED",
       "check": "scratchpad probe.sh commit-observe, commit-enforce and stop-enforce: claude -p --model haiku --settings pointing PreToolUse and Stop at these hooks, a scratch repo whose origin is under the policy's login, scratch policy, flags run and state",
-      "commit": "089468b",
+      "commit": "15e8334",
       "record": ".changes/2026-11-27-stop-checks/probe.txt",
       "remaining": "Run from --settings, not from the installed plugin; the run's close repeats it after the plugin update."
     },
@@ -20,7 +20,7 @@
       "claim": "Run as Claude Code runs it, the hook stays quiet on a green tree, sends a red one back with its output, caps send-backs at two, clears its count when the tree goes green, logs once per tree in observe, does nothing in off or in a session that only read, ignores an edit outside the repo, follows an edit made from a parent folder, catches a change made through Bash and in an untracked file, never runs an untrusted repo's commands, parses flow and block lists, cuts off a hung check, and fails open on a broken event.",
       "verdict": "VERIFIED",
       "check": "python3 -m unittest tests.test_stop_checks (17 tests, system Python 3.9, a fake ledger on PATH)",
-      "commit": "089468b",
+      "commit": "15e8334",
       "record": ".changes/2026-11-27-stop-checks/make-test.txt",
       "remaining": "Subagent tool calls live in their own transcript files; whether the main transcript shows a subagent's edits was not checked."
     },
@@ -28,7 +28,7 @@
       "claim": "The tests hold the rules: rerunning on every stop, running an untrusted repo's commands, ignoring Bash changes, ignoring untracked content, sending back in observe, no cap, judging cwd's repo for any edit, and treating a hung check as a pass each turn them red.",
       "verdict": "VERIFIED",
       "check": "eight one-line mutants of stop_checks.py, each followed by python3 -m unittest tests.test_stop_checks",
-      "commit": "089468b",
+      "commit": "15e8334",
       "record": ".changes/2026-11-27-stop-checks/mutants.txt",
       "remaining": "Eight rules mutated, not every line."
     }
