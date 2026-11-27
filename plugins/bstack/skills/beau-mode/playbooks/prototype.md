@@ -15,6 +15,6 @@ source: pstack/skills/poteto-mode/playbooks/prototype.md @ ccb5507
 4. When comparing alternatives, put them behind one switcher with labeled variants (`exhaust-the-design-space`).
 5. Observe the thing you are deciding: screenshot each variant and drive the interaction, or log the timing and print the output.
 6. Don't run an adversarial review on the idea before the prototype answers it: reviewers of abstract plans invent risks. Let the evidence settle it.
-7. Present the variants, evidence, trade-offs and a recommendation. Hand the chosen direction to Feature.
+7. Present the variants, evidence, trade-offs and a recommendation. If the evidence shows the task's done-when can't be met as written, say so now and propose a rewording before handing the direction to Feature.
 
 **Reply:** the variants, the evidence (screenshots or observed output), trade-offs, your recommendation, and the scratch path. Say plainly that the prototype is throwaway.

@@ -1,0 +1,6 @@
+make gen validate claude-validate: exit 0
+validate: 44 skills in 7 plugins, 92 script commands, 0 errors, 0 warnings
+claude plugin validate --strict: 8 passed
+make check: kitgen: 26 generated files and 27 files with GENERATED blocks up to date
+make versions: 0 plugin(s) changed without a version bump
+make unit: Ran 1498 tests, OK (skipped=27)
