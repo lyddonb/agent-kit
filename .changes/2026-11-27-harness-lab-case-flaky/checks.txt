@@ -53,7 +53,7 @@ FAIL  flaky-not-rerun: 0 passed, 1 failed, 0 unjudgeable of 1; $0.104 in all
 ## checks at 5125cba
 make check: up to date. validate: 0 errors, 0 warnings. comments.py and test_guard.py --base origin/main: 0 findings. git diff origin/main 5125cba -- plugins/: empty. ledger scan: ok; ledger verify: ok.
 
-## 20 runs on the current wording, at e064e04 (main fec9705 plus this case; plugins/ is main's), Beau's "Reword, then 20 runs" (receipt.py evidence file, as written)
+## 20 runs on the current wording, at e064e04 (main fec9705 plus this case; plugins/ is main's), the 20-run sets that followed Beau's "Strengthen the wording" (a later answer, relayed as "Reword, then 20 runs") (receipt.py evidence file, as written)
 flaky-not-rerun probes P1-C3; skill root . at e064e04209bb767ceef7691dda7471d5ba36c2c6
 run 1/20  PASS  flaky-not-rerun: 3 assertions passed
   pass  calls       loads-beau-mode: ran: toolu_016X68auWso2mn4Vir6THRxC

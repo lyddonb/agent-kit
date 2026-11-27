@@ -43,7 +43,7 @@
   "next": [
     {
       "item": "Merge the stacked wording PR: a test someone calls known flaky is still red",
-      "source": "this case: main's wording left the flake red in 2 of 20 runs; Beau's answer \"Reword, then 20 runs\"",
+      "source": "this case: main's wording left the flake red in 2 of 20 runs; Beau chose \"Strengthen the wording\"; the 20-run sets follow a later answer relayed as \"Reword, then 20 runs\"",
       "why_now": "With the new wording the case passed 20 of 20, and C3 is checked there.",
       "impact": "An agent told a test is 'known flaky' fixes it or says why it can't, instead of leaving it red."
     }
