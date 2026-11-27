@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "goal": "Catch a commit made without proving the change works, at the moment it happens: log it in observe, stop it in enforce (agent-kit R32, run 2026-11-27-r32-hook-gates, unit 3).",
+  "changed": [
+    "bstack ships a Claude Code PreToolUse hook on Bash, hooks/commit_gate.py. A git commit (with -C, -c, env prefixes or after && included; commit-tree not) in a session that ran no verify-work, verify-<app> skill, interrogate, code-review, review subagent or second opinion since its last commit that went through is judged.",
+    "The mode comes from policy.checks.commit-gate in ~/.agents/policy.yaml and the repo's .agents/policy.yaml, the stricter of the two, observe when neither names it. Observe logs a would-block lesson to the weekly flags run and allows. Enforce denies twice per commit, then lets the next through and logs why. Off does nothing. Any error allows and prints one line.",
+    "hooks/checks.py holds the mode reader, the per-session state and the flags-run logger, for the Stop hook to share. bstack 0.56.0.",
+    "From the two-model review: a verification counts only once its result arrives without error; quoted text, heredoc bodies and --dry-run are not commits, while a commit on its own line or behind sudo, env, command or a path to git is; modes may be single-quoted, double-quoted, bare or a flow map; ledger calls time out at 8 s; and a repo's own .agents/policy.yaml counts only when its GitHub origin is under identity.human's login."
+  ],
+  "claims": [
+    {
+      "claim": "Run as Claude Code runs it, the hook logs and allows in observe, denies twice then lets through with the reason in enforce, does nothing in off, counts each kind of verification once it finishes without error and no other, ignores an untrusted repo's policy,, restarts its count after a commit lands, judges only git commit, takes the stricter of the two policy files, and fails open on a broken event.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m unittest tests.test_commit_gate (16 tests, system Python 3.9, a fake ledger on PATH)",
+      "commit": "89fcb7f",
+      "record": ".changes/2026-11-27-commit-gate/make-test.txt",
+      "remaining": "No real Claude Code session has hit it yet: the run's unit 5 drives real headless sessions after units 2 and 4 merge."
+    },
+    {
+      "claim": "In real headless Claude Code sessions loading this hook, observe logged one would-block and the commit landed; enforce denied twice, let the third through with the reason logged, and the commit landed.",
+      "verdict": "VERIFIED",
+      "check": "scratchpad probe.sh commit-observe and commit-enforce: claude -p --model haiku --settings pointing PreToolUse at this hook, a scratch repo whose origin is under the policy's login, scratch policy, flags run and state",
+      "commit": "607e876",
+      "record": ".changes/2026-11-27-commit-gate/probe.txt",
+      "remaining": "The Stop hook's probe is in the stop-checks record; the run's close re-runs both after the plugin update."
+    },
+    {
+      "claim": "The tests hold the rules: counting a denied commit as a commit, a third stop, dropping verify-<app> skills, blocking in observe, the weaker mode winning, verification before the last commit counting, and commit-tree counting each turn them red.",
+      "verdict": "VERIFIED",
+      "check": "seven one-line mutants of commit_gate.py and checks.py, each followed by python3 -m unittest tests.test_commit_gate",
+      "commit": "5d0a098",
+      "record": ".changes/2026-11-27-commit-gate/mutants.txt",
+      "remaining": "Seven rules mutated, not every line."
+    },
+    {
+      "claim": "The checklist items this diff fires pass: plugins in step, no comments added, no test weakened.",
+      "verdict": "VERIFIED",
+      "check": "make check versions; comments.py --base origin/main; test_guard.py --base origin/main",
+      "commit": "5d0a098",
+      "record": ".changes/2026-11-27-commit-gate/probes.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "The Stop hook that runs a repo's .agents/checks.yaml when the agent finishes",
+      "source": "run 2026-11-27-r32-hook-gates unit 4 (agent-kit R32)",
+      "why_now": "It shares checks.py, which this unit adds.",
+      "impact": "A red tree goes back to the agent before it is pushed."
+    },
+    {
+      "item": "Decide what counts as verification before commit-gate moves to enforce",
+      "source": "inferred: replayed over this machine's past transcripts, the rule fires on most commits, and most of those followed a test run",
+      "why_now": "Before H14 step 3 (the observe week's enforce decision).",
+      "impact": "Enforce as written would stop most commits Beau's agents make today."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.56.0"
+  }
+}

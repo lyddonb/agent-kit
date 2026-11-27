@@ -1,0 +1,22 @@
+=== commit-observe
+claude exit 0
+--- commits:
+<sha> add mul
+<sha> init
+--- would-block entries:
+commit-gate observe | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit
+--- hook messages the agent saw:
+--- tests now:
+OK
+=== commit-enforce
+claude exit 0
+--- commits:
+<sha> add mul
+<sha> init
+--- would-block entries:
+commit-gate deny | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit
+commit-gate deny | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit
+commit-gate let-through | no verify-work, verify-<app>, interrogate or review ran in this session since its last commit; let through after 2 stops
+--- hook messages the agent saw:
+--- tests now:
+OK

@@ -1,0 +1,7 @@
+killed: a denied commit counts as a commit
+killed: three stops instead of two
+killed: verify-<app> skills stop counting
+killed: observe blocks like enforce
+killed: the weaker mode wins
+killed: verification before the last commit still counts
+killed: commit-tree counts as a commit

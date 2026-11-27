@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.56.0 (2026-11-27)
+
+- New commit gate (Claude Code hook). When a session runs `git commit` without having run verify-work, a `verify-<app>` skill, interrogate or a review since its last commit, the gate acts on the mode `policy.checks.commit-gate` sets in `~/.agents/policy.yaml` or the repo's `.agents/policy.yaml`. In `observe`, the default, it lets the commit through and appends a would-block lesson to this machine's weekly flags run (`~/.agents/flags.yaml`). In `enforce` it denies the commit with the reason. After two denials since the last commit it lets the next one through and records why. In `off` it does nothing. Any error inside the hook lets the commit through. A verification counts once it finishes without error. Quoted text and heredoc bodies are not read as commits. A repo's own `.agents/policy.yaml` counts only when its GitHub `origin` is yours.
+- Try: `Set `checks: {commit-gate: enforce}` under `policy:` in a profile, run agentfiles sync, and commit without verifying.`
+
 ## bstack 0.55.0 (2026-11-27)
 
 - `check-plan.py` allows a leading `Evidence:` on a plan line (the same label product-phase specs require), so copying phase evidence into plan boxes no longer fails as a mid-sentence colon. A real mid-sentence colon still fails, and the message names the rewrite or the Evidence: form.
