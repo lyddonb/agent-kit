@@ -4,7 +4,7 @@
   "changed": [
     "bstack ships a Claude Code PreToolUse hook on Bash, hooks/commit_gate.py. A git commit (with -C, -c, env prefixes or after && included; commit-tree not) in a session that ran no verify-work, verify-<app> skill, interrogate, code-review, review subagent or second opinion since its last commit that went through is judged.",
     "The mode comes from policy.checks.commit-gate in ~/.agents/policy.yaml and the repo's .agents/policy.yaml, the stricter of the two, observe when neither names it. Observe logs a would-block lesson to the weekly flags run and allows. Enforce denies twice per commit, then lets the next through and logs why. Off does nothing. Any error allows and prints one line.",
-    "hooks/checks.py holds the mode reader, the per-session state and the flags-run logger, for the Stop hook to share. bstack 0.56.0.",
+    "hooks/checks.py holds the mode reader, the per-session state and the flags-run logger, for the Stop hook to share. bstack 0.57.0.",
     "From the two-model review: a verification counts only once its result arrives without error; quoted text, heredoc bodies and --dry-run are not commits, while a commit on its own line or behind sudo, env, command or a path to git is; modes may be single-quoted, double-quoted, bare or a flow map; ledger calls time out at 8 s; and a repo's own .agents/policy.yaml counts only when its GitHub origin is under identity.human's login."
   ],
   "claims": [
@@ -56,6 +56,6 @@
     }
   ],
   "release": {
-    "see": "changes.yaml bstack@0.56.0"
+    "see": "changes.yaml bstack@0.57.0"
   }
 }

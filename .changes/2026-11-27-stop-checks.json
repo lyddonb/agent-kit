@@ -5,7 +5,7 @@
     "bstack ships a Claude Code Stop hook, hooks/stop_checks.py. It finds each repo the session changed (one holding a file it edited, or the working folder's repo when it ran a command there) and runs the commands that repo's .agents/checks.yaml lists under stop:, from its root.",
     "It runs only in repos whose GitHub origin is under identity.human's login, so a clone of someone else's repo never runs its own commands. It reruns only when the tree moved (HEAD, the diff, untracked files' content) or after a send-back. Each command has timeout_s; all of them share nine minutes, inside the hook's ten.",
     "policy.checks.stop-checks sets the mode: observe logs a would-block once per unchanged tree; enforce sends the agent back with the last 40 lines of output, twice, then lets the stop through and logs why; off does nothing. Any error allows the stop.",
-    "agent-kit declares its own cheap check, make check, in .agents/checks.yaml. bstack 0.57.0."
+    "agent-kit declares its own cheap check, make check, in .agents/checks.yaml. bstack 0.58.0."
   ],
   "claims": [
     {
@@ -42,6 +42,6 @@
     }
   ],
   "release": {
-    "see": "changes.yaml bstack@0.57.0"
+    "see": "changes.yaml bstack@0.58.0"
   }
 }
