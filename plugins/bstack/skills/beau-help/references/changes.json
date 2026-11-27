@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.53.0",
+      "date": "2026-11-27",
+      "plugin": "bstack",
+      "version": "0.53.0",
+      "changes": [
+        "New Stop hook (Claude Code). When the agent finishes, the hook runs the commands under `stop:` in `.agents/checks.yaml`, from the repo root, in each repo the session changed (one holding a file it edited, or the working folder's repo when it ran a command there). It runs them only in repos whose GitHub `origin` is under the login in your policy's `identity.human`, so a clone of someone else's repo never runs its own commands. It runs again only when the tree moved: HEAD, the diff, or any untracked file. Each command gets `timeout_s` (default 120), and all of them together get nine minutes. If one fails, the hook acts on `policy.checks.stop-checks`. In `observe`, the default, it logs a would-block lesson to the weekly flags run, once per unchanged tree. In `enforce` it sends the agent back with the last 40 lines of the failing output. After two send-backs it lets the stop through and records why. In `off` it does nothing. agent-kit declares `make check`."
+      ],
+      "try": "Add `.agents/checks.yaml` with `stop: [\"make test\"]` to a repo you own, set `checks: {stop-checks: enforce}` under `policy:`, and finish a session that left a test red."
+    },
+    {
       "id": "bstack@0.52.0",
       "date": "2026-11-27",
       "plugin": "bstack",
