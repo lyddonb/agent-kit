@@ -7,7 +7,7 @@
     "product-phase: advance from subscribed merge events; continuous rebase for shared plan/spec files; restamp receipts when a probe changes; run check-plan before push; land post-merge review debt as the next plan unit.",
     "feature: reshoot review-gate media after interrogate-driven code fixes, then stop at merge-ready.",
     "beau-mode Start every task reads Project preferences.md, lists self-hosted workers, and treats a shared local checkout as a mutex; Green means every check includes post-merge deploy.",
-    "bstack 0.53.0."
+    "bstack 0.54.0."
   ],
   "claims": [
     {
@@ -35,13 +35,13 @@
       "impact": "Plan PRs stop failing local-ci on Evidence: boxes without hand rewrites."
     },
     {
-      "item": "Bump agentfiles.lock mine pin after bstack 0.53.0 merges",
+      "item": "Bump agentfiles.lock mine pin after bstack 0.54.0 merges",
       "source": "inferred",
       "why_now": "Installed skills stay on the old pin until agentfiles update.",
       "impact": "Cloud and local agents load the new playbook text."
     }
   ],
   "release": {
-    "see": "changes.yaml bstack@0.53.0"
+    "see": "changes.yaml bstack@0.54.0"
   }
 }

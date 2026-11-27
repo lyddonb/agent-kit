@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.55.0 (2026-11-27)
+
+- `check-plan.py` allows a leading `Evidence:` on a plan line (the same label product-phase specs require), so copying phase evidence into plan boxes no longer fails as a mid-sentence colon. A real mid-sentence colon still fails, and the message names the rewrite or the Evidence: form.
+- Try: `Put `Evidence: .verify/foo` under a plan checkbox and run check-plan.py on the plan.`
+
 ## bstack 0.54.0 (2026-11-27)
 
 - beau-mode playbooks encode studyhall reflect lessons: merge-ready waits for review-gate media and finished interrogate (reshoot media after code fixes); re-fetch live PR state before any merge-ready claim; open a PR only when linked to an active tracker task; after merge to main, check deploy once so green PR CI does not hide a red main deploy; parallel PRs that share plan or phase-spec files rebase continuously instead of serializing; product-phase advances from subscribed merge events, restamps receipts when a probe changes, runs check-plan before push, and lands post-merge review debt as the next plan unit; Start every task reads Project preferences.md, lists self-hosted workers, and treats a shared local checkout as a mutex.

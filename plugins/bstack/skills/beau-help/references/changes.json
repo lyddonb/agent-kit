@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.55.0",
+      "date": "2026-11-27",
+      "plugin": "bstack",
+      "version": "0.55.0",
+      "changes": [
+        "`check-plan.py` allows a leading `Evidence:` on a plan line (the same label product-phase specs require), so copying phase evidence into plan boxes no longer fails as a mid-sentence colon. A real mid-sentence colon still fails, and the message names the rewrite or the Evidence: form."
+      ],
+      "try": "Put `Evidence: .verify/foo` under a plan checkbox and run check-plan.py on the plan."
+    },
+    {
       "id": "bstack@0.54.0",
       "date": "2026-11-27",
       "plugin": "bstack",

@@ -1,0 +1,20 @@
+## Proof: check-plan Evidence: allowlist
+
+Past bad form (studyhall P3-01 commit 9b6d13d, hand-patched in 2d36d44):
+```
+- [x] Show this plan to the human, then stop. Start only on an explicit go.
+  Evidence: Beau plan go 2026-11-26 (Project "do both" with P8-02); H19 Done.
+```
+
+### origin/main check-plan on past Evidence: form
+exit problems with colon: 1
+- mid-sentence colon
+
+### this branch check-plan on past Evidence: form
+problems: 0
+[]
+
+### this branch still fails true mid-sentence colon (Note: ...)
+- tmp/tmpugmlswqs/plan.md:3: mid-sentence colon (rewrite without ": ", or put plan evidence on its own line starting with "Evidence: ")
+
+unittest tests.test_check_plan: see make unit
