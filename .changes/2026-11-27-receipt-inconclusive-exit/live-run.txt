@@ -1,0 +1,20 @@
+# agent-ledger main 6dea4a6 as ledger; scratch repo, three criteria, probe exits 2, 2, 0
+$ ledger receipts 2026-11-27-live
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C1 | INCONCLUSIVE | `sh -c 'echo UNJUDGEABLE: plugin did not load; exit 2'` (exit 2) | `3ce1aca` | `.evidence/2026-11-27-live/p1-c1.txt sha256:4cb6c93c185b7a8af889277895d775e40c5c1c4b94d4dda0623fd193af19ee89` | seq 2 |
+| P1-C2 | NOT VERIFIED | `sh -c 'echo UNJUDGEABLE: plugin did not load; exit 2'` (exit 2) | `3ce1aca` | `.evidence/2026-11-27-live/p1-c2.txt sha256:4cb6c93c185b7a8af889277895d775e40c5c1c4b94d4dda0623fd193af19ee89` | seq 3 |
+| P1-C3 | VERIFIED | `sh -c 'echo PASS; exit 0'` (exit 0) | `3ce1aca` | `.evidence/2026-11-27-live/p1-c3.txt sha256:c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431` | seq 4 |
+
+$ ledger verify .audit/runs/2026-11-27-live
+ok 2026-11-27-live: 4 entries, head seq 4 a538b49eb3ac9944c2acad75577eeaa629bbce8a128f26a48f05429958eb7a76
+note: chain-only check. It can't detect entries cut from the end or a rewritten suffix with recomputed hashes; seals and `verify --base` close that (M0 unit 4).
+
+# verification entries: summary, exit, why
+P1-C1 INCONCLUSIVE | exit 2 | why: probe exited 2; exit 2 says nothing (--inconclusive-exit)
+P1-C2 NOT VERIFIED | exit 2 | why: probe exited 2
+P1-C3 VERIFIED | exit 0 | why: probe exited 0
+
+# C1 and C3 ticked, then check-product.py --receipts 2026-11-27-live --base HEAD~1 (receipt lines only)
+docs/phases/P1-harness.md:5: P1-C1: its last receipt says INCONCLUSIVE, not VERIFIED
+check-product: repo: 13 problem(s), 0 draft marker(s) awaiting confirmation, receipts: 2 newly checked, 1 backed

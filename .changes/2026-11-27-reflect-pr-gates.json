@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goal": "Turn a reflect pass on one session into skill edits so future agents open a PR only when it is finished, keep owner-machine figures out of public repos, raise an impossible done-when before building, and test checkers on a hand-built fail case.",
+  "changed": [
+    "beau-mode/SKILL.md step 2: replace a todo list written before beau-mode loaded, and expand a playbook the matched one names (Opening a PR) at once.",
+    "beau-mode/playbooks/opening-a-pr.md step 5: in a public repo, run leak-check and strip figures and paths from your own machine or a private repo; step 8: open only after every step and review, and send later fixes to a new PR.",
+    "beau-mode/playbooks/prototype.md step 7: say when the evidence shows the done-when can't be met, and propose a rewording before Feature.",
+    "verify-work/SKILL.md step 5: check a checker on a pass case and a hand-built fail case.",
+    "bstack 0.53.0 in kit.yaml and changes.yaml, and the generated files."
+  ],
+  "claims": [
+    {
+      "claim": "The kit's generators and checks pass with the edits.",
+      "verdict": "VERIFIED",
+      "check": "make gen validate claude-validate (exit 0, 0 errors, 0 warnings), make check, make versions, make unit (1498 tests OK)",
+      "commit": "2aaf5a6f47fa",
+      "record": ".changes/2026-11-27-reflect-pr-gates/checks.txt",
+      "remaining": ""
+    },
+    {
+      "claim": "Agents following the edited text open PRs only when finished, raise impossible done-whens before building, and test checkers on a hand-built fail case.",
+      "verdict": "UNCHECKED",
+      "check": "No Eval playbook run: the edits add sentences to existing steps, and the session that produced them is the only case so far.",
+      "commit": "2aaf5a6f47fa",
+      "record": "",
+      "remaining": "Watch the next sessions; a repeat of any of these mistakes after this release is a flag on beau-mode."
+    }
+  ],
+  "next": [
+    {
+      "item": "A leak-check mode or pre-push hook that fails on own-machine figures and home paths in public repos.",
+      "source": "reflect backlog, routed to the correct skill",
+      "why_now": "It is the third time figures reached a public push, and leak-check skips numbers by design.",
+      "impact": "Private figures stop before the first push instead of after merge, when a commit message can no longer change."
+    },
+    {
+      "item": "A roadmap trigger reader for 'what's next' (a --roadmap mode on waiting.py).",
+      "source": "reflect backlog, routed to the correct skill",
+      "why_now": "Ranking across five roadmaps took about fifteen hand-run commands, twice in one session.",
+      "impact": "Each 'what's next' starts from one listing of open entries, their dependencies and trigger text."
+    }
+  ],
+  "release": {
+    "note": "bstack 0.53.0: beau-mode expands Opening a PR up front, PRs open only once finished, public repos get a leak and own-machine figure check, prototypes raise an impossible done-when early, and verify-work tests a checker on a hand-built fail case."
+  }
+}

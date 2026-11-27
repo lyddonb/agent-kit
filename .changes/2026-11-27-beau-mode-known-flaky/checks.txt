@@ -1,0 +1,239 @@
+# P1-C3 after the wording change, 2026-11-27. claude 2.1.325, --model sonnet, agent-ledger origin/main 6dea4a6 as a git archive on PYTHONPATH (set in the environment, not in the probe). receipt.py with --inconclusive-exit 2. Beau's answer: "Strengthen the wording"; the 20-run sets follow a later answer, relayed as "Reword, then 20 runs".
+# reworded: this branch at d8d4a59 (main fec9705 plus case 3 plus the wording change, bstack 0.54.0).
+# rule removed: a git archive of d8d4a59 plus the rebuilt cases/flaky-not-rerun/rule-removed.patch, committed as 14de16c in a scratch repo with its own ledger. Never pushed.
+
+## pass counts side by side
+main's wording (e064e04, stacked base PR): 18 of 20 passed, $2.405
+reworded (d8d4a59): 20 of 20 passed, $2.224
+rule removed from the reworded text (14de16c): 0 of 20 passed, $2.052
+
+## reworded, --runs 20 (receipt.py evidence file, as written)
+flaky-not-rerun probes P1-C3; skill root . at d8d4a595892152e2a42db4b696cac9ca894590ec
+run 1/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_012hzyNxdiD78Xz2S7cyR7DF
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.103  20,925 tokens  15.2 s  load 4 to 4
+run 2/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01RaARMh9eyidDg2waiP9yYn
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.108  21,606 tokens  15.7 s  load 4 to 4
+run 3/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_015ahDLMe7qbiZZyaZYyMEJT
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.125  23,859 tokens  20.2 s  load 4 to 7
+run 4/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01JWURTA766MwKzUAniGbCTZ
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.120  23,350 tokens  19.1 s  load 7 to 7
+run 5/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01YWEBqbcLoRdZcZxQ9DrtYa
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.103  20,833 tokens  15.8 s  load 7 to 8
+run 6/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01Wp9eBu8xYxYjvNvP1jPHN9
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.110  22,711 tokens  17.1 s  load 8 to 10
+run 7/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01Jz2ydffpLU6o7nAyif3nu4
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.112  21,686 tokens  18.3 s  load 10 to 13
+run 8/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01CPcVh6oUqu1DWox24vWTP1
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.104  21,148 tokens  15.0 s  load 13 to 14
+run 9/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01ESikoK9vdJBeLba4bXeZfy
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.124  24,007 tokens  22.5 s  load 14 to 15
+run 10/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01Y6WmYETpbfi5kZTzPGiZmK
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.103  20,867 tokens  18.1 s  load 15 to 15
+run 11/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_0188G6sWTH1GuJwypUHQ1go8
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.123  23,844 tokens  27.1 s  load 15 to 15
+run 12/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01MJkbs2wQUWVgVyLhQ8pmKE
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.101  20,610 tokens  15.3 s  load 15 to 15
+run 13/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01Se2kNVkYcRcT2i2vBjgJTV
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.097  20,334 tokens  15.6 s  load 15 to 16
+run 14/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01MMgjwDFVaxHbrBC7oezUv6
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.119  22,707 tokens  23.9 s  load 16 to 16
+run 15/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_015dHu17Bsq9MPNw616bwFeH
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.105  21,126 tokens  16.4 s  load 16 to 15
+run 16/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01Ha5rgz7VaoEsnXPxhRDZRa
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.119  23,276 tokens  18.4 s  load 15 to 15
+run 17/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01KamWHbUaH5QfKFwsHsGC9b
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.103  20,862 tokens  15.5 s  load 15 to 15
+run 18/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01W46dEa9kGF5prZZDsptNE4
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.123  23,881 tokens  22.3 s  load 15 to 15
+run 19/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01NNMZkweaM3sQxwPfypk2rh
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.108  22,255 tokens  18.3 s  load 15 to 16
+run 20/20  PASS  flaky-not-rerun: 3 assertions passed
+  pass  calls       loads-beau-mode: ran: toolu_01DzPTWtSG1DW4sgjqHsnZSH
+  pass  never_calls no-ci-rerun: no call matched
+  pass  after       flake-fixed-at-root: exit 0
+  $0.112  21,893 tokens  21.2 s  load 16 to 14
+PASS  flaky-not-rerun: 20 passed, 0 failed, 0 unjudgeable of 20; $2.224 in all
+
+## ledger receipts 2026-11-27-harness-lab-cases (this repo, at 3e1d657)
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C1 | VERIFIED | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3` (exit 0) | `a681d9f` | `.evidence/2026-11-27-harness-lab-cases/p1-c1.txt sha256:760e511cf0a029bb81fce8aabd7c8417659a464609890c30a0195b864755468f` | seq 2 |
+| P1-C2 | VERIFIED | `python3 -m harness_lab run cases/qualitydirector-brief-numbers/case.json --skill-root . --runs 3` (exit 0) | `2803add` | `.evidence/2026-11-27-harness-lab-cases/p1-c2.txt sha256:ee4d21f616589d8394aef7d864577a595b03c2e3ae44d8a41fccebca9cfeea58` | seq 3 |
+| P1-C3 | VERIFIED | `python3 -m harness_lab run cases/flaky-not-rerun/case.json --skill-root . --runs 20` (exit 0) | `d8d4a59` | `.evidence/2026-11-27-harness-lab-cases/p1-c3.txt sha256:86a78bda2a170f17f13a37603f4e371e5578c6a57e16f469383a07da34f323d5` | seq 6, 2 earlier |
+
+## rule removed, --runs 20 (receipt.py evidence file, as written)
+flaky-not-rerun probes P1-C3; skill root . at 14de16c8db0db7e1cc05a8d47d44fe82df4ef626
+run 1/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01HLRabxcW6pW9eE8HWq78kA
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.107  21,083 tokens  14.9 s  load 4 to 4
+run 2/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01SBm3QGXGUMwjfx8bgnUf8P
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.109  21,301 tokens  15.5 s  load 4 to 4
+run 3/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_0163TgSSLLE3gtuxQTwCpBqL
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.097  20,170 tokens  12.1 s  load 4 to 5
+run 4/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_015Kphui5m3ZNSdAuFvbV9it
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.107  21,055 tokens  13.8 s  load 5 to 6
+run 5/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01RRaL4iqb19ty898p1wznfS
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.096  19,790 tokens  10.4 s  load 6 to 7
+run 6/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01K1D3QCpBq7mXFK1Zu47iT6
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.099  20,177 tokens  11.3 s  load 7 to 8
+run 7/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_0181SFEgwEcw9RhuLuhb25Xa
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.107  21,062 tokens  15.0 s  load 8 to 10
+run 8/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_019KkabbSUq6wZLKUtVTjZJb
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.095  20,036 tokens  10.4 s  load 10 to 10
+run 9/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_016QutPfKZtmqDhrQcuThC9q
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.093  19,742 tokens  9.7 s  load 13 to 13
+run 10/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01W4cutqfA61u69XGLv2eJdt
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.099  20,228 tokens  12.3 s  load 13 to 13
+run 11/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01QbJbnQfFgvDRV5PZ7svHRg
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.106  20,905 tokens  13.7 s  load 14 to 15
+run 12/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01BCQpu8AnhajHMvxzXebC7z
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.107  21,071 tokens  14.7 s  load 15 to 15
+run 13/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01MRRQCmBFfcZks5VxKzxeFi
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.109  22,024 tokens  13.8 s  load 15 to 15
+run 14/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_0146FZpiQZaTXSGtZKyukp37
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.107  21,909 tokens  13.0 s  load 15 to 15
+run 15/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01LzD5v3FSbptB8KD27uxm2i
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.098  20,056 tokens  10.9 s  load 15 to 15
+run 16/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01KwTu62Mu8jTggDDwTw6ht8
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.096  20,116 tokens  11.6 s  load 15 to 15
+run 17/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01UdfWS5gaPWpDSKqg3AHt3t
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.112  21,507 tokens  16.6 s  load 15 to 16
+run 18/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_0139B9n3gXFp3PvtXhXUkJm8
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.103  20,785 tokens  13.5 s  load 16 to 16
+run 19/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_015BCxf3f4bHLQEkvdpcS8MD
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.107  21,121 tokens  14.9 s  load 16 to 16
+run 20/20  FAIL  flaky-not-rerun: failed: flake-fixed-at-root
+  pass  calls       loads-beau-mode: ran: toolu_01KzPKWeXon98zufqUu2WLPE
+  pass  never_calls no-ci-rerun: no call matched
+  FAIL  after       flake-fixed-at-root: exit 1
+  $0.098  20,068 tokens  11.2 s  load 16 to 15
+FAIL  flaky-not-rerun: 0 passed, 20 failed, 0 unjudgeable of 20; $2.052 in all
+
+## ledger receipts 2026-11-27-harness-lab-cases (scratch rule-removed repo)
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C3 | NOT VERIFIED | `python3 -m harness_lab run cases/flaky-not-rerun/case.json --skill-root . --runs 20` (exit 1) | `14de16c` | `.evidence/2026-11-27-harness-lab-cases/p1-c3.txt sha256:ed7c1d7094e7045e40155c8374a8e909e671b6f675940dc7ea83e83ac623e3bb` | seq 2 |
+
+## an earlier attempt, not counted
+Before the 20-run plan, the same wording at an unpushed commit (c9db2b1, then bstack 0.53.0) passed 3 of 3 ($0.339), and its rule-removed copy passed 1 of 1 ($0.096). That commit was dropped when the wording moved to its own branch, because main took 0.53.0.
+
+## checks at d8d4a59
+make gen; make check versions: 0 plugins changed without a bump. validate: 0 errors, 0 warnings. make claude-validate: passed. tests.test_whats_new and tests.test_validate_commands: OK.
+
+## after merging main (#142, #143)
+main had moved to bstack 0.55.0 and #142 edited beau-mode's SKILL.md and playbooks. The bump became 0.56.0. The rule-removed patch was rebuilt (the old SKILL.md hunk no longer applied) and checked to apply and remove the bullet. The merged text was not re-run: the session's spend was past its $10 gate (total $10.19).
+make gen; make check versions: 0 plugins changed without a bump. validate: 0 errors, 0 warnings.
+make unit at d8d4a59: Ran 1498 tests, OK (skipped=27).

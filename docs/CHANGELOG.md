@@ -3,6 +3,42 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.58.0 (2026-11-27)
+
+- New Stop hook (Claude Code). When the agent finishes, the hook runs the commands under `stop:` in `.agents/checks.yaml`, from the repo root, in each repo the session changed (one holding a file it edited, or the working folder's repo when it ran a command there). It runs them only in repos whose GitHub `origin` is under the login in your policy's `identity.human`, so a clone of someone else's repo never runs its own commands. It runs again only when the tree moved: HEAD, the diff, or any untracked file. Each command gets `timeout_s` (default 120), and all of them together get nine minutes. If one fails, the hook acts on `policy.checks.stop-checks`. In `observe`, the default, it logs a would-block lesson to the weekly flags run, once per unchanged tree. In `enforce` it sends the agent back with the last 40 lines of the failing output. After two send-backs it lets the stop through and records why. In `off` it does nothing. agent-kit declares `make check`.
+- Try: `Add `.agents/checks.yaml` with `stop: ["make test"]` to a repo you own, set `checks: {stop-checks: enforce}` under `policy:`, and finish a session that left a test red.`
+
+## bstack 0.57.0 (2026-11-27)
+
+- New commit gate (Claude Code hook). When a session runs `git commit` without having run verify-work, a `verify-<app>` skill, interrogate or a review since its last commit, the gate acts on the mode `policy.checks.commit-gate` sets in `~/.agents/policy.yaml` or the repo's `.agents/policy.yaml`. In `observe`, the default, it lets the commit through and appends a would-block lesson to this machine's weekly flags run (`~/.agents/flags.yaml`). In `enforce` it denies the commit with the reason. After two denials since the last commit it lets the next one through and records why. In `off` it does nothing. Any error inside the hook lets the commit through. A verification counts once it finishes without error. Quoted text and heredoc bodies are not read as commits. A repo's own `.agents/policy.yaml` counts only when its GitHub `origin` is yours.
+- Try: `Set `checks: {commit-gate: enforce}` under `policy:` in a profile, run agentfiles sync, and commit without verifying.`
+
+## bstack 0.56.0 (2026-11-27)
+
+- beau-mode no longer lets a test called "known flaky" stay red. Fix it in the task, or say why you can't. A harness-lab case caught the gap: told a test was a known flake that a re-run turns green, an agent left it red in 2 of 20 runs.
+
+## bstack 0.55.0 (2026-11-27)
+
+- `check-plan.py` allows a leading `Evidence:` on a plan line (the same label product-phase specs require), so copying phase evidence into plan boxes no longer fails as a mid-sentence colon. A real mid-sentence colon still fails, and the message names the rewrite or the Evidence: form.
+- Try: `Put `Evidence: .verify/foo` under a plan checkbox and run check-plan.py on the plan.`
+
+## bstack 0.54.0 (2026-11-27)
+
+- beau-mode playbooks encode studyhall reflect lessons: merge-ready waits for review-gate media and finished interrogate (reshoot media after code fixes); re-fetch live PR state before any merge-ready claim; open a PR only when linked to an active tracker task; after merge to main, check deploy once so green PR CI does not hide a red main deploy; parallel PRs that share plan or phase-spec files rebase continuously instead of serializing; product-phase advances from subscribed merge events, restamps receipts when a probe changes, runs check-plan before push, and lands post-merge review debt as the next plan unit; Start every task reads Project preferences.md, lists self-hosted workers, and treats a shared local checkout as a mutex.
+- Try: `/beau-mode open a PR for an active tracker task after review-gate media`
+
+## bstack 0.53.0 (2026-11-27)
+
+- beau-mode's first steps now replace a todo list written before it loaded, and expand any playbook the matched one names (Opening a PR) into its own steps at once, so its commit rules apply from the first commit.
+- Opening a PR now says a PR is opened only after every check and review is done, because a human may merge it at once, and that a later fix goes in a new PR. In a public repo it runs `leak-check` and removes figures and paths from your own machine before pushing.
+- The Prototype playbook raises a done-when the evidence shows can't be met before the build starts, with a proposed rewording.
+- verify-work checks a checker (a lint, doctor or validator) on a case it must pass and a hand-built case it must fail.
+
+## bstack 0.52.0 (2026-11-27)
+
+- verify-work's `receipt.py` takes `--inconclusive-exit N`, repeatable, for a probe with an exit code that means the run said nothing. A listed code is recorded as INCONCLUSIVE instead of NOT VERIFIED, with the exit code kept in the receipt and named in the entry's `why`. Pass `--inconclusive-exit 2` when the probe is harness-lab, whose exit 2 (UNJUDGEABLE) means the plugin didn't load, the budget ran out or the stream had no calls, so a broken setup no longer reads as a broken skill in `ledger receipts`. No code is inconclusive by default, and exit 0 can't be listed.
+- Try: `receipt.py --run RUN --actor ACTOR --spec SPEC --criterion C1 --inconclusive-exit 2 -- sh -c 'exit 2'`
+
 ## bstack 0.51.0 (2026-11-26)
 
 - New parallel-next skill finds the next planned work that can run alongside other sessions and starts the items you pick, each in its own session that begins with `/beau-mode`. Its `scripts/inflight.py` reads every worktree, dirty checkout and open pull request (drafts included), plus the live sessions your tool lists. It then checks each candidate's expected files against them. A candidate is `taken` when a claim carries its roadmap id, `conflict` on a shared file, `unknown` beside a worktree with no changes yet, `rebase` when it shares only hot files (a file touched by 40% of the last 30 commits, such as a changelog or manifest), and `clear` otherwise. A session living in a workspace's worktree claims its branch's ids in every repo of that workspace. You pick any subset, none included. Each brief fences the session to its files and puts the item's id in its branch, so the next run sees the work is taken.

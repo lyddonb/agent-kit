@@ -9,3 +9,5 @@ node_modules/
 .verify/
 # Local git worktrees made by agents and people
 .worktrees/
+# receipt.py output; the PR change record keeps what a reviewer needs
+.evidence/

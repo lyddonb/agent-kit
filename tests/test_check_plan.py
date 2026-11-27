@@ -80,6 +80,28 @@ class CheckPlanTest(unittest.TestCase):
         self.assertProblem(GOOD.replace("Retries that land", "Note: retries that land"), "mid-sentence colon")
         self.assertProblem(GOOD.replace("Wall time", "<metric>"), "unfilled placeholder")
 
+    def test_evidence_label_is_not_mid_sentence_colon(self):
+        # Real past form from studyhall P3-01 (9b6d13d): product-phase Evidence: under a box.
+        # Before the allowlist, check-plan failed these as mid-sentence colon (hand-patched to
+        # Evidence. in 2d36d44). Same lines must now pass; a true mid-sentence colon still fails.
+        with_evidence = GOOD.replace(
+            "- [ ] Show this plan to the human, then stop. Start only on an explicit go.\n",
+            "- [x] Show this plan to the human, then stop. Start only on an explicit go.\n"
+            "  Evidence: Beau plan go 2026-11-26 (Project \"do both\" with P8-02); H19 Done.\n"
+            "- [x] Start a decision trail with the show-me-your-work skill.\n"
+            "  Evidence: ledger run `2026-11-26-p3-core`.\n"
+            "- [x] Run the **state-machines** skill on session phase.\n"
+            "  Evidence: `packages/core/src/machines/session-phase.md`, `level.md` (0 problems).\n",
+            1,
+        )
+        self.assertEqual(problems(with_evidence), [])
+        still_bad = with_evidence.replace(
+            "Retries that land mid-run no longer write duplicate rows.",
+            "Note: retries that land mid-run no longer write duplicate rows.",
+            1,
+        )
+        self.assertProblem(still_bad, 'mid-sentence colon (rewrite without ": ", or put plan evidence')
+
     def test_sub_block_order(self):
         self.assertProblem(GOOD.replace("**You see.**", "**Seen.**", 1), "sub-blocks are")
 

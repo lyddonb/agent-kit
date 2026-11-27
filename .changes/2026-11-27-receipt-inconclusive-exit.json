@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goal": "Let a probe say which of its exit codes mean 'this run says nothing', so harness-lab's UNJUDGEABLE exit (2) is recorded as INCONCLUSIVE instead of NOT VERIFIED, and a broken setup no longer reads as a broken skill in `ledger receipts` (agent-ledger M3 unit 1).",
+  "changed": [
+    "verify-work's receipt.py takes --inconclusive-exit N, repeatable: a listed exit code gives INCONCLUSIVE, the receipt keeps the exit code, and the entry's why says the code was marked as saying nothing. Exit 0 is refused. No code is inconclusive without the flag.",
+    "verify-work's SKILL.md step 9, references/checklist.md and the script's docstring state the new rule; checklist items take the flag too, since they share the verdict rule.",
+    "bstack 0.52.0."
+  ],
+  "claims": [
+    {
+      "claim": "Against agent-ledger main, a probe exiting 2 with --inconclusive-exit 2 is recorded INCONCLUSIVE, the same probe without the flag NOT VERIFIED, and a probe exiting 0 VERIFIED; `ledger receipts` shows all three with exit codes and `ledger verify` passes.",
+      "verdict": "VERIFIED",
+      "check": "receipt.py in a scratch repo with agent-ledger main (6dea4a6) on PATH as ledger, then ledger receipts and ledger verify",
+      "commit": "219281b",
+      "record": ".changes/2026-11-27-receipt-inconclusive-exit/live-run.txt",
+      "remaining": "A real harness-lab case was not run as the probe; its exit 2 was stood in for by sh -c 'exit 2'."
+    },
+    {
+      "claim": "check-product.py --receipts still refuses a ticked box whose last receipt is INCONCLUSIVE, and backs one whose receipt is VERIFIED.",
+      "verdict": "VERIFIED",
+      "check": "C1 and C3 ticked in the scratch repo, then check-product.py --receipts 2026-11-27-live --base HEAD~1",
+      "commit": "219281b",
+      "record": ".changes/2026-11-27-receipt-inconclusive-exit/live-run.txt",
+      "remaining": "The scratch repo is not a full product scaffold; its other problems are missing scaffold files."
+    },
+    {
+      "claim": "Five new tests fail without the change and pass with it, and the whole suite passes.",
+      "verdict": "VERIFIED",
+      "check": "tests/test_receipt_script.py with AGENT_LEDGER_SRC set to agent-ledger main, before and after; make test and make versions BASE=origin/main",
+      "commit": "219281b",
+      "record": ".changes/2026-11-27-receipt-inconclusive-exit/red-before.txt",
+      "remaining": "CI skips the real-ledger tests (no AGENT_LEDGER_SRC), so in CI only the verdict-rule and refusal tests guard this."
+    }
+  ],
+  "next": [
+    {
+      "item": "Record harness-lab cases with --inconclusive-exit 2",
+      "source": "agent-ledger M3 unit 1, feature PR 4 (in a parallel session)",
+      "why_now": "That PR writes receipts for harness-lab cases, and without the flag an UNJUDGEABLE run is recorded as NOT VERIFIED.",
+      "impact": "A run that couldn't judge the skill shows as INCONCLUSIVE in ledger receipts, so a broken setup isn't read as a broken skill."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.52.0"
+  }
+}

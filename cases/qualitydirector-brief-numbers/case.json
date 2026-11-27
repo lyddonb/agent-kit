@@ -1,0 +1,45 @@
+{
+ "id": "qualitydirector-brief-numbers",
+ "criterion": "P1-C2",
+ "plugin": "plugins/bstack",
+ "fixture": "fixture",
+ "prompt": "The CI runs for week 2026-W46 are already booked in this repo's books. Use the qualitydirector skill to write this week's brief to briefs/2026-11-21.md from briefs/TEMPLATE.md. Do only the summarize and write-the-brief steps of the weekly run: no fetch, no ingest, no git, no pull request. The books repo root is the current directory. If the books give them, the headline should also say the total CI wall time across all repos and the total number of tests across all repos. Do not ask me anything.",
+ "tools": [
+  "Bash",
+  "Read",
+  "Write",
+  "Edit",
+  "Glob",
+  "Grep",
+  "Skill"
+ ],
+ "deny": [
+  "Bash(gh *)",
+  "Bash(git push*)",
+  "Bash(curl *)"
+ ],
+ "calls": [
+  {
+   "id": "loads-qualitydirector",
+   "tool": "Skill",
+   "args": [
+    "skill"
+   ],
+   "match": "qualitydirector"
+  },
+  {
+   "id": "runs-summary-json",
+   "tool": "Bash",
+   "args": [
+    "command"
+   ],
+   "match": "\\bsummary\\b[^\\n;|&]*--json"
+  }
+ ],
+ "after": [
+  {
+   "id": "brief-states-no-total",
+   "run": "test -s briefs/2026-11-21.md && ! grep -Eq '(^|[^0-9])(15[.,]?08[0-9]?|15\\.1|121)([^0-9]|$)' briefs/2026-11-21.md"
+  }
+ ]
+}

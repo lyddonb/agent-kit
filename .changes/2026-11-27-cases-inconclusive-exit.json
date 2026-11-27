@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "goal": "Make the documented way to record a harness-lab case pass --inconclusive-exit 2, so an UNJUDGEABLE run is recorded as INCONCLUSIVE instead of NOT VERIFIED and a broken setup doesn't read as a broken skill.",
+  "changed": [
+    "cases/README.md's receipt command passes --inconclusive-exit 2, and a sentence says what it does: UNJUDGEABLE becomes INCONCLUSIVE with (exit 2) kept, and neither verdict ticks the box."
+  ],
+  "claims": [
+    {
+      "claim": "The receipt command as now written turns the real receipt-before-tick case's PASS into VERIFIED and an UNJUDGEABLE run into INCONCLUSIVE; without the flag the same UNJUDGEABLE run is NOT VERIFIED.",
+      "verdict": "VERIFIED",
+      "check": "receipt.py --inconclusive-exit 2 -- python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . with --runs 1, and with --runs 1 --budget-usd 0.01 for UNJUDGEABLE; read back with ledger receipts, in a scratch clone at 5bac343 with agent-ledger main 48865bf",
+      "commit": "4da821f",
+      "record": ".changes/2026-11-27-cases-inconclusive-exit/real-case.txt",
+      "remaining": "That run used --runs 1, not the --runs 3 the README shows; the ledger runs stayed in the scratch clone, whose merge commit exists nowhere else."
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "cases/ is not part of a plugin, so no plugin version changes."
+  }
+}

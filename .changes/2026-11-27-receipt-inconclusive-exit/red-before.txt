@@ -1,0 +1,8 @@
+# tests/test_receipt_script.py with the new tests, before the receipt.py change (AGENT_LEDGER_SRC = agent-ledger main)
+ERROR: test_a_listed_exit_makes_a_failing_item_inconclusive (test_receipt_script.ItemRealLedgerTest)
+ERROR: test_an_exit_the_probe_marks_as_saying_nothing_is_inconclusive (test_receipt_script.VerdictRuleTest)
+FAIL: test_a_listed_exit_is_inconclusive_and_keeps_its_exit_code (test_receipt_script.RealLedgerTest)
+FAIL: test_an_exit_not_listed_stays_not_verified (test_receipt_script.RealLedgerTest)
+FAIL: test_exit_0_cannot_be_marked_inconclusive (test_receipt_script.RefusalTest)
+Ran 50 tests in 74.116s
+FAILED (failures=3, errors=2)
