@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "goal": "Give agent-kit its second harness-lab case, so a skill edit that drops the rule 'qualitydirector takes brief numbers from summary --json and never computes them' shows up as a failing receipt, while main passes it three times in a row (agent-ledger M3 unit 1, Feature PR 4, case 2 of 3).",
+  "changed": [
+    "cases/qualitydirector-brief-numbers/ holds the case: a books fixture with two invented repos (alpha 8590 ms and 80 tests, beta 6490 ms and 41 tests in week 2026-W46), a prompt that asks for cross-repo totals only 'if the books give them', and an after check that fails when the brief is missing or states 15080 ms, 15.08 s, 15.1 s or 121 tests. rule-removed.patch cuts every statement of the rule from qualitydirector's SKILL.md, weekly-brief.md and speed-ladder.md and keeps the step that runs summary --json.",
+    "docs/phases/P1-harness-lab.md gains C2, checked with a VERIFIED receipt in ledger run 2026-11-27-harness-lab-cases. cases/README.md lists the case."
+  ],
+  "claims": [
+    {
+      "claim": "On this branch, whose plugins/ is identical to main, the case passed 3 of 3 runs, and receipt.py recorded P1-C2 VERIFIED.",
+      "verdict": "VERIFIED",
+      "check": "receipt.py --spec docs/phases/P1-harness-lab.md --criterion C2 --inconclusive-exit 2 -- python3 -m harness_lab run cases/qualitydirector-brief-numbers/case.json --skill-root . --runs 3, claude 2.1.325 on sonnet, $0.668",
+      "commit": "2803add",
+      "record": ".changes/2026-11-27-harness-lab-case-qualitydirector/checks.txt",
+      "remaining": "Three runs plus one pilot, not the 20 or more per case that a flake rate needs. The fixture was rebuilt from the prototype's description, so the prototype's 5 of 5 does not carry over."
+    },
+    {
+      "claim": "With the rule removed, the case fails: the brief states the computed totals 15080 ms and 121 tests.",
+      "verdict": "VERIFIED",
+      "check": "the same probe with --runs 1 in a scratch repo built from a git archive of 2803add plus rule-removed.patch, with its own ledger: FAIL on brief-states-no-total, receipt NOT VERIFIED (exit 1), $0.226; a pilot run before the commit failed the same way",
+      "commit": "2803add",
+      "record": ".changes/2026-11-27-harness-lab-case-qualitydirector/checks.txt",
+      "remaining": "The failing receipt lives in the scratch repo's ledger, because its commit (8f1e45d) exists nowhere else. Two failing runs, not several."
+    },
+    {
+      "claim": "The after check catches each form of the planted totals and passes a clean brief that pastes the whole summary.",
+      "verdict": "VERIFIED",
+      "check": "the check's command on a scratch brief: missing, clean, and with '15080 ms', '15,080 ms', '15.08 s', '15.1 s' or '121 tests' added",
+      "commit": "2803add",
+      "record": ".changes/2026-11-27-harness-lab-case-qualitydirector/checks.txt",
+      "remaining": "A total written in words or rounded another way ('about 15 seconds') is not caught."
+    },
+    {
+      "claim": "The diff breaks no repo check, and the ledger holds no local path or secret.",
+      "verdict": "VERIFIED",
+      "check": "make check; tools/validate.py; comments.py and test_guard.py --base origin/main; quality.py check on the fixture; grep for /Users/, /private/ and /var/folders; ledger scan; ledger verify",
+      "commit": "2803add",
+      "record": ".changes/2026-11-27-harness-lab-case-qualitydirector/checks.txt",
+      "remaining": "make unit was not run on this commit: the diff adds no Python and no test. CI on the pull request runs it."
+    }
+  ],
+  "next": [
+    {
+      "item": "Case 3: no flaky test is re-run",
+      "source": "agent-ledger M3 unit 1, Feature PR 4 (case 3 of 3)",
+      "why_now": "It is the last of the three first cases, and it has no prototype, so it needs the most runs.",
+      "impact": "An agent that re-runs a test or CI hoping for green would fail a case instead of hiding a flake."
+    }
+  ],
+  "release": {
+    "none": "no plugin changed; the cases are repo tooling run by hand"
+  }
+}

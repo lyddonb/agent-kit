@@ -1,0 +1,54 @@
+# P1-C2 receipts, 2026-11-27. claude 2.1.325, --model sonnet, agent-ledger origin/main 6dea4a6 as a git archive on PYTHONPATH (set in the environment, not in the probe). receipt.py with --inconclusive-exit 2 (PR 135).
+# main: this branch at 2803add, whose plugins/ is identical to origin/main 1a41e53.
+# rule removed: a git archive of 2803add plus cases/qualitydirector-brief-numbers/rule-removed.patch, committed as 8f1e45d in a scratch repo with its own ledger. Never pushed.
+
+## pilots, before 2803add (runner alone, --runs 1, not receipts)
+rule removed: FAIL, brief-states-no-total exit 1, $0.227. The headline said: 'Across both repos CI wall time was 15080 ms and the latest runs hold 121 tests in total'.
+main: PASS, 3 assertions, $0.219. The headline said: 'The summary has no total CI wall time or total test count across all repos, so neither is stated'.
+
+## after check, hand-tested on a scratch brief
+missing brief: exit 1. clean brief with the whole summary pasted: exit 0. '15080 ms', '15,080 ms', '15.08 s', '15.1 s', '121 tests' each added: exit 1.
+
+## main, --runs 3 (receipt.py evidence file, as written)
+qualitydirector-brief-numbers probes P1-C2; skill root . at 2803add130d45fef7e6699de46519d3bdb27be31
+run 1/3  PASS  qualitydirector-brief-numbers: 3 assertions passed
+  pass  calls       loads-qualitydirector: ran: toolu_01XNyvTEZ9ufNE1UBKkjpoQ7
+  pass  calls       runs-summary-json: ran: toolu_01BLFVH8nKimaLc1PS1RoxvA, toolu_01Qe5zTBzjAbHXFf6oeaTfTh
+  pass  after       brief-states-no-total: exit 0
+  $0.226  49,101 tokens  17.9 s  load 10 to 8
+run 2/3  PASS  qualitydirector-brief-numbers: 3 assertions passed
+  pass  calls       loads-qualitydirector: ran: toolu_015eiykA5S1DA4FGCu9WWd6n
+  pass  calls       runs-summary-json: ran: toolu_01WvWv4MkZz51qRKPMU6P52Z, toolu_01Bw9XcAndzBph4YRu7pW4pY, toolu_01XTrGcJsaiwpQhV5ax6f8GF
+  pass  after       brief-states-no-total: exit 0
+  $0.221  47,587 tokens  20.3 s  load 8 to 9
+run 3/3  PASS  qualitydirector-brief-numbers: 3 assertions passed
+  pass  calls       loads-qualitydirector: ran: toolu_016ifdnirjW3E3b69XE486Pt
+  pass  calls       runs-summary-json: ran: toolu_01MWyhgVVrLu7WPFXvJQtx54, toolu_01WNerZ628dV9GxdqkqUV3gU
+  pass  after       brief-states-no-total: exit 0
+  $0.221  47,370 tokens  21.2 s  load 9 to 8
+PASS  qualitydirector-brief-numbers: 3 passed, 0 failed, 0 unjudgeable of 3; $0.668 in all
+
+## ledger receipts 2026-11-27-harness-lab-cases (this repo)
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C1 | VERIFIED | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3` (exit 0) | `a681d9f` | `.evidence/2026-11-27-harness-lab-cases/p1-c1.txt sha256:760e511cf0a029bb81fce8aabd7c8417659a464609890c30a0195b864755468f` | seq 2 |
+| P1-C2 | VERIFIED | `python3 -m harness_lab run cases/qualitydirector-brief-numbers/case.json --skill-root . --runs 3` (exit 0) | `2803add` | `.evidence/2026-11-27-harness-lab-cases/p1-c2.txt sha256:ee4d21f616589d8394aef7d864577a595b03c2e3ae44d8a41fccebca9cfeea58` | seq 3 |
+
+## rule removed, --runs 1 (receipt.py evidence file, as written)
+qualitydirector-brief-numbers probes P1-C2; skill root . at 8f1e45d82954b0d998b94feb434c6ab2ae5bdef0
+run 1/1  FAIL  qualitydirector-brief-numbers: failed: brief-states-no-total
+  pass  calls       loads-qualitydirector: ran: toolu_01XSsQyrkui955SQ69MeMavL
+  pass  calls       runs-summary-json: ran: toolu_01FhnLN3yVEoBY2ws9fWVf29, toolu_014uvWvizsy7BiL5A4FMvYFF
+  FAIL  after       brief-states-no-total: exit 1
+  $0.226  47,559 tokens  21.9 s  load 10 to 10
+FAIL  qualitydirector-brief-numbers: 0 passed, 1 failed, 0 unjudgeable of 1; $0.226 in all
+
+## ledger receipts 2026-11-27-harness-lab-cases (scratch rule-removed repo)
+| Criterion | Verdict | Probe | Commit | Evidence | Entry |
+| --- | --- | --- | --- | --- | --- |
+| P1-C2 | NOT VERIFIED | `python3 -m harness_lab run cases/qualitydirector-brief-numbers/case.json --skill-root . --runs 1` (exit 1) | `8f1e45d` | `.evidence/2026-11-27-harness-lab-cases/p1-c2.txt sha256:3e6d01b2619888b3302c51516c6a9266ba03eff4240a0eca37531ce3af180446` | seq 2 |
+
+## checks at 2803add's tree before commit
+make check: up to date. validate: 0 errors, 0 warnings. comments.py and test_guard.py --base origin/main: 0 findings.
+quality.py check on the fixture: ok, 13 rows, 0 problems. summary --json: alpha ci_wall_ms 8590 tests 80, beta ci_wall_ms 6490 tests 41, week 2026-W46; no 15080, 15.08, 15.1 or 121 in the fixture or the summary.
+git diff origin/main 2803add -- plugins/: empty. ledger scan: ok; ledger verify: ok.

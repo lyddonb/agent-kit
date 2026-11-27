@@ -1,0 +1,6 @@
+week,repo,test_id,runs,failed,total_ms,max_ms
+2026-W46,alpha,tests.test_a.A.test_four,1,1,9,9
+2026-W46,alpha,tests.test_a.A.test_one,5,0,60,40
+2026-W46,alpha,tests.test_a.A.test_two,5,1,15,3
+2026-W46,beta,tests.test_b.B.test_parse,2,0,44,30
+2026-W46,beta,tests.test_b.B.test_render,2,0,18,10
