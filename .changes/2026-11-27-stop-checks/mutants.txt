@@ -1,0 +1,8 @@
+killed: every stop reruns the checks
+killed: an untrusted repo's commands run
+killed: Bash changes are not judged
+killed: untracked content leaves the tree unchanged
+killed: observe sends back like enforce
+killed: no anti-stall cap
+killed: an edit anywhere judges cwd's repo
+killed: a hung check counts as a pass

@@ -1,0 +1,3 @@
+# Cheap checks bstack's Stop hook runs when an agent finishes after changing this repo.
+stop: ["make check"]
+timeout_s: 120
