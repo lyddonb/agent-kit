@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.51.0",
+      "date": "2026-11-26",
+      "plugin": "bstack",
+      "version": "0.51.0",
+      "changes": [
+        "New parallel-next skill finds the next planned work that can run alongside other sessions and starts the items you pick, each in its own session that begins with `/beau-mode`. Its `scripts/inflight.py` reads every worktree, dirty checkout and open pull request (drafts included), plus the live sessions your tool lists. It then checks each candidate's expected files against them. A candidate is `taken` when a claim carries its roadmap id, `conflict` on a shared file, `unknown` beside a worktree with no changes yet, `rebase` when it shares only hot files (a file touched by 40% of the last 30 commits, such as a changelog or manifest), and `clear` otherwise. A session living in a workspace's worktree claims its branch's ids in every repo of that workspace. You pick any subset, none included. Each brief fences the session to its files and puts the item's id in its branch, so the next run sees the work is taken."
+      ],
+      "try": "/parallel-next"
+    },
+    {
       "id": "bstack@0.50.0",
       "date": "2026-11-26",
       "plugin": "bstack",
