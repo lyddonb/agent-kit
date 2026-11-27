@@ -110,7 +110,10 @@ approved edits.
 **Why not done:** `beau-mode` is written from pstack's poteto-mode and what Beau has said
 about how he works. Only real sessions show which rules are wrong for him. Inventing
 evidence would overfit.
-**Blocked by:** HUMAN_TASKS H8.
+**Status (2026-11-27):** open. H8 is done, and the first round is merged: a `/reflect` on a
+Claude Code session gave six edits, which Beau approved and which shipped in bstack 0.53.0
+(pull request 141). R12 and R13 now wait only on their own triggers. Rounds after each further
+real task are what remain.
 
 ## P1
 
