@@ -1,0 +1,107 @@
+[
+ {
+  "id": "t1",
+  "pr": "agent-kit#98",
+  "repo": "agent-kit",
+  "merge": "5a543e1e09bad39d99f674540201b2e5d7ea0482",
+  "prompt": "`test_run_waits_for_a_tick_holding_the_lock` in the local-ci tests fails at random. It turned CI red on a pull request that never touched local-ci, with a `JSONDecodeError`. Make it stop failing.",
+  "trails": [
+   ".changes/2026-11-22-local-ci.json"
+  ]
+ },
+ {
+  "id": "t2",
+  "pr": "agent-kit#108",
+  "repo": "agent-kit",
+  "merge": "fad4f33756e41008e4fda13e4a7d213bd2641d33",
+  "prompt": "`test_plist_carries_the_quality_repo_only_when_set` fails when I run `make test` in a worktree named `.worktrees/quality-local-ci`, but it passes in CI. Fix it.",
+  "trails": [
+   ".changes/2026-11-22-local-ci-stub-race.json"
+  ]
+ },
+ {
+  "id": "t3",
+  "pr": "agent-kit#106",
+  "repo": "agent-kit",
+  "merge": "1e7fa2d9e25800d090613615f04b2fa8acdad755",
+  "prompt": "debrief.py's change record check now gates every pull request, so the checker itself has to be sound. Two security reviewers found holes in it: a claim marked VERIFIED can give a `record` that isn't a real file in the repo (a glob such as `*` passes), and a pull request can make the check read files outside the repo through a record that is a symlink. Close both.",
+  "trails": [
+   ".changes/2026-11-21-debrief-pr-check.json",
+   ".changes/2026-11-22-change-record-from-base.json"
+  ]
+ },
+ {
+  "id": "t4",
+  "pr": "agent-kit#103",
+  "repo": "agent-kit",
+  "merge": "6d19ad92e3fcc842db723aebe29a4ee0f46b0892",
+  "prompt": "In my quality and finances repos, `.changes/exempt` exempts all of `briefs/`, so a change to `briefs/TEMPLATE.md` (which shapes every weekly brief) needs no change record. I want a change to the template to need one, while the dated briefs beside it (`briefs/2026-11-16.md` and so on) stay exempt. Make that possible.",
+  "trails": [
+   ".changes/2026-11-22-exempt-list.json"
+  ]
+ },
+ {
+  "id": "t5",
+  "pr": "agent-kit#71",
+  "repo": "agent-kit",
+  "merge": "63d2397cee50051af75955bcf63ccb6db2ff119a",
+  "prompt": "The weekly CFO job on my Mac (cfo's `weekly-claude-code.sh`, installed with `--install`) books every skill-use row with an empty version, though my `agentfiles.lock` is there. When I run the script by hand from my shell, the versions are filled in. Fix it.",
+  "trails": [
+   "commit dc5b3e4c56 (`git show dc5b3e4c56`: the one-command install for this weekly job)",
+   "commit 954e7ebee6 (`git show 954e7ebee6`: the job that books Claude Code usage)"
+  ]
+ },
+ {
+  "id": "t6",
+  "pr": "agent-kit#79",
+  "repo": "agent-kit",
+  "merge": "34e8a07627cd65f936c38248018a4c1dfb58f3eb",
+  "prompt": "Before we make any of this repo's pull request checks required: for each check that runs on a pull request here, can the pull request itself change the code or config that judges it? Give me one row per check, with where its code and config come from when it runs on a pull request. Don't change any workflows.",
+  "trails": [
+   ".changes/2026-11-21-debrief-pr-check.json"
+  ]
+ },
+ {
+  "id": "t7",
+  "pr": "agent-ledger#15",
+  "repo": "agent-ledger",
+  "merge": "ec10e108d280c79e7765d0b0d1100bd6fdb67ac7",
+  "prompt": "`ledger session add` still can't archive the big orchestrator transcript from our last gate run: it falls back to a pointer entry, and says the archived entry failed redaction. The transcript's own text redacts fine. Find out why and fix it so a transcript like that archives.",
+  "trails": [
+   ".audit/runs/2026-10-18-m0-foundation/"
+  ]
+ },
+ {
+  "id": "t8",
+  "pr": "agent-ledger#42",
+  "repo": "agent-ledger",
+  "merge": "966abe968b5f5befe67cafa3f31a7045a867ea59",
+  "prompt": "In a GitHub stack, `ledger-verify` fails every pull request above the bottom one with \"the merge commit's first parent isn't on origin/main\", even ones with no `.audit/` changes. They pass once the pull request below merges. Fix the Action so stacked pull requests get checked properly.",
+  "trails": [
+   ".changes/2026-11-22-h13-base-branch-checks.json",
+   ".changes/2026-11-23-pin-debrief-1e7fa2d.json"
+  ]
+ },
+ {
+  "id": "t9",
+  "pr": "agent-kit#121",
+  "repo": "agent-kit",
+  "merge": "5bb37baaed",
+  "prompt": "Inside Claude Code the model roles file can only name Claude models, so every review panel and judge here comes from one model family. I want a reviewer or judge seat to be able to run through another agent's CLI that's installed on this machine (`claude -p` or `cursor-agent -p`), read-only, and come back with either the answer or a clear reason it gave none. Build that (it's R11 on the roadmap) and wire it into the roles convention the skills share.",
+  "trails": [
+   ".changes/2026-11-26-test-guard.json",
+   ".changes/2026-11-26-waiting-on-me.json"
+  ]
+ },
+ {
+  "id": "t10",
+  "pr": "agent-kit#116",
+  "repo": "agent-kit",
+  "merge": "ffe87e55d2",
+  "prompt": "Our rule is never skip, delete, loosen or retry a test, but nothing checks a diff for it. A revert in PR 105 deleted nine debrief tests and nobody noticed for days. Build the guard from roadmap R29 unit 3: given `--base REF`, report a diff that weakens Python tests. It reports and blocks nothing.",
+  "trails": [
+   ".changes/2026-11-22-checklist-item-receipt.json",
+   ".changes/2026-11-21-checklist-base-copy.json"
+  ]
+ }
+]

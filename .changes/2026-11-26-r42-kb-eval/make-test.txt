@@ -1,0 +1,3 @@
+make gen && make test at a67bbaa
+Ran 1475 tests in 256.031s
+OK (skipped=24)

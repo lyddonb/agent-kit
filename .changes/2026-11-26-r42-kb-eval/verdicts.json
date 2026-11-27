@@ -1,0 +1,612 @@
+{
+ "t1": {
+  "status": "ok",
+  "labels": {
+   "A": "kb",
+   "B": "full2",
+   "C": "kbr",
+   "D": "full1",
+   "E": "trails",
+   "F": "both"
+  },
+  "scores": {
+   "kb": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 4,
+    "reply": 4,
+    "note": "Correct and robust atomic-write plus locking fix, with good stress evidence but no permanent regression test."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 4,
+    "scope": 3,
+    "reply": 3,
+    "note": "It fixes torn reads, but concurrent stub processes share one .tmp path without locking and can corrupt or lose that file."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 3,
+    "scope": 2,
+    "reply": 3,
+    "note": "The shared temporary path remains unsafe for concurrent writers, while the regression test is slow and never checks the writer's exit status."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "A minimal, collision-resistant atomic-write fix with strong repeated-run evidence and accurate caveats."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 4,
+    "reply": 4,
+    "note": "The locking, atomic replacement, and concurrent regression test comprehensively cover both torn reads and lost updates, though the reply is noisy."
+   },
+   "both": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 4,
+    "reply": 5,
+    "note": "The per-process temporary file safely fixes torn reads and the reply accurately distinguishes strong scratch evidence from missing permanent coverage."
+   }
+  }
+ },
+ "t2": {
+  "status": "ok",
+  "labels": {
+   "A": "both",
+   "B": "kbr",
+   "C": "full1",
+   "D": "kb",
+   "E": "trails",
+   "F": "full2"
+  },
+  "scores": {
+   "both": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 5,
+    "reply": 3,
+    "note": "Correctly reproduced and fixed the path-sensitive assertion, but lost coverage for leaked quality environment settings and gave a noisy, speculative reply."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "Concise and well proven, though checking only ProgramArguments weakens the original test's broader protection against quality settings in the environment."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 2,
+    "note": "The focused assertions preserve the intended behavior and were proven, but the reply is repetitive, contradictory, and dominated by unrelated failures."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "A clear, minimal, reproduced fix, with the minor weakness that it no longer checks for a quality repository leaking through environment variables."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 2,
+    "note": "The fix is focused and verified against the regression, but the reply repeatedly revises itself and adds extensive unrelated environment diagnostics."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 2,
+    "scope": 5,
+    "reply": 5,
+    "note": "The diagnosis and minimal change are sound and the verification limits are stated honestly, but the actual path-dependent failure was not reproduced or tested after the fix."
+   }
+  }
+ },
+ "t3": {
+  "status": "ok",
+  "labels": {
+   "A": "full2",
+   "B": "kb",
+   "C": "both",
+   "D": "full1",
+   "E": "kbr",
+   "F": "trails"
+  },
+  "scores": {
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "Complete, convention-compliant fix with strong regression proof and accurate caveats."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 4,
+    "note": "Technically thorough, but the uncommitted change record incorrectly attributes working-tree verification to the base commit."
+   },
+   "both": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 3,
+    "note": "The fix and targeted evidence are strong, but the final reply is repetitive and internally awkward about full-suite status."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "The security logic is sound, but required version and change-record bookkeeping is knowingly unfinished."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 5,
+    "reply": 4,
+    "note": "The focused fix works, but repository bookkeeping and the PR-gating path remain unfinished, and the parent-symlink claim is too broad."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 4,
+    "scope": 3,
+    "reply": 2,
+    "note": "The core hardening is plausible, but the added record has an invalid release shape, lacks required versioning, and falsely claims to pass the checker."
+   }
+  }
+ },
+ "t4": {
+  "status": "ok",
+  "labels": {
+   "A": "full1",
+   "B": "both",
+   "C": "kbr",
+   "D": "trails",
+   "E": "full2",
+   "F": "kb"
+  },
+  "scores": {
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 4,
+    "reply": 4,
+    "note": "Correct exception mechanism with focused tests, but no change record and no old-code failure run."
+   },
+   "both": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 3,
+    "reply": 5,
+    "note": "Thoroughly tested and candid, though the matching redesign and rule hierarchy exceed the narrow request."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 4,
+    "reply": 5,
+    "note": "Strongest answer: correct behavior, regression-aware path handling, old-code failures, and explicit verification gaps."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 4,
+    "scope": 4,
+    "reply": 5,
+    "note": "The core fix is plausible and tested, but generated release files and the required record are knowingly missing, leaving CI failing."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 4,
+    "reply": 5,
+    "note": "A solid targeted implementation with mutation evidence, but broader validation was not run after moving matching into Python."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 4,
+    "reply": 5,
+    "note": "Correct targeted behavior and transparent limits, though only the debrief suite ran and the preserved artifact shows the old-code failures rather than the passing run."
+   }
+  }
+ },
+ "t5": {
+  "status": "ok",
+  "labels": {
+   "A": "both",
+   "B": "trails",
+   "C": "full2",
+   "D": "full1",
+   "E": "kbr",
+   "F": "kb"
+  },
+  "scores": {
+   "both": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "Correct, minimal fix with focused plist tests and an accurate statement of what remains unproven."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 4,
+    "reply": 5,
+    "note": "Correctly propagates both variables and tests the plist, though the additional install warning is unnecessary scope."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 4,
+    "reply": 3,
+    "note": "The implementation is sound, but the reply contains duplicated, initially contradictory test-status reports."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 4,
+    "note": "Strongest proof: the test simulates the launchd environment and verifies the resulting booked version, though the opening waiting message is stale."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "Correctly resolves one lock path with proper precedence and tests escaping, precedence, and absence."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 3,
+    "note": "The fix is correct, but the reply says rerun behavior is unknown while the accompanying documentation states reruns book nothing new."
+   }
+  }
+ },
+ "t6": {
+  "status": "ok",
+  "labels": {
+   "A": "full2",
+   "B": "full1",
+   "C": "both",
+   "D": "kbr",
+   "E": "kb",
+   "F": "trails"
+  },
+  "scores": {
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 4,
+    "note": "Correct and comprehensive, though it incorrectly suggests a missing artifact necessarily fails the upload step."
+   },
+   "full1": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "Accurately identifies the sole status check, traces every step to its source, and clearly states the unverified GitHub settings."
+   },
+   "both": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "Complete, precise, and appropriately distinguishes PR-controlled judging code from trusted base-reference data."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 5,
+    "reply": 3,
+    "note": "The core diagnosis is right, but its claims that nothing comes from base and everything is PR-controlled contradict its own version-check and external-action rows."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 5,
+    "reply": 4,
+    "note": "Strong audit with clear provenance, but advising not to require change-record is imprecise because it is only a step within the validate check."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 5,
+    "reply": 3,
+    "note": "The main finding is correct, but 'nothing is taken from base' is false and a failed npm install would fail before the Makefile's skip path."
+   }
+  }
+ },
+ "t7": {
+  "status": "ok",
+  "labels": {
+   "A": "full1",
+   "B": "both",
+   "C": "kbr",
+   "D": "trails",
+   "E": "kb",
+   "F": "full2"
+  },
+  "scores": {
+   "full1": {
+    "cause": 5,
+    "fix": 1,
+    "proof": 3,
+    "scope": 1,
+    "reply": 2,
+    "note": "Correctly diagnoses the self-redacting metadata but unnecessarily stops without implementing the requested fix."
+   },
+   "both": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "Matches the accepted approach with focused code, regression coverage, fallback coverage, and candid suite reporting."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 4,
+    "reply": 4,
+    "note": "Implements a valid alternative shape with strong tests, though compatibility machinery and weakened assertions add minor excess."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 1,
+    "proof": 3,
+    "scope": 1,
+    "reply": 2,
+    "note": "Provides a solid diagnosis and recommendation but fails the build request by treating an ordinary format update as blocked."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 2,
+    "proof": 3,
+    "scope": 2,
+    "reply": 2,
+    "note": "The exemption archives sessions but weakens central validation and leaves serialized ledger entries vulnerable to the same repository scan."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 4,
+    "reply": 3,
+    "note": "The alternative list representation works and is well tested, but the spec remains contradictory and the final reply contains stale, conflicting progress text."
+   }
+  }
+ },
+ "t8": {
+  "status": "ok",
+  "labels": {
+   "A": "full1",
+   "B": "kb",
+   "C": "full2",
+   "D": "both",
+   "E": "trails",
+   "F": "kbr"
+  },
+  "scores": {
+   "full1": {
+    "cause": 5,
+    "fix": 2,
+    "proof": 4,
+    "scope": 4,
+    "reply": 4,
+    "note": "Correct diagnosis and honest reporting, but accepting any origin branch checks only against the lower PR and can miss violations introduced earlier in the stack."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 5,
+    "reply": 5,
+    "note": "It implements the sound merge-base fallback, preserves normal behavior, tests lower-stack violations and unrelated history, and reports limitations accurately."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 4,
+    "reply": 4,
+    "note": "The direct merge-base solution is sound and well tested, though the speculative changes.yml follow-up is inconsistent with its own account of base_ref."
+   },
+   "both": {
+    "cause": 2,
+    "fix": 3,
+    "proof": 4,
+    "scope": 4,
+    "reply": 2,
+    "note": "It solves a different missing-or-rewritten-base-ref theory and validates merge identity, but does not protect upper PRs from ledger rewrites lower in the stack."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 2,
+    "proof": 3,
+    "scope": 4,
+    "reply": 4,
+    "note": "The cause is right and caveats are candid, but the any-origin rule is weaker and its violation test does not exercise the main fallback path."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 2,
+    "proof": 3,
+    "scope": 4,
+    "reply": 4,
+    "note": "It reproduces the symptom and tests the minimal relaxation, but the any-origin approach depends on the lower remote ref and does not verify the whole stack against main."
+   }
+  }
+ },
+ "t9": {
+  "status": "ok",
+  "labels": {
+   "A": "full2",
+   "B": "kb",
+   "C": "trails",
+   "D": "full1",
+   "E": "kbr",
+   "F": "both"
+  },
+  "scores": {
+   "full2": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 2,
+    "reply": 5,
+    "note": "Strong implementation and candid verification, but adds substantial machinery and a knowingly incomplete change record."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 4,
+    "scope": 3,
+    "reply": 5,
+    "note": "Comprehensively supports reviewer and judgment seats with solid fake-CLI tests, though the new skill and documentation are broader than necessary."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 4,
+    "scope": 2,
+    "reply": 5,
+    "note": "Robust read-only handling and failure evidence, but reviewer-only role semantics and large evidence artifacts reduce completeness and focus."
+   },
+   "full1": {
+    "cause": 4,
+    "fix": 3,
+    "proof": 4,
+    "scope": 3,
+    "reply": 4,
+    "note": "Mostly workable, but restricting CLI entries to reviewers and using Claude plan mode weakens judge coverage and behavior fidelity."
+   },
+   "kbr": {
+    "cause": 4,
+    "fix": 3,
+    "proof": 4,
+    "scope": 3,
+    "reply": 5,
+    "note": "Honest and well tested, but excluding judgment seats and relying on an incomplete post-write tree check leave gaps."
+   },
+   "both": {
+    "cause": 4,
+    "fix": 3,
+    "proof": 4,
+    "scope": 3,
+    "reply": 3,
+    "note": "Good test depth, but reviewer-only wiring, questionable Claude flags, and inconsistent claims about real runs reduce confidence."
+   }
+  }
+ },
+ "t10": {
+  "status": "ok",
+  "labels": {
+   "A": "full1",
+   "B": "kbr",
+   "C": "kb",
+   "D": "trails",
+   "E": "full2",
+   "F": "both"
+  },
+  "scores": {
+   "full1": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 4,
+    "reply": 5,
+    "note": "Comprehensive working guard with strong historical proof, though it omits the repository checklist trigger and adds substantial evidence bookkeeping."
+   },
+   "kbr": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 4,
+    "scope": 5,
+    "reply": 5,
+    "note": "The tested CLI is credible and the reply is candid, but the guard is not wired into verify-work or the checklist, so nothing invokes it."
+   },
+   "kb": {
+    "cause": 5,
+    "fix": 4,
+    "proof": 5,
+    "scope": 4,
+    "reply": 5,
+    "note": "A well-integrated AST-based implementation with strong tests and replay evidence, weakened slightly by parser compatibility risk and no checklist trigger."
+   },
+   "trails": {
+    "cause": 5,
+    "fix": 5,
+    "proof": 5,
+    "scope": 3,
+    "reply": 5,
+    "note": "The strongest implementation and proof, including a full-history noise sweep, at the cost of committing several extra replay and measurement artifacts."
+   },
+   "full2": {
+    "cause": 5,
+    "fix": 3,
+    "proof": 4,
+    "scope": 3,
+    "reply": 5,
+    "note": "The guard itself is strong, but the change deliberately leaves a newly added change record invalid and the work uncommitted."
+   },
+   "both": {
+    "cause": 4,
+    "fix": 4,
+    "proof": 4,
+    "scope": 4,
+    "reply": 4,
+    "note": "A solid line-based guard with good tests, but it ignores untracked tests, lacks the checklist trigger, and inaccurately says R29 unit 1 remains open."
+   }
+  }
+ }
+}
