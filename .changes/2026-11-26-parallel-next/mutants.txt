@@ -1,0 +1,14 @@
+One-line mutants of plugins/bstack/skills/parallel-next/scripts/inflight.py at 027ac72, each followed by
+python3 -m unittest tests.test_inflight. killed means at least one test went red.
+
+killed   hot files excuse nothing (any shared file is a conflict)
+killed   dropped candidates still block the ones below them
+killed   merged sessions still claim ids
+killed   a five-commit history counts files as hot
+killed   a worktree with no changes gets an empty footprint, not an unknown one
+killed   draft pull requests are skipped
+killed   ids are not scoped to their repo
+killed   untracked .worktrees/ folders make the main checkout dirty
+killed   idle hours from the commit time, not when HEAD moved
+killed   dotted ids (P2.3) cut to P2
+killed   a workspace worktree's branch ids are not claimed in its child repos

@@ -1,0 +1,23 @@
+A fresh general-purpose agent, given only SKILL.md and the workspace, followed steps 1 to 3 on
+Beau's real workspace (six repos, read-only, no sessions started) at commit 3452c5d. The items it
+proposed name private repos, so they are not kept here. What it found in the skill, and what
+happened to each:
+
+Script
+- idle hours came from the commit time, not when HEAD moved: fixed, test added
+- dotted ids (P2.3) were cut to P2, so they could never be taken: fixed, test added
+- an unknown reason named the worktree by ref, not folder: fixed
+- a session in a folder of repos claims its ids in every repo: kept on purpose (a false
+  "taken" drops a candidate, never starts a collision); the step now says how to override it
+- a rarely regenerated file is not hot, so guessing it turns a rebase into a conflict: the
+  step now says to list only files edited by hand
+- a worktree with no changes reads as unknown even when it is a long-lived store: kept; the
+  step now keeps such a candidate and shows the worktree and its idle hours
+- the session list's pr_state can be stale: not fixable in the script; it reads what the tool says
+
+Skill text
+- no paths named before step 1, no fetch, no waiting.py location: fixed
+- the limit came after the step that uses it, and named no policy key: fixed
+- blockers and started work could take proposal slots: fixed
+- no way to write an item that lands in two repos, or one with no id: fixed
+- "no session there: call it idle" was unsafe with a partial session list: replaced

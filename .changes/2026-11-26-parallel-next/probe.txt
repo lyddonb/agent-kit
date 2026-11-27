@@ -1,0 +1,10 @@
+== claude -p "/beau-mode <question>" --model claude-haiku-5-5 --max-turns 1
+Read the principles that apply.
+== claude -p "/bstack:beau-mode <question>" --model claude-haiku-5-5 --max-turns 1
+**Read the principles that apply.**
+== control, no command
+NONE. No skill has been loaded in this conversation. The `beau-mode` rule in your global instructions says to load it for non-trivial tasks, but I haven't called the Skill tool yet, so I have no step 3 to quote.
+
+== claude -w r7-try -p "Reply OK" in a scratch repo, then git branch -a
+  main
++ worktree-r7-try

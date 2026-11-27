@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "goal": "Give Beau one command that finds the next planned work that can run alongside work already in flight in other sessions without colliding with it, recommends options, and starts the zero or more he picks, each in its own session under /beau-mode.",
+  "changed": [
+    "New bstack skill parallel-next: see what is in flight, pick candidates by the project's own ranking rules, check them, propose up to the policy's agents budget, and start one /beau-mode session per pick from a fenced brief (references/brief.md).",
+    "Its scripts/inflight.py reads worktrees, dirty checkouts, open pull requests (drafts included) and a tool's session list as claims, and gives each candidate a state: taken, conflict, unknown, rebase or clear. Hot files come from the last 30 commits on the default branch. A worktree of a repo that holds other repos (a workspace) claims its branch's ids in all of them.",
+    "beau-mode's skill table points at it."
+  ],
+  "claims": [
+    {
+      "claim": "Each rule in inflight.py is held by a test: eleven one-line mutants each turn tests/test_inflight.py red.",
+      "verdict": "VERIFIED",
+      "check": "eleven mutants of inflight.py, each followed by python3 -m unittest tests.test_inflight",
+      "commit": "027ac72",
+      "record": ".changes/2026-11-26-parallel-next/mutants.txt",
+      "remaining": "Fixture repos for the tests; the real workspace only through the dry run below."
+    },
+    {
+      "claim": "A fresh agent can follow steps 1 to 3 on a real six-repo workspace and reach a proposal; what it found wrong is fixed or kept on purpose.",
+      "verdict": "VERIFIED",
+      "check": "a general-purpose subagent with only SKILL.md ran steps 1 to 3 read-only on the real workspace",
+      "commit": "3452c5d",
+      "record": ".changes/2026-11-26-parallel-next/dry-run.txt",
+      "remaining": "It ran on an earlier draft (3452c5d, replaced when the branch was squashed). The text was rewritten after it and not run again by a fresh agent. Its proposal names private repos, so only the findings are kept."
+    },
+    {
+      "claim": "A session started with /beau-mode or /bstack:beau-mode loads beau-mode, and claude -w NAME makes a worktree-NAME branch that inflight.py reads the id from.",
+      "verdict": "VERIFIED",
+      "check": "claude -p with each command form asked for start step 3's title, with a no-command control that answered NONE; claude -w r7-try in a scratch repo made branch worktree-r7-try; test_worktree_with_no_changes_has_unknown_footprint reads R7 from that name",
+      "commit": "027ac72",
+      "record": ".changes/2026-11-26-parallel-next/probe.txt",
+      "remaining": "Step 4 has not started a real session from a pick, in the desktop app or the CLI: no item has been picked yet."
+    },
+    {
+      "claim": "The whole suite passes.",
+      "verdict": "VERIFIED",
+      "check": "make test",
+      "commit": "027ac72",
+      "record": ".changes/2026-11-26-parallel-next/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [
+    {
+      "item": "Point the workspace AGENTS.md's 'Choosing what to work on next' at parallel-next for starting several items at once",
+      "source": "inferred: that section ranks by hand and says to propose at most three",
+      "why_now": "The command exists, but agents in the workspace still follow the hand-built steps.",
+      "impact": "Beau gets proposals already checked against work in flight, instead of a ranked list that may collide with a running session."
+    },
+    {
+      "item": "First real run: Beau picks from the list and step 4 starts the sessions",
+      "source": "inferred: the launch step is the one claim left unchecked",
+      "why_now": "Only a real pick proves the start and the step 5 recheck.",
+      "impact": "Beau sees whether the started sessions stay inside their fences."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.51.0"
+  }
+}
