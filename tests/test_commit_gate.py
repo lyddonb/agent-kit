@@ -183,6 +183,22 @@ class CommitGateTest(unittest.TestCase):
         self.assertIsNone(self.run_hook([])[0], "an untrusted repo's policy is ignored, so the gate observes")
         self.assertEqual([e["outcome"] for e in self.logged()], ["observe"])
 
+    def test_every_way_git_spells_your_own_origin_is_trusted(self):
+        sys.path.insert(0, str(HOOK.parent))
+        import checks
+        os.environ["BSTACK_POLICY"] = str(self.policy)
+        self.addCleanup(os.environ.pop, "BSTACK_POLICY", None)
+        for url in ("https://github.com/tester/repo.git", "git@github.com:tester/repo.git",
+                    "git@github.com:/tester/repo.git", "ssh://git@github.com/tester/repo", "https://github.com/Tester/repo/"):
+            with self.subTest(url):
+                subprocess.run(["git", "-C", str(self.repo), "remote", "set-url", "origin", url], check=True)
+                self.assertTrue(checks.trusted(self.repo))
+        for url in ("https://github.com/tester-evil/repo.git", "https://gitlab.com/tester/repo.git",
+                    "https://github.com/other/tester.git"):
+            with self.subTest(url):
+                subprocess.run(["git", "-C", str(self.repo), "remote", "set-url", "origin", url], check=True)
+                self.assertFalse(checks.trusted(self.repo))
+
     def test_a_missing_identity_still_gates_and_says_it_could_not_log(self):
         self.set_policy("enforce", human="not an id")
         out, err = self.run_hook([])

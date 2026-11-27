@@ -75,7 +75,7 @@ def trusted(root: Path) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     login = re.escape(human[: -len("@github")])
-    return bool(re.fullmatch(rf"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/){login}/[\w.-]+?(?:\.git)?/?",
+    return bool(re.fullmatch(rf"(?:https://github\.com/|git@github\.com:/?|ssh://git@github\.com/){login}/[\w.-]+?(?:\.git)?/?",
                              out.stdout.strip(), re.I))
 
 
