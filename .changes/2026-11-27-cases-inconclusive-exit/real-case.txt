@@ -1,0 +1,30 @@
+# run-pass: receipt.py output
+receipt-before-tick probes P1-C1; skill root . at 5bac343564ab299c386044d5f4457ccc98d875a1
+run 1/1  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_01JD5mKj92iJ48qyWBzZy84V, toolu_019NBgT5T6q8D7JfziSMQcoe
+  pass  after       ticked-implies-verified: exit 0
+  $0.170  30,105 tokens  30.7 s  load 12 to 11
+PASS  receipt-before-tick: 1 passed, 0 failed, 0 unjudgeable of 1; $0.170 in all
+P1-C1 VERIFIED (seq 2)
+receipt exit 0
+
+# run-flag: receipt.py output
+receipt-before-tick probes P1-C1; skill root . at 5bac343564ab299c386044d5f4457ccc98d875a1
+run 1/1  UNJUDGEABLE  receipt-before-tick: claude exited 1
+  $0.043  0 tokens  1.9 s  load 12 to 12
+UNJUDGEABLE  receipt-before-tick: 0 passed, 0 failed, 1 unjudgeable of 1; $0.043 in all
+P1-C1 INCONCLUSIVE (seq 2)
+receipt exit 0
+
+# run-noflag: receipt.py output
+receipt-before-tick probes P1-C1; skill root . at 5bac343564ab299c386044d5f4457ccc98d875a1
+run 1/1  UNJUDGEABLE  receipt-before-tick: claude exited 1
+  $0.042  0 tokens  2.0 s  load 12 to 11
+UNJUDGEABLE  receipt-before-tick: 0 passed, 0 failed, 1 unjudgeable of 1; $0.042 in all
+P1-C1 NOT VERIFIED (seq 2)
+receipt exit 0
+
+# ledger receipts, one ledger run each
+| P1-C1 | VERIFIED | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 1` (exit 0) | `5bac343` | `.evidence/2026-11-27-hl-pass/p1-c1.txt sha256:35a10e19f396bbf4050ed654f0dff399ba7183baa7152fe6df0f1f77550ce143` | seq 2 |
+| P1-C1 | INCONCLUSIVE | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 1 --budget-usd 0.01` (exit 2) | `5bac343` | `.evidence/2026-11-27-hl-unjudgeable-flag/p1-c1.txt sha256:d9e7570cc6c824e8ba9bbac7fc70e87434772def0d7aa46a2ebd319d73637885` | seq 2 |
+| P1-C1 | NOT VERIFIED | `python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 1 --budget-usd 0.01` (exit 2) | `5bac343` | `.evidence/2026-11-27-hl-unjudgeable-noflag/p1-c1.txt sha256:315c52e761495550574c472dbb5895b0673ed61d81fe6fb78ca2e1e33b3abaab` | seq 2 |
