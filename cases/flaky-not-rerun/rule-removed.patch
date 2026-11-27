@@ -1,0 +1,68 @@
+diff -ru kit/plugins/bstack/skills/beau-mode/SKILL.md kit-norule/plugins/bstack/skills/beau-mode/SKILL.md
+--- kit/plugins/bstack/skills/beau-mode/SKILL.md	2026-11-27 11:49:55
++++ kit-norule/plugins/bstack/skills/beau-mode/SKILL.md	2026-11-27 11:49:55
+@@ -26,7 +26,6 @@
+ - **Nontrivial change, architecture question, or "are we sure?":** run the **how** skill on the affected code first. For why it's built that way, run **why**.
+ - **A "which approach" or "what should this do" question you are about to ask:** if the answer is a fact you could observe by running something (behavior, timing, layout, output, performance), don't ask. Settle it with the Prototype playbook. Ask the human only for product or preference calls that no experiment can settle.
+ - **Done means proven:** run the **verify-work** skill before you say a task is done. "It compiles" and "tests pass" are not proof of behavior. Verification is infrastructure: when a project has no `verify-<app>` skill, offer **create-verification-skill**.
+-- **Green means every check:** a task isn't done until every test and every CI check passes, including a failure your diff didn't cause. A flaky test is a bug: run it in a loop to measure how often it fails, find the root cause, fix the code or the test, and add a test that fails every time without the fix. Never re-run CI hoping for green, never skip, retry or loosen a test to hide a flake, and never call a red check unrelated. After a merge to main, check the repo's deploy (or its post-merge workflow) once. Do not call the tree green if that deploy is red.
+ - **A one-way door or a design with no precedent:** run the **architect** skill. Plan with code (prototypes, sketches), not long documents, and don't adversarially review an abstract plan: reviewers invent risks for code that doesn't exist.
+ - **Contested design or risky diff:** run the **interrogate** skill before shipping.
+ - **Long, unattended or multi-phase work:** keep a decision trail in the project's ledger with the **show-me-your-work** skill.
+diff -ru kit/plugins/bstack/skills/beau-mode/playbooks/autonomous-run.md kit-norule/plugins/bstack/skills/beau-mode/playbooks/autonomous-run.md
+--- kit/plugins/bstack/skills/beau-mode/playbooks/autonomous-run.md	2026-11-27 11:49:55
++++ kit-norule/plugins/bstack/skills/beau-mode/playbooks/autonomous-run.md	2026-11-27 11:49:55
+@@ -13,7 +13,7 @@
+ 2. Work in an isolated branch or worktree so the run can't collide with anything else.
+ 3. Each iteration: make the smallest change the evidence justifies, verify it against the predicate, commit if it moved, discard it if it didn't. Changes that "might help" get reverted. A fix after which the same check still fails is one round: count it, and follow **Round cap** below.
+ 4. Record one ledger entry per iteration with **show-me-your-work**: what changed and whether the predicate moved. If the run spans several PRs or touches a default gate, start it with the **Large work item** playbook instead, and use this loop as its step 7.
+-5. Fix what you find along the way (flaky checks, broken skills, related bugs) in separate commits or PRs, then return to the predicate. Don't park reversible work for the human.
++5. Fix what you find along the way (broken skills, related bugs) in separate commits or PRs, then return to the predicate. Don't park reversible work for the human.
+ 6. Use whatever keeps you going: your tool's loop or schedule feature if it has one, otherwise keep iterating in this session.
+ 7. Stop when the predicate passes. A plateau means change approach, not stop, except at a gate in the policy or the charter's stop-loss, which do stop the run, and at the round cap, which stops work on that check. Never relax the predicate to declare victory. If you reach a real dead end, stop and write up why.
+ 
+@@ -25,7 +25,7 @@
+ 
+ When a check still fails after its third round, stop work on that check:
+ 
+-1. Leave the check as it is. Don't skip, loosen, delete or special-case it, and don't run it again hoping for a pass.
++1. Leave the check as it is. Don't skip, loosen, delete or special-case it.
+ 2. Take out your fixes that didn't move it. A fix someone else committed stays: say it didn't move the check and let them decide.
+ 3. Tell the human which check it is, the command and its last output, each fix you tried with what the check said after it, and why you think it is stuck.
+ 4. In a run with a ledger, record the stop as a `gate` entry that names the check, and the human's reply as a `gate-answer` entry.
+diff -ru kit/plugins/bstack/skills/beau-mode/playbooks/bug-fix.md kit-norule/plugins/bstack/skills/beau-mode/playbooks/bug-fix.md
+--- kit/plugins/bstack/skills/beau-mode/playbooks/bug-fix.md	2026-11-27 11:49:55
++++ kit-norule/plugins/bstack/skills/beau-mode/playbooks/bug-fix.md	2026-11-27 11:49:55
+@@ -26,7 +26,7 @@
+ 
+ When a check still fails after its third round, stop work on that check:
+ 
+-1. Leave the check as it is. Don't skip, loosen, delete or special-case it, and don't run it again hoping for a pass.
++1. Leave the check as it is. Don't skip, loosen, delete or special-case it.
+ 2. Take out your fixes that didn't move it. A fix someone else committed stays: say it didn't move the check and let them decide.
+ 3. Tell the human which check it is, the command and its last output, each fix you tried with what the check said after it, and why you think it is stuck.
+ 4. In a run with a ledger, record the stop as a `gate` entry that names the check, and the human's reply as a `gate-answer` entry.
+diff -ru kit/plugins/bstack/skills/beau-mode/playbooks/feature.md kit-norule/plugins/bstack/skills/beau-mode/playbooks/feature.md
+--- kit/plugins/bstack/skills/beau-mode/playbooks/feature.md	2026-11-27 11:49:55
++++ kit-norule/plugins/bstack/skills/beau-mode/playbooks/feature.md	2026-11-27 11:49:55
+@@ -30,7 +30,7 @@
+ 
+ When a check still fails after its third round, stop work on that check:
+ 
+-1. Leave the check as it is. Don't skip, loosen, delete or special-case it, and don't run it again hoping for a pass.
++1. Leave the check as it is. Don't skip, loosen, delete or special-case it.
+ 2. Take out your fixes that didn't move it. A fix someone else committed stays: say it didn't move the check and let them decide.
+ 3. Tell the human which check it is, the command and its last output, each fix you tried with what the check said after it, and why you think it is stuck.
+ 4. In a run with a ledger, record the stop as a `gate` entry that names the check, and the human's reply as a `gate-answer` entry.
+diff -ru kit/plugins/bstack/snippets/round-cap.md kit-norule/plugins/bstack/snippets/round-cap.md
+--- kit/plugins/bstack/snippets/round-cap.md	2026-11-27 11:49:55
++++ kit-norule/plugins/bstack/snippets/round-cap.md	2026-11-27 11:49:55
+@@ -5,7 +5,7 @@
+ 
+ When a check still fails after its third round, stop work on that check:
+ 
+-1. Leave the check as it is. Don't skip, loosen, delete or special-case it, and don't run it again hoping for a pass.
++1. Leave the check as it is. Don't skip, loosen, delete or special-case it.
+ 2. Take out your fixes that didn't move it. A fix someone else committed stays: say it didn't move the check and let them decide.
+ 3. Tell the human which check it is, the command and its last output, each fix you tried with what the check said after it, and why you think it is stuck.
+ 4. In a run with a ledger, record the stop as a `gate` entry that names the check, and the human's reply as a `gate-answer` entry.
