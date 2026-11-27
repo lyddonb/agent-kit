@@ -63,11 +63,27 @@ def read_modes(path: Path) -> dict:
     return modes
 
 
+def trusted(root: Path) -> bool:
+    """A repo whose own .agents/ files may steer these hooks: its origin is on GitHub under the
+    login in identity.human. A clone of someone else's repo can't raise a mode or run commands."""
+    human = identity_human()
+    if not human or not human.endswith("@github"):
+        return False
+    try:
+        out = subprocess.run(["git", "-C", str(root), "remote", "get-url", "origin"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    login = re.escape(human[: -len("@github")])
+    return bool(re.fullmatch(rf"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/){login}/[\w.-]+?(?:\.git)?/?",
+                             out.stdout.strip(), re.I))
+
+
 def mode(check: str, cwd: str) -> str:
-    """The strictest mode the user's policy and the repo's .agents/policy.yaml set (S2)."""
+    """The strictest mode the user's policy and, in a trusted repo, its .agents/policy.yaml set (S2)."""
     found = [read_modes(user_policy()).get(check)]
     root = repo_root(cwd)
-    if root:
+    if root and trusted(root):
         found.append(read_modes(root / ".agents" / "policy.yaml").get(check))
     found = [m for m in found if m]
     return max(found, key=MODES.index) if found else DEFAULT_MODE

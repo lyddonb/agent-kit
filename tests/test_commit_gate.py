@@ -39,6 +39,8 @@ class CommitGateTest(unittest.TestCase):
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", "git@github.com:tester/repo.git"],
+                       check=True)
         self.policy = self.tmp / "policy.yaml"
         self.flags_root = self.tmp / "flags"
         (self.flags_root / ".audit" / "runs").mkdir(parents=True)
@@ -172,6 +174,14 @@ class CommitGateTest(unittest.TestCase):
         self.set_policy("enforce")
         (self.repo / ".agents" / "policy.yaml").write_text("checks:\n  commit-gate: off\n")
         self.assert_denied(self.run_hook([], session="s2")[0])
+
+    def test_a_repo_someone_else_owns_cannot_raise_the_mode(self):
+        (self.repo / ".agents").mkdir()
+        (self.repo / ".agents" / "policy.yaml").write_text("checks:\n  commit-gate: enforce\n")
+        subprocess.run(["git", "-C", str(self.repo), "remote", "set-url", "origin",
+                        "https://github.com/someone-else/repo.git"], check=True)
+        self.assertIsNone(self.run_hook([])[0], "an untrusted repo's policy is ignored, so the gate observes")
+        self.assertEqual([e["outcome"] for e in self.logged()], ["observe"])
 
     def test_a_missing_identity_still_gates_and_says_it_could_not_log(self):
         self.set_policy("enforce", human="not an id")
