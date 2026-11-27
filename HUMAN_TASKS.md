@@ -9,7 +9,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H1 | Create and publish the GitHub repo | **Done** |
 | H2 | Confirm the license | **Done** |
 | H3 | Turn on GitHub Actions and branch protection | **Done** |
-| H4 | Verify installs in each tool you use | **Skipped** |
+| H4 | Verify installs in each tool you use | To do: Codex CLI and Cursor skills **done** by R1 (2026-11-27); the rest are yours |
 | H5 | Decide what is public, and keep employer content separate | **Done** |
 | H6 | Review the example skills | To do |
 | H7 | Review beau-mode and unslop for your voice | To do |
@@ -54,13 +54,37 @@ frontmatter, then `make gen`.
 **Steps:** Ensure Actions are enabled; add a branch protection rule requiring the
 `validate` check to pass.
 
-### H4. Verify installs in each tool you use — Skipped
-**Why a human:** Needs your machines, logged-in apps, and judgment on what "works".
-**Status:** Deferred for now. The steps below are unchanged when you pick this up.
-**Steps:** Follow [docs/INSTALL.md](docs/INSTALL.md) for Codex, Cursor, pi, and any
-others; note anything wrong in an issue. This is ROADMAP R1.
-**Note:** Codex plugin enabling happens in the ChatGPT/Codex app UI; Cursor's flow for
-adding a third-party plugin repo should be checked against its current docs.
+### H4. Verify installs in each tool you use — To do
+**Why a human:** Needs your logged-in apps, and some tools aren't installed on the agent's
+machine. R1 checked Codex CLI 0.172.0 (skills and MCP) and Cursor CLI (skills from a local
+clone). The results are in [docs/INSTALL.md, Tested installs](docs/INSTALL.md#tested-installs).
+**Steps:** for each tool you use, install, check, then fill in its row in that table (date,
+version, agent-kit commit, what you ran, what you saw).
+1. **Cursor app, from the marketplace.** `agent-kit` is already a marketplace on your
+   account. Run `cursor-agent plugin marketplace update agent-kit` (it was indexed at an
+   old commit), then install `essentials` and `research-tools` from the
+   plugin list in the app. In a new chat, ask "list every skill you have with its
+   SKILL.md path". Paths under `~/.cursor/plugins/cache/` and outside `~/.cursor/skills`
+   prove the plugin route. For MCP: in Cursor's MCP settings, look for a server from the
+   `research-tools` plugin (not your own `context7` from `~/.cursor/mcp.json`), and ask
+   it to resolve the library id for "react".
+2. **Codex app or IDE extension.** Codex CLI 0.39.0 is still on your PATH (Homebrew and
+   npm) and has no `plugin` command. Update until `codex plugin --help` works:
+   `npm i -g @openai/codex@latest`, and `brew uninstall codex && brew install --cask codex`
+   (the formula reports 0.39.0 as current; the cask is 0.172.0). Then, in the
+   app's Plugins directory, check that the 7 `agent-kit` plugins appear and enable
+   `research-tools`, and ask a chat which skills it has.
+3. **GitHub Copilot in VS Code.** Add `lyddonb/agent-kit` as a plugin source, or point
+   Copilot at `plugins/research-tools` in a clone, following
+   [GitHub's plugin docs](https://docs.github.com/en/copilot/concepts/agents/about-plugins).
+   In Copilot Chat agent mode, ask for its skills, then for the library id for "react",
+   and check that the context7 tool runs.
+4. **pi** (if you use it): `pi install git:github.com/lyddonb/agent-kit`, then ask pi
+   for its skills. pi has no MCP, so `library-docs` should say it is falling back.
+5. **OpenCode** (if you use it): `scripts/install.sh` from a clone, add the `context7`
+   entry from INSTALL.md's "MCP servers by hand" to `opencode.json`, then ask for its
+   skills and resolve "react".
+Note anything wrong in an issue, or fix the INSTALL.md step that failed.
 
 ### H5. Decide what is public, and keep employer content separate — Done
 **Why a human:** Confidentiality and IP.
