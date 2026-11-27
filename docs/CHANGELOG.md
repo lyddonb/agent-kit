@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.52.0 (2026-11-27)
+
+- verify-work's `receipt.py` takes `--inconclusive-exit N`, repeatable, for a probe with an exit code that means the run said nothing. A listed code is recorded as INCONCLUSIVE instead of NOT VERIFIED, with the exit code kept in the receipt and named in the entry's `why`. Pass `--inconclusive-exit 2` when the probe is harness-lab, whose exit 2 (UNJUDGEABLE) means the plugin didn't load, the budget ran out or the stream had no calls, so a broken setup no longer reads as a broken skill in `ledger receipts`. No code is inconclusive by default, and exit 0 can't be listed.
+- Try: `receipt.py --run RUN --actor ACTOR --spec SPEC --criterion C1 --inconclusive-exit 2 -- sh -c 'exit 2'`
+
 ## bstack 0.51.0 (2026-11-26)
 
 - New parallel-next skill finds the next planned work that can run alongside other sessions and starts the items you pick, each in its own session that begins with `/beau-mode`. Its `scripts/inflight.py` reads every worktree, dirty checkout and open pull request (drafts included), plus the live sessions your tool lists. It then checks each candidate's expected files against them. A candidate is `taken` when a claim carries its roadmap id, `conflict` on a shared file, `unknown` beside a worktree with no changes yet, `rebase` when it shares only hot files (a file touched by 40% of the last 30 commits, such as a changelog or manifest), and `clear` otherwise. A session living in a workspace's worktree claims its branch's ids in every repo of that workspace. You pick any subset, none included. Each brief fences the session to its files and puts the item's id in its branch, so the next run sees the work is taken.

@@ -26,6 +26,14 @@ class VerdictRuleTest(unittest.TestCase):
         self.assertEqual(d(0, "the UI half", False), "INCONCLUSIVE")
         self.assertEqual(d(0, None, True), "INCONCLUSIVE")
 
+    def test_an_exit_the_probe_marks_as_saying_nothing_is_inconclusive(self):
+        d = receipt.decide_verdict
+        self.assertEqual(d(2, None, False, inconclusive_exits={2}), "INCONCLUSIVE")
+        self.assertEqual(d(2, "x", True, inconclusive_exits={2, 3}), "INCONCLUSIVE")
+        self.assertEqual(d(1, None, False, inconclusive_exits={2}), "NOT VERIFIED", "an unlisted failure still fails")
+        self.assertEqual(d(2, None, False), "NOT VERIFIED", "exit 2 is an ordinary failure unless the caller says so")
+        self.assertEqual(d(0, None, False, inconclusive_exits={2}), "VERIFIED")
+
 
 class ReceiptBase(unittest.TestCase):
     def setUp(self):
@@ -101,6 +109,10 @@ class RefusalTest(ReceiptBase):
     def test_empty_not_run_is_refused(self):
         self.assertRefused(self.receipt(self.ok, self.probe, extra=["--not-run", " "]), "--not-run needs text")
 
+    def test_exit_0_cannot_be_marked_inconclusive(self):
+        self.assertRefused(self.receipt(self.ok, self.probe, extra=["--inconclusive-exit", "0"]),
+                           "--inconclusive-exit 0")
+
     def test_a_failing_ledger_append_is_shown_and_its_code_returned(self):
         done = self.receipt(h.stub_ledger_bin(self.tmp, append_rc=2), ["true"])
         self.assertEqual(done.returncode, 2)
@@ -175,6 +187,24 @@ class RealLedgerTest(ReceiptBase):
         self.assertEqual(done.stdout.splitlines()[-1], "P2e-C8 NOT VERIFIED (seq 2)")
         data = self.last()["data"]
         self.assertEqual((data["verdict"], data["receipt"]["exit"]), ("NOT VERIFIED", 3))
+
+    def test_a_listed_exit_is_inconclusive_and_keeps_its_exit_code(self):
+        done = self.go(["sh", "-c", "echo plugin did not load; exit 2"], extra=["--inconclusive-exit", "2"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.splitlines()[-1], "P2e-C8 INCONCLUSIVE (seq 2)")
+        entry = self.last()
+        self.assertEqual((entry["data"]["verdict"], entry["data"]["receipt"]["exit"]), ("INCONCLUSIVE", 2))
+        self.assertIn("exit 2 says nothing", entry["why"])
+        shown = h.run(["ledger", "receipts", self.run_id], self.repo, self.bin)
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertIn("| P2e-C8 | INCONCLUSIVE |", shown.stdout)
+        self.assertEqual(h.run(["ledger", "verify", f".audit/runs/{self.run_id}"], self.repo, self.bin).returncode, 0)
+
+    def test_an_exit_not_listed_stays_not_verified(self):
+        self.go(["sh", "-c", "exit 1"], extra=["--inconclusive-exit", "2"])
+        self.assertEqual(self.last()["data"]["verdict"], "NOT VERIFIED")
+        self.go(["sh", "-c", "exit 2"])
+        self.assertEqual(self.last()["data"]["verdict"], "NOT VERIFIED")
 
     def test_missing_probe_command_is_not_verified(self):
         done = self.go(["definitely-not-a-command-xyz"])
@@ -411,6 +441,11 @@ class ItemRealLedgerTest(ItemBase):
         (self.repo / "src.txt").write_text("two\n")
         self.assertEqual(self.go("passes").stdout.splitlines()[-1], "checklist:passes INCONCLUSIVE (seq 3)")
         self.assertTrue(self.last()["data"]["checklist"]["dirty"])
+
+    def test_a_listed_exit_makes_a_failing_item_inconclusive(self):
+        done = self.go("fails", extra=["--inconclusive-exit", "3"])
+        self.assertEqual(done.stdout.splitlines()[-1], "checklist:fails INCONCLUSIVE (seq 2)")
+        self.assertEqual(self.last()["data"]["checklist"]["exit"], 3)
 
     def test_the_command_run_is_the_committed_one_not_an_uncommitted_edit(self):
         (self.repo / CHECKLIST).write_text(ITEMS.replace("echo broken >&2; exit 3", "exit 0"))

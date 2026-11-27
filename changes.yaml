@@ -7,6 +7,13 @@
 # kitgen renders this into docs/CHANGELOG.md and into the beau-help skill, which shows
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
+- date: 2026-11-27
+  plugin: bstack
+  version: 0.52.0
+  changes:
+    - "verify-work's `receipt.py` takes `--inconclusive-exit N`, repeatable, for a probe with an exit code that means the run said nothing. A listed code is recorded as INCONCLUSIVE instead of NOT VERIFIED, with the exit code kept in the receipt and named in the entry's `why`. Pass `--inconclusive-exit 2` when the probe is harness-lab, whose exit 2 (UNJUDGEABLE) means the plugin didn't load, the budget ran out or the stream had no calls, so a broken setup no longer reads as a broken skill in `ledger receipts`. No code is inconclusive by default, and exit 0 can't be listed."
+  try: "receipt.py --run RUN --actor ACTOR --spec SPEC --criterion C1 --inconclusive-exit 2 -- sh -c 'exit 2'"
+
 - date: 2026-11-26
   plugin: bstack
   version: 0.51.0

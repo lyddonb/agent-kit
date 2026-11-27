@@ -1,0 +1,5 @@
+# make test, then make versions BASE=origin/main (27 skips are the real-ledger tests: no AGENT_LEDGER_SRC, as in CI)
+Ran 1498 tests in 762.214s
+OK (skipped=27)
+make test exit 0
+versions exit 0
