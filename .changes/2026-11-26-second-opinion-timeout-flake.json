@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "goal": "Make second_opinion's timeout test pass or fail on what the script does, not on how loaded the machine is: it errored once in a full make test at load average near 100 with FileNotFoundError reading the fake CLI's pid file.",
+  "changed": [
+    "tests/test_second_opinion.py runs the timeout tests through a launcher whose Popen returns only once the fake CLI has written its pid file, so the script's 1s timeout starts after the grandchild exists instead of racing the fake's interpreter start-up.",
+    "The fake starts its child before reading stdin (so the gate can't deadlock on the prompt) and writes the pid file atomically with the time it became ready; the 'returns quickly' bound is measured from that time.",
+    "A new test makes the fake wait 2s before starting its child, longer than --timeout, and still requires the grandchild to be killed.",
+    "When the fake never becomes ready within the gate's 15s liveness bound, the test fails with the gate's message instead of a bare JSONDecodeError."
+  ],
+  "claims": [
+    {
+      "claim": "The flake's mechanism is the fake CLI not reaching its pid write before the 1s timeout kills it: a 2s start delay reproduces the reported FileNotFoundError on every run, and the reported traceback passed the status assertion first, so the fake was alive and timed out, not crashed.",
+      "verdict": "VERIFIED",
+      "check": "TimeoutTest at 3af620c, three runs under uv Python 3.12",
+      "commit": "3af620c",
+      "record": ".changes/2026-11-26-second-opinion-timeout-flake/repro.txt",
+      "remaining": "The natural flake never fired here: 15 plain runs at load near 100 and 20 beside make unit passed, and the fake's measured start-up to pid write peaked at 0.6s against the 1s budget. The mechanism rests on the forced repro and the traceback."
+    },
+    {
+      "claim": "With the gate, both timeout tests pass, including the one whose fake starts slower than the timeout.",
+      "verdict": "VERIFIED",
+      "check": "TimeoutTest at 0c83998, three runs, then 20 runs beside a full make unit at load 40 to 90",
+      "commit": "0c83998",
+      "record": ".changes/2026-11-26-second-opinion-timeout-flake/loop.txt",
+      "remaining": "A start-up slower than the gate's 15s liveness bound still fails the test, by design; see the next claim."
+    },
+    {
+      "claim": "A fake that never becomes ready within 15s fails the test with 'the fake CLI never wrote its pid file', not a JSONDecodeError.",
+      "verdict": "VERIFIED",
+      "check": "the slow-start test with start_delay=16 in a temporary copy, under uv Python 3.12; before 18c2a16 the same run ended in JSONDecodeError",
+      "commit": "18c2a16",
+      "record": ".changes/2026-11-26-second-opinion-timeout-flake/gate-bound.txt",
+      "remaining": "None."
+    },
+    {
+      "claim": "The gated tests still catch a broken group kill: signalling only the CLI instead of its process group turns both red.",
+      "verdict": "VERIFIED",
+      "check": "one-line mutant of kill_group (os.kill for os.killpg), then TimeoutTest",
+      "commit": "0c83998",
+      "record": ".changes/2026-11-26-second-opinion-timeout-flake/mutant.txt",
+      "remaining": "One mutant only."
+    },
+    {
+      "claim": "The whole suite passes.",
+      "verdict": "VERIFIED",
+      "check": "make gen and make test on the branch",
+      "commit": "18c2a16",
+      "record": ".changes/2026-11-26-second-opinion-timeout-flake/make-test.txt",
+      "remaining": "CI on the pull request."
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "Test-only change; second_opinion.py and every plugin file are unchanged"
+  }
+}

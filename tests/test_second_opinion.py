@@ -19,13 +19,16 @@ SCRIPT = ROOT / "plugins/bstack/skills/beau-mode/scripts/second_opinion.py"
 FAKE = f'''#!{sys.executable}
 import json, os, subprocess, sys, time
 name = os.path.basename(sys.argv[0])
-prompt = sys.stdin.read()
 mode = os.environ.get("FAKE_MODE", "ok")
 if mode == "sleep":
+    time.sleep(float(os.environ.get("FAKE_START_DELAY", "0")))
     child = subprocess.Popen(["sleep", "30"])
-    with open(os.environ["FAKE_PIDFILE"], "w") as f:
-        f.write(str(child.pid))
+    pidfile = os.environ["FAKE_PIDFILE"]
+    with open(pidfile + ".tmp", "w") as f:
+        f.write("%d %f" % (child.pid, time.time()))
+    os.replace(pidfile + ".tmp", pidfile)
     time.sleep(30)
+prompt = sys.stdin.read()
 if mode == "fail":
     sys.stderr.write("\\n".join("line %d" % i for i in range(40)) + "\\n")
     sys.exit(3)
@@ -43,6 +46,23 @@ else:
 print(json.dumps(body))
 '''
 
+READY_GATE = '''
+import os, runpy, signal, subprocess, sys, time
+pidfile = os.environ["FAKE_PIDFILE"]
+class ReadyPopen(subprocess.Popen):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        deadline = time.monotonic() + 15
+        while not os.path.exists(pidfile):
+            if time.monotonic() > deadline:
+                os.killpg(self.pid, signal.SIGKILL)
+                sys.exit("the fake CLI never wrote its pid file")
+            time.sleep(0.01)
+subprocess.Popen = ReadyPopen
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+'''
+
 
 class SecondOpinionCase(unittest.TestCase):
     def setUp(self):
@@ -58,10 +78,11 @@ class SecondOpinionCase(unittest.TestCase):
         self.prompt = self.dir / "prompt.md"
         self.prompt.write_text("review this please")
 
-    def run_so(self, *args, mode="ok", path=None, stdin=None, timeout=60):
+    def run_so(self, *args, mode="ok", path=None, stdin=None, timeout=60, start_delay=0, ready_gate=False):
         env = {**os.environ, "PATH": path if path is not None else f"{self.bin}{os.pathsep}{os.environ['PATH']}",
-               "FAKE_MODE": mode, "FAKE_PIDFILE": str(self.dir / "pid")}
-        done = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env,
+               "FAKE_MODE": mode, "FAKE_PIDFILE": str(self.dir / "pid"), "FAKE_START_DELAY": str(start_delay)}
+        gate = ["-c", READY_GATE] if ready_gate else []
+        done = subprocess.run([sys.executable, *gate, str(SCRIPT), *args], capture_output=True, text=True, env=env,
                               input=stdin, timeout=timeout)
         return done.returncode, done.stdout, done.stderr
 
@@ -186,12 +207,14 @@ class InvocationTest(SecondOpinionCase):
 
 
 class TimeoutTest(SecondOpinionCase):
-    def test_a_timeout_kills_the_cli_and_what_it_started(self):
-        began = time.monotonic()
-        code, res, _ = self.review("cli:claude:opus", "--timeout", "1", mode="sleep", timeout=20)
-        self.assertLess(time.monotonic() - began, 10)
-        self.assertEqual((code, res["status"]), (1, "timeout"))
-        pid = int((self.dir / "pid").read_text())
+    def assert_timeout_kills_the_grandchild(self, start_delay):
+        code, out, err = self.run_so("--reviewer", "cli:claude:opus", "--prompt-file", str(self.prompt), "--json",
+                                     "--timeout", "1", mode="sleep", timeout=20, start_delay=start_delay, ready_gate=True)
+        self.assertTrue(out, err)
+        self.assertEqual((code, json.loads(out)["status"]), (1, "timeout"), err)
+        pid, ready_at = (self.dir / "pid").read_text().split()
+        self.assertLess(time.time() - float(ready_at), 10, "the timeout should fire long before the fake's 30s sleep ends")
+        pid = int(pid)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             try:
@@ -201,6 +224,12 @@ class TimeoutTest(SecondOpinionCase):
             time.sleep(0.1)
         os.kill(pid, 9)
         self.fail("the grandchild survived the timeout")
+
+    def test_a_timeout_kills_the_cli_and_what_it_started(self):
+        self.assert_timeout_kills_the_grandchild(start_delay=0)
+
+    def test_a_cli_slower_to_start_than_the_timeout_still_has_its_grandchild_killed(self):
+        self.assert_timeout_kills_the_grandchild(start_delay=2)
 
 
 if __name__ == "__main__":
