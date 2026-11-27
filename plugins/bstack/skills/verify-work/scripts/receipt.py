@@ -3,17 +3,24 @@
 
 Usage:
     receipt.py --run RUN_ID --actor ACTOR_JSON --spec docs/phases/P2e-digest-actions.md \\
-        --criterion C8 [--not-run TEXT] [--root DIR] -- CMD [ARG...]
+        --criterion C8 [--not-run TEXT] [--inconclusive-exit N]... [--root DIR] -- CMD [ARG...]
 
 Run it from the product repo root (or pass --root). It runs CMD there, copies its combined
 stdout and stderr to the terminal and to `.evidence/<run-id>/<criterion>.txt`, and decides the
 verdict from the exit code, not from anyone's prose:
 
-    non-zero exit                      NOT VERIFIED
-    exit 0 with --not-run, or a dirty  INCONCLUSIVE
+    an exit given as --inconclusive-exit   INCONCLUSIVE
+    any other non-zero exit                NOT VERIFIED
+    exit 0 with --not-run, or a dirty      INCONCLUSIVE
       tree: a tracked file differs from HEAD before or after the probe, or an untracked file
       that git doesn't ignore exists before it (bookkeeping files don't count: see BOOKKEEPING)
-    exit 0 otherwise                   VERIFIED
+    exit 0 otherwise                       VERIFIED
+
+--inconclusive-exit N, repeatable, is for a probe that has an exit code meaning "this run says
+nothing about the criterion": harness-lab exits 2 for UNJUDGEABLE, when the plugin didn't load, the
+budget ran out or the stream had no calls. No code is inconclusive by default, because other probes
+exit 2 for an ordinary failure. The receipt still records the exit code, and the entry's `why` says
+it was marked as saying nothing. Exit 0 can't be listed.
 
 Then it appends a `verification` entry with a `receipt` (agent-ledger 1.1.0 or newer; see
 "Receipt entries" in its S3 spec). Prints `P2e-C8 VERIFIED (seq 4)`.
@@ -48,7 +55,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import AbstractSet, Optional
 
 VERIFIED, NOT_VERIFIED, INCONCLUSIVE = "VERIFIED", "NOT VERIFIED", "INCONCLUSIVE"
 LIVE_ITEM = re.compile(r"^\s*- \[[ xX]\] \*\*([A-Z]\d+)\.\*\*")
@@ -79,8 +86,12 @@ class Receipt:
         return d
 
 
-def decide_verdict(exit_code: Optional[int], not_run: Optional[str], dirty: bool) -> str:
-    """The three-way rule: a failed probe, an incomplete or off-commit one, or a clean pass."""
+def decide_verdict(exit_code: Optional[int], not_run: Optional[str], dirty: bool,
+                   inconclusive_exits: AbstractSet[int] = frozenset()) -> str:
+    """The three-way rule: a failed probe, a probe that said nothing, an incomplete or off-commit
+    one, or a clean pass."""
+    if exit_code in inconclusive_exits:
+        return INCONCLUSIVE
     if exit_code not in (0, None):
         return NOT_VERIFIED
     if not_run or dirty:
@@ -131,6 +142,9 @@ def repo_root(args: argparse.Namespace) -> Path:
 def check_run(root: Path, args: argparse.Namespace) -> None:
     if args.not_run is not None and not args.not_run.strip():
         raise Refusal("--not-run needs text saying which part of the probe did not run")
+    if 0 in args.inconclusive_exits:
+        raise Refusal("--inconclusive-exit 0 would make a passing probe inconclusive; list only the codes that mean "
+                      "the run said nothing")
     if not (root / ".audit/runs" / args.run / "ledger.jsonl").is_file():
         raise Refusal(f"no ledger for run {args.run} at .audit/runs/{args.run}/ledger.jsonl")
 
@@ -231,7 +245,7 @@ def run_probe(cmd: list[str], root: Path, evidence: Path) -> tuple[int, str]:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="receipt.py", usage="%(prog)s --run RUN_ID --actor ACTOR_JSON "
                                 "(--spec SPEC --criterion C8 | --item ID [--checklist FILE]) "
-                                "[--not-run TEXT] [--root DIR] [-- CMD [ARG...]]",
+                                "[--not-run TEXT] [--inconclusive-exit N]... [--root DIR] [-- CMD [ARG...]]",
                                 description="Run one criterion's probe, or one checklist item's check, and write "
                                             "its ledger entry.")
     p.add_argument("--run", required=True)
@@ -241,6 +255,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--item", help="a reliability checklist item's id, in place of --spec and --criterion")
     p.add_argument("--checklist", help="the checklist file for --item (default: .agents/checklist.json)")
     p.add_argument("--not-run", dest="not_run")
+    p.add_argument("--inconclusive-exit", dest="inconclusive_exits", type=int, action="append", default=[],
+                   metavar="N", help="an exit code that means the probe said nothing: INCONCLUSIVE, not NOT VERIFIED")
     p.add_argument("--root")
     p.add_argument("cmd", nargs=argparse.REMAINDER)
     args = p.parse_args(argv)
@@ -277,13 +293,14 @@ def main(argv: list[str]) -> int:
         dirty = dirty_before or dirty_tree(root, untracked=False)
     except Refusal:
         dirty = True  # the probe ran, so record it; a tree we can't read is not a clean one
-    verdict = decide_verdict(code, args.not_run, dirty)
+    verdict = decide_verdict(code, args.not_run, dirty, frozenset(args.inconclusive_exits))
     receipt = Receipt(criterion=criterion, spec=spec, spec_sha256=spec_sha, probe=shlex.join(cmd),
                       commit=commit, exit=code, dirty=dirty, not_run=args.not_run).to_dict()
     if target.kind == "checklist":
         receipt = {"item": args.item, "file": spec, "file_sha256": spec_sha,
                    **{k: v for k, v in receipt.items() if k not in ("criterion", "spec", "spec_sha256")}}
-    why = f"probe exited {code}" + (f"; not run: {args.not_run}" if args.not_run else "") + ("; tree was dirty" if dirty else "")
+    why = f"probe exited {code}" + (f"; exit {code} says nothing (--inconclusive-exit)"
+                                    if code in args.inconclusive_exits else "") + (f"; not run: {args.not_run}" if args.not_run else "") + ("; tree was dirty" if dirty else "")
     append = [ledger, "append", "--run", args.run, "--actor", args.actor, "--type", "verification",
               "--summary", f"{criterion} {verdict}", "--why", why,
               f"--evidence={evidence.relative_to(root).as_posix()} sha256:{out_sha}", f"--evidence={commit}",
