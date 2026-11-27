@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.52.0 (2026-11-27)
+
+- New commit gate (Claude Code hook). When a session runs `git commit` without having run verify-work, a `verify-<app>` skill, interrogate or a review since its last commit, the gate acts on the mode `policy.checks.commit-gate` sets in `~/.agents/policy.yaml` or the repo's `.agents/policy.yaml`. In `observe`, the default, it lets the commit through and appends a would-block lesson to this machine's weekly flags run (`~/.agents/flags.yaml`). In `enforce` it denies the commit with the reason. After two denials since the last commit it lets the next one through and records why. In `off` it does nothing. Any error inside the hook lets the commit through.
+- Try: `Set `checks: {commit-gate: enforce}` under `policy:` in a profile, run agentfiles sync, and commit without verifying.`
+
 ## bstack 0.51.0 (2026-11-26)
 
 - New parallel-next skill finds the next planned work that can run alongside other sessions and starts the items you pick, each in its own session that begins with `/beau-mode`. Its `scripts/inflight.py` reads every worktree, dirty checkout and open pull request (drafts included), plus the live sessions your tool lists. It then checks each candidate's expected files against them. A candidate is `taken` when a claim carries its roadmap id, `conflict` on a shared file, `unknown` beside a worktree with no changes yet, `rebase` when it shares only hot files (a file touched by 40% of the last 30 commits, such as a changelog or manifest), and `clear` otherwise. A session living in a workspace's worktree claims its branch's ids in every repo of that workspace. You pick any subset, none included. Each brief fences the session to its files and puts the item's id in its branch, so the next run sees the work is taken.
