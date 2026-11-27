@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "goal": "Send a red tree back to the agent when it finishes, before anything is pushed: log it in observe, send it back in enforce (agent-kit R32, run 2026-11-27-r32-hook-gates, unit 4).",
+  "changed": [
+    "bstack ships a Claude Code Stop hook, hooks/stop_checks.py. It finds each repo the session changed (one holding a file it edited, or the working folder's repo when it ran a command there) and runs the commands that repo's .agents/checks.yaml lists under stop:, from its root.",
+    "It runs only in repos whose GitHub origin is under identity.human's login, so a clone of someone else's repo never runs its own commands. It reruns only when the tree moved (HEAD, the diff, untracked files' content) or after a send-back. Each command has timeout_s; all of them share nine minutes, inside the hook's ten.",
+    "policy.checks.stop-checks sets the mode: observe logs a would-block once per unchanged tree; enforce sends the agent back with the last 40 lines of output, twice, then lets the stop through and logs why; off does nothing. Any error allows the stop.",
+    "agent-kit declares its own cheap check, make check, in .agents/checks.yaml. bstack 0.58.0."
+  ],
+  "claims": [
+    {
+      "claim": "In real headless Claude Code sessions loading both hooks from this branch: observe and enforce commits behave as the commit gate record says, and a session that left a test red was sent back twice with the failing test's output, then let through with the reason logged.",
+      "verdict": "VERIFIED",
+      "check": "scratchpad probe.sh commit-observe, commit-enforce and stop-enforce: claude -p --model haiku --settings pointing PreToolUse and Stop at these hooks, a scratch repo whose origin is under the policy's login, scratch policy, flags run and state",
+      "commit": "15e8334",
+      "record": ".changes/2026-11-27-stop-checks/probe.txt",
+      "remaining": "Run from --settings, not from the installed plugin; the run's close repeats it after the plugin update."
+    },
+    {
+      "claim": "Run as Claude Code runs it, the hook stays quiet on a green tree, sends a red one back with its output, caps send-backs at two, clears its count when the tree goes green, logs once per tree in observe, does nothing in off or in a session that only read, ignores an edit outside the repo, follows an edit made from a parent folder, catches a change made through Bash and in an untracked file, never runs an untrusted repo's commands, parses flow and block lists, cuts off a hung check, and fails open on a broken event.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m unittest tests.test_stop_checks (17 tests, system Python 3.9, a fake ledger on PATH)",
+      "commit": "15e8334",
+      "record": ".changes/2026-11-27-stop-checks/make-test.txt",
+      "remaining": "Subagent tool calls live in their own transcript files; whether the main transcript shows a subagent's edits was not checked."
+    },
+    {
+      "claim": "The tests hold the rules: rerunning on every stop, running an untrusted repo's commands, ignoring Bash changes, ignoring untracked content, sending back in observe, no cap, judging cwd's repo for any edit, and treating a hung check as a pass each turn them red.",
+      "verdict": "VERIFIED",
+      "check": "eight one-line mutants of stop_checks.py, each followed by python3 -m unittest tests.test_stop_checks",
+      "commit": "15e8334",
+      "record": ".changes/2026-11-27-stop-checks/mutants.txt",
+      "remaining": "Eight rules mutated, not every line."
+    }
+  ],
+  "next": [
+    {
+      "item": "Prove both hooks from the installed plugin, then close the run",
+      "source": "run 2026-11-27-r32-hook-gates units 5 to 7 (agent-kit R32)",
+      "why_now": "Units 1 to 4 are open; the predicate needs the merged, installed hooks.",
+      "impact": "Beau's sessions start logging would-blocks for the observe week (H14 step 3)."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.58.0"
+  }
+}

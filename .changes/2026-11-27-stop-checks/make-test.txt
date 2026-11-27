@@ -1,0 +1,8 @@
+$ make test
+Ran 1533 tests in 398.273s
+OK (skipped=27)
+
+$ python3 -m unittest tests.test_stop_checks
+Ran 17 tests in 6.826s
+
+OK

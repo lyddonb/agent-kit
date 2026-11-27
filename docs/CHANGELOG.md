@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.58.0 (2026-11-27)
+
+- New Stop hook (Claude Code). When the agent finishes, the hook runs the commands under `stop:` in `.agents/checks.yaml`, from the repo root, in each repo the session changed (one holding a file it edited, or the working folder's repo when it ran a command there). It runs them only in repos whose GitHub `origin` is under the login in your policy's `identity.human`, so a clone of someone else's repo never runs its own commands. It runs again only when the tree moved: HEAD, the diff, or any untracked file. Each command gets `timeout_s` (default 120), and all of them together get nine minutes. If one fails, the hook acts on `policy.checks.stop-checks`. In `observe`, the default, it logs a would-block lesson to the weekly flags run, once per unchanged tree. In `enforce` it sends the agent back with the last 40 lines of the failing output. After two send-backs it lets the stop through and records why. In `off` it does nothing. agent-kit declares `make check`.
+- Try: `Add `.agents/checks.yaml` with `stop: ["make test"]` to a repo you own, set `checks: {stop-checks: enforce}` under `policy:`, and finish a session that left a test red.`
+
 ## bstack 0.57.0 (2026-11-27)
 
 - New commit gate (Claude Code hook). When a session runs `git commit` without having run verify-work, a `verify-<app>` skill, interrogate or a review since its last commit, the gate acts on the mode `policy.checks.commit-gate` sets in `~/.agents/policy.yaml` or the repo's `.agents/policy.yaml`. In `observe`, the default, it lets the commit through and appends a would-block lesson to this machine's weekly flags run (`~/.agents/flags.yaml`). In `enforce` it denies the commit with the reason. After two denials since the last commit it lets the next one through and records why. In `off` it does nothing. Any error inside the hook lets the commit through. A verification counts once it finishes without error. Quoted text and heredoc bodies are not read as commits. A repo's own `.agents/policy.yaml` counts only when its GitHub `origin` is yours.
