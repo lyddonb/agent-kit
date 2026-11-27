@@ -13,7 +13,7 @@ legal choices, and judgment calls. **🚧 BLOCKER** items block other work (list
 | H5 | Decide what is public, and keep employer content separate | **Done** |
 | H6 | Review the example skills | To do |
 | H7 | Review beau-mode and unslop for your voice | To do |
-| H8 | Dogfood beau-mode on real tasks | 🚧 **BLOCKER** for ROADMAP R10, R12, R13 |
+| H8 | Dogfood beau-mode on real tasks | **Done** (2026-11-27): real runs in Claude Code and Cursor, and `/reflect` in each |
 | H9 | Share the Poteto posts | **Done** (the pstack guide parts 1 and 2) |
 | H10 | Review and merge the bstack branch | **Done** |
 | H11 | Review and merge the verification and planning branch | **Done** |
@@ -87,7 +87,14 @@ you have said, not from watching you work.
 - The 24 principles in `plugins/principles/`. Remove any you disagree with rather than
   leaving rules agents will follow that you don't believe.
 
-### H8. Dogfood beau-mode on real tasks — 🚧 BLOCKER for R10, R12, R13
+### H8. Dogfood beau-mode on real tasks — Done
+**Answer (2026-11-27):** Done in both tools. Beau's words: "i've run the beau-mode feature and
+investigation in cursor as well". In
+Claude Code, a feature (agentfiles R16) and an investigation ("what's next") were run under
+beau-mode, then `/reflect`; Beau approved all six edits, merged in bstack 0.53.0 (pull request
+141). In Cursor, every task in one private project ran under beau-mode, with `/reflect`. A bug
+run in Claude Code was not named on its own; the quality books show beau-mode in steady use
+there since week 43.
 **Why a human:** Only real work shows what the skill gets wrong.
 **Steps:** Run `/beau-mode` on a real bug, a feature and an investigation in Claude Code and in
 Cursor. After each, run `/reflect` and approve or reject its proposals. Note anything that felt
