@@ -3,6 +3,10 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.54.0 (2026-11-27)
+
+- beau-mode no longer lets a test called "known flaky" stay red. Fix it in the task, or say why you can't. A harness-lab case caught the gap: told a test was a known flake that a re-run turns green, an agent left it red in 2 of 20 runs.
+
 ## bstack 0.53.0 (2026-11-27)
 
 - beau-mode's first steps now replace a todo list written before it loaded, and expand any playbook the matched one names (Opening a PR) into its own steps at once, so its commit rules apply from the first commit.
