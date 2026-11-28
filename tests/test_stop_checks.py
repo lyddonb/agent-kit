@@ -40,6 +40,7 @@ class StopChecksTest(unittest.TestCase):
         self.configure('stop: ["test \\"$(cat ok)\\" = yes", "true"]')
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "init")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.policy = self.tmp / "policy.yaml"
         flags = self.tmp / "flags"
         (flags / ".audit" / "runs").mkdir(parents=True)
@@ -55,7 +56,18 @@ class StopChecksTest(unittest.TestCase):
         self.set_mode("enforce")
 
     def configure(self, text):
+        """Land checks.yaml on the base branch, as a merged pull request would."""
+        self.edit_config(text)
+        if (self.repo / ".git").exists() and self.git_out("rev-parse", "--verify", "-q", "HEAD"):
+            git(self.repo, "commit", "-qm", "checks", "--", ".agents/checks.yaml")
+            git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def edit_config(self, text):
+        (self.repo / ".agents").mkdir(exist_ok=True)
         (self.repo / ".agents" / "checks.yaml").write_text(text + "\n")
+
+    def git_out(self, *args):
+        return subprocess.run(["git", "-C", str(self.repo), *args], capture_output=True, text=True).stdout.strip()
 
     def set_mode(self, mode):
         self.policy.write_text(f"version: 1\nidentity:\n  human: 'tester@github'\nchecks:\n  stop-checks: '{mode}'\n")
@@ -161,12 +173,14 @@ class StopChecksTest(unittest.TestCase):
         self.assertIsNone(self.stop())
         self.configure('stop: ["false"]')
         self.assertEqual(self.stop()["decision"], "block", "checks.yaml changed, so the tree moved")
-        git(self.repo, "checkout", "--", ".agents/checks.yaml")
+        self.configure('stop: ["true"]')
         self.assertIsNone(self.stop(), "a green tree ends the run of send-backs")
         self.assertIsNone(self.stop(), "and an unmoved tree runs nothing")
 
     def test_a_repo_without_checks_or_outside_git_does_nothing(self):
-        (self.repo / ".agents" / "checks.yaml").unlink()
+        git(self.repo, "rm", "-q", ".agents/checks.yaml")
+        git(self.repo, "commit", "-qm", "no checks")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.break_tree()
         self.assertIsNone(self.stop())
         outside = self.tmp / "plain"
@@ -179,15 +193,76 @@ class StopChecksTest(unittest.TestCase):
     def test_block_lists_comments_and_quotes_parse(self):
         sys.path.insert(0, str(HOOKS))
         import stop_checks
-        self.configure("# cheap ones\nstop:\n  - 'make check'   # fast\n  - \"echo 'it''s'\"\n  - 'it''s'\n  - exit 1\ntimeout_s: 30")
-        self.assertEqual(stop_checks.read_config(self.repo), (["make check", "echo 'it''s'", "it's", "exit 1"], 30))
-        self.configure('stop: ["a && b", \'c\']')
-        self.assertEqual(stop_checks.read_config(self.repo), (["a && b", "c"], 120))
+        text = "# cheap ones\nstop:\n  - 'make check'   # fast\n  - \"echo 'it''s'\"\n  - 'it''s'\n  - exit 1\ntimeout_s: 30"
+        self.assertEqual(stop_checks.parse_config(text), (["make check", "echo 'it''s'", "it's", "exit 1"], 30))
+        self.assertEqual(stop_checks.parse_config('stop: ["a && b", \'c\']'), (["a && b", "c"], 120))
 
     def test_a_check_that_hangs_is_cut_off_and_reported(self):
         self.configure('stop: ["sleep 5"]\ntimeout_s: 1')
         out = self.stop()
         self.assertIn("timed out after 1s", out["reason"])
+
+    def test_an_uncommitted_edit_of_the_checks_does_not_change_what_runs(self):
+        self.break_tree()
+        self.edit_config('stop: ["true"]\ntimeout_s: 1')
+        out = self.stop()
+        self.assertEqual(out["decision"], "block", "the base branch's checks judge the tree, not the session's copy")
+        self.assertIn("test", out["reason"])
+
+    def test_a_committed_edit_on_the_branch_does_not_change_what_runs(self):
+        self.edit_config('stop: ["true"]')
+        git(self.repo, "commit", "-qam", "loosen the checks")
+        self.break_tree()
+        self.assertEqual(self.stop()["decision"], "block", "a branch commit to checks.yaml takes effect only after it merges")
+
+    def test_checks_added_on_the_branch_wait_for_the_merge(self):
+        git(self.repo, "rm", "-q", ".agents/checks.yaml")
+        git(self.repo, "commit", "-qm", "no checks yet")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        marker = self.tmp / "ran"
+        self.edit_config(f'stop: ["touch {marker}; exit 1"]')
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "add checks")
+        self.assertIsNone(self.stop())
+        self.assertFalse(marker.exists(), "checks the base branch doesn't have must not run")
+
+    def test_the_base_is_origins_default_branch(self):
+        git(self.repo, "checkout", "-qb", "feature")
+        self.edit_config('stop: ["false"]')
+        git(self.repo, "commit", "-qam", "branch checks")
+        git(self.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        self.assertIsNone(self.stop(), "the branch's own commit of checks.yaml is not the base")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertEqual(self.stop()["decision"], "block", "once it is on origin's default branch, it runs")
+
+    def test_origin_head_wins_over_main_and_the_reason_names_it(self):
+        git(self.repo, "checkout", "-qb", "trunk")
+        self.configure('stop: ["false"]')
+        git(self.repo, "update-ref", "refs/remotes/origin/trunk", "HEAD")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD~1")
+        git(self.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        out = self.stop()
+        self.assertEqual(out["decision"], "block", "origin/HEAD names the default branch, so its checks run")
+        self.assertIn(f"from origin/HEAD {self.git_out('rev-parse', '--short=7', 'HEAD')}", out["reason"])
+
+    def test_origin_master_is_the_last_fallback(self):
+        self.configure('stop: ["false"]')
+        git(self.repo, "update-ref", "-d", "refs/remotes/origin/main")
+        git(self.repo, "update-ref", "refs/remotes/origin/master", "HEAD")
+        self.assertIn("from origin/master", self.stop()["reason"])
+
+    def test_no_default_branch_runs_nothing_and_says_why(self):
+        git(self.repo, "update-ref", "-d", "refs/remotes/origin/main")
+        marker = self.tmp / "ran"
+        self.edit_config(f'stop: ["touch {marker}; exit 1"]')
+        path = self.tmp / "s9.jsonl"
+        path.write_text(json.dumps(EDIT) + "\n")
+        event = {"session_id": "s9", "transcript_path": str(path), "cwd": str(self.repo)}
+        out = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(event), capture_output=True,
+                             text=True, env=self.env, timeout=60)
+        self.assertEqual((out.returncode, out.stdout), (0, ""))
+        self.assertFalse(marker.exists())
+        self.assertIn("no base branch", out.stderr)
 
     def test_a_broken_event_fails_open(self):
         out = subprocess.run([sys.executable, str(HOOK)], input="{", capture_output=True, text=True,

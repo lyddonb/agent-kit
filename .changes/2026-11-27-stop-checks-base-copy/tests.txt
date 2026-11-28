@@ -1,0 +1,29 @@
+test_a_broken_event_fails_open (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_change_made_through_bash_is_judged (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_check_that_hangs_is_cut_off_and_reported (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_committed_edit_on_the_branch_does_not_change_what_runs (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_green_tree_stops_quietly (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_later_stop_runs_only_when_the_tree_moved (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_new_untracked_files_content_moves_the_tree (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_repo_someone_else_owns_runs_nothing (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_repo_without_checks_or_outside_git_does_nothing (tests.test_stop_checks.StopChecksTest) ... ok
+test_a_session_that_changed_nothing_runs_nothing (tests.test_stop_checks.StopChecksTest) ... ok
+test_after_two_send_backs_the_stop_goes_through_and_says_why (tests.test_stop_checks.StopChecksTest) ... ok
+test_an_edit_made_from_a_parent_folder_judges_the_repo_it_landed_in (tests.test_stop_checks.StopChecksTest) ... ok
+test_an_edit_outside_the_repo_does_not_judge_it (tests.test_stop_checks.StopChecksTest) ... ok
+test_an_uncommitted_edit_of_the_checks_does_not_change_what_runs (tests.test_stop_checks.StopChecksTest) ... ok
+test_block_lists_comments_and_quotes_parse (tests.test_stop_checks.StopChecksTest) ... ok
+test_checks_added_on_the_branch_wait_for_the_merge (tests.test_stop_checks.StopChecksTest) ... ok
+test_enforce_sends_a_red_tree_back_with_the_failing_output (tests.test_stop_checks.StopChecksTest) ... ok
+test_fixing_the_tree_clears_the_count (tests.test_stop_checks.StopChecksTest) ... ok
+test_no_default_branch_runs_nothing_and_says_why (tests.test_stop_checks.StopChecksTest) ... ok
+test_observe_logs_and_lets_the_stop_through_once_per_tree (tests.test_stop_checks.StopChecksTest) ... ok
+test_off_runs_nothing (tests.test_stop_checks.StopChecksTest) ... ok
+test_origin_head_wins_over_main_and_the_reason_names_it (tests.test_stop_checks.StopChecksTest) ... ok
+test_origin_master_is_the_last_fallback (tests.test_stop_checks.StopChecksTest) ... ok
+test_the_base_is_origins_default_branch (tests.test_stop_checks.StopChecksTest) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 10.435s
+
+OK
