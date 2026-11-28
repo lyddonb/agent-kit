@@ -1,0 +1,19 @@
+# probe.py: checks.mode and stop_checks.judge from plugins/bstack/hooks at 7120563, scratch repo, scratch policy/state/flags
+import sys, time; sys.path.insert(0, "<worktree>/plugins/bstack/hooks")
+import checks, stop_checks
+from pathlib import Path
+r = Path("<scratch>/repo")
+def show(label):
+    m = checks.mode("stop-checks", str(r)); cg = checks.mode("commit-gate", str(r))
+    out = stop_checks.judge(r, m, "s-" + label, [], str(r), time.time() + 60)
+    print(f"{label}: trusted={checks.trusted(r)} stop-checks={m} commit-gate={cg} send-back={'yes' if out else 'no'}")
+show(sys.argv[1])
+# output
+bstack stop-checks: deny not logged: ~/.agents/flags.yaml or identity.human is missing
+1-committed-config: trusted=True stop-checks=enforce commit-gate=enforce send-back=yes
+2-uncommitted-edit-of-checks.yaml-to-true: trusted=True stop-checks=enforce commit-gate=enforce send-back=no
+bstack stop-checks: observe not logged: ~/.agents/flags.yaml or identity.human is missing
+3-repo-policy-deleted-no-user-mode: trusted=True stop-checks=observe commit-gate=observe send-back=no
+bstack stop-checks: deny not logged: ~/.agents/flags.yaml or identity.human is missing
+4-repo-policy-deleted-user-sets-enforce: trusted=True stop-checks=enforce commit-gate=observe send-back=yes
+5-origin-moved-off-login: trusted=False stop-checks=enforce commit-gate=observe send-back=no

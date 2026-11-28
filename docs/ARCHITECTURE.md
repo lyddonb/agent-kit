@@ -95,7 +95,7 @@ another's.
 ## Can a pull request change the check that judges it?
 
 An audit of every verification gate in the runtime's five repos, as of 2026-11-21 (roadmap
-R29, unit 1). It answers one question per gate: when a pull request is checked, do the
+R29, unit 1), with R32's two Claude Code hooks added on 2026-11-27. It answers one question per gate: when a pull request is checked, do the
 check's code and config come from somewhere the pull request can write? A gate that answers
 "the PR" can be turned off by the change it is meant to judge. Nothing is fixed here. The
 table is the input to H13 in `HUMAN_TASKS.md`.
@@ -129,6 +129,25 @@ audit measured:
 | `check-product.py` | None of the five. A product repo's agent runs it before each PR | Not a CI check anywhere | The copy in the bstack plugin installed on the author's machine (inferred from the Product phase playbook; no workflow calls it) | The repo's `docs/` files in the pull request | **The PR**: its author decides whether to run it, and nothing records that it ran | R22 puts it in CI. `--base REF` (R29 unit 2) reports a probe written in the diff that checks its box, in observe mode |
 | Receipts (`receipt.py`, `check-product.py --receipts`) | None of the five, same as above | Not a CI check anywhere | The installed plugin copy and `ledger` on the author's PATH (inferred, as above) | The criterion's `Probe:` text and the command given to `receipt.py`, both chosen in the pull request | **The PR**. Where `ledger-verify` runs, it proves the ledger holding the receipts is intact. It doesn't check that a ticked box has a receipt (read: `verify.py` and `repo_verify.py` don't mention receipts) | R29 unit 2 (built: an `observe:` line for a probe the diff wrote, unless a person confirms it), then the receipts gate in R32 |
 | Reliability checklist (`checklist.py`, run by `verify-work`) | agent-kit keeps a `.agents/checklist.json`. agent-ledger's is in its pull request 34 | Not a CI check anywhere. It prints checks and exits 0 | The copy in the bstack plugin installed on the author's machine | `.agents/checklist.json`, read from the working tree and from the merge base. An item the pull request removes or turns off still prints, marked (bstack 0.33.0) | **The PR** for whether it runs at all and whether each printed check is done. The base for which items apply | None needed for the content. Running it is the author's choice until a gate reads its result (R32) |
+| `commit-gate` (bstack's PreToolUse hook on `git commit`) | Any repo a Claude Code session commits in with bstack installed | Not a CI check. Its mode is `observe` unless a policy file says `enforce` (H14 step 3 decides) | The installed bstack plugin, outside the repo. In agent-kit, a change to `plugins/bstack/hooks/` runs only after a release and a plugin update (inferred from the install route) | The strictest mode of `~/.agents/policy.yaml` and, in a trusted repo, the working tree's `.agents/policy.yaml`, uncommitted edits included. What counts as a verification is in the hook's code | **The session's change**, for the repo's half: with the repo file deleted, the mode fell to the user file's (probe 3). A mode set in the user file held (probe 4) | Set `enforce` in the user policy, through the agentfiles profile, not in a repo file. Owner: Beau, H14 step 3 |
+| `stop-checks` (bstack's Stop hook) | A trusted repo the session changed that has `.agents/checks.yaml` | Not a CI check. Mode as for `commit-gate` | The installed bstack plugin, as above | The commands and `timeout_s` in the working tree's `.agents/checks.yaml`, uncommitted edits included. They run only while the repo's origin is under `identity.human`'s login | **The session's change**: rewriting `stop:` to `true`, uncommitted, stopped the send-back (probe 2), and moving origin off the login stopped the commands running (probe 5). The mode itself can be lowered as for `commit-gate` | Read `stop:` and `timeout_s` from the base branch's copy, the way the checklist reads its base, so an edit takes effect only after it merges. Set the mode in the user policy. Owner: R29 |
+
+**The hook probes (2026-11-27).** Each hook's own functions, run against a scratch repo whose
+origin is under `identity.human`'s login, with a scratch user policy, state and flags file. The
+committed config was `stop: ["false"]` and a repo policy setting both hooks to `enforce`.
+
+| Probe | Change in the working tree | `stop-checks` mode | `commit-gate` mode | Sent back |
+|---|---|---|---|---|
+| 1 | None | enforce | enforce | Yes |
+| 2 | `stop:` rewritten to `["true"]`, not committed | enforce | enforce | No |
+| 3 | Repo `.agents/policy.yaml` deleted, no mode in the user file | observe | observe | No |
+| 4 | Same, with `stop-checks: enforce` in the user file | enforce | observe | Yes |
+| 5 | Origin moved to another owner | enforce | observe | No (untrusted) |
+
+Both hooks also keep their counts in `~/.agents/state/checks/` and read `~/.agents/policy.yaml`,
+which the agent can write as the same macOS user. Like the self-hosted runner below, that is
+reachable only by code written to get around the check, not by a change that loosens it in good
+faith (inferred, not probed).
 
 **Fix A, the pattern `ledger-verify` already uses in finances and quality.** Trigger on
 `pull_request_target`, keep the checker's SHA in the base branch's workflow, check out the
