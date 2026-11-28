@@ -5,8 +5,18 @@ What changed in each plugin release, newest first. In an agent, ask for `beau-he
 
 ## architecture 0.1.0 (2026-11-28)
 
-- The new architecture plugin keeps a register of risks to your systems' stability in a private books folder. `arch.py check` rejects a row that makes an illegal move, a risk closed without a `receipt:`, scores that differ from the rubric, a cell that a spreadsheet would run as a formula, and, with `--base`, an edited or deleted past row. `arch.py summary --json` ranks the risks by a score and tier the script computes, never a model, and gives the same bytes every run.
+- The new architecture plugin keeps a register of risks to your systems' stability in a private books folder, one row per event in a risk's life. `arch.py check` rejects a row that makes an illegal move, a risk closed without a `receipt:`, scores that differ from the rubric, a rescore or an answer that names no question, a cell that a spreadsheet would run as a formula or that hides characters, and, with `--base`, an edited or deleted past row. With `--base`, rows already at the ref are not judged again by a rubric that changed since, and new rows are judged by the rubric as it was at the ref.
+- `arch.py summary --json` ranks the risks by a score and tier the script computes, never a model, with live risks first, and gives the same bytes every run.
 - Try: `Make a folder with `risks.csv` and `rubric.csv` as the arch-books skill describes, then run `arch.py check BOOKS` and `arch.py summary BOOKS --json`.`
+
+## bstack 0.63.3 (2026-11-28)
+
+- beau-help lists the new architecture plugin and its arch-books skill.
+
+## bstack 0.63.2 (2026-11-28)
+
+- parallel-next's session brief tells a started session that its pull request also updates the item's own roadmap status line, so it no longer stops to ask about that file. It calls a file fine to share only when `inflight.py` lists it as hot, and warns that in a repo that bumps a version in every pull request, the second to merge re-bumps.
+- When a started session asks to edit a file another claim also touches, parallel-next reads that claim's diff for the file before answering, and says which pull request will need a re-bump.
 
 ## bstack 0.63.1 (2026-11-28)
 
