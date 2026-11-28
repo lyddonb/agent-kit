@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "goal": "Give the Head of Architecture a risk register a model cannot fudge: an append-only log of events in each risk's life, with one script that folds it and sets every score and tier (the first piece of R54).",
+  "changed": [
+    "A new architecture plugin (0.1.0) with one skill, arch-books, and arch.py with check and summary.",
+    "risks.csv holds one row per event; the lifecycle is a state machine whose spec, code and tests share one transition table.",
+    "With --base, check and summary refuse edited or deleted history, leave rows already at the ref out of the rubric rules, and judge new rows by the rubric as it was at the ref.",
+    "bstack 0.63.3: beau-help's generated catalog lists the new plugin."
+  ],
+  "claims": [
+    {
+      "claim": "Seven attacks from two adversarial reviews behave as they should: a rubric lowered in the same change as an open row fails, a later recalibration passes, a rescore naming no question fails, a closed P0 leaves the live tier counts, an invisible character is not a receipt, and summary --base refuses deleted history.",
+      "verdict": "VERIFIED",
+      "check": "the arch.py CLI run on scratch books in temp git repos, exit codes read",
+      "commit": "f7a158c",
+      "record": ".changes/2026-11-27-arch-register/replay.txt",
+      "remaining": "Run on synthetic books only; no real books exist yet."
+    },
+    {
+      "claim": "The whole test suite passes on the branch merged with main, including the register's own tests and its property test over random event sequences.",
+      "verdict": "VERIFIED",
+      "check": "unittest discover -s tests under Python 3.12",
+      "commit": "f7a158c",
+      "record": ".changes/2026-11-27-arch-register/full-suite.txt",
+      "remaining": "macOS only; CI runs it on Linux."
+    },
+    {
+      "claim": "A rescore, an accept or a decline records a person's answer.",
+      "verdict": "UNCHECKED",
+      "check": "none: the script checks that the row names a question id, not that a person answered it",
+      "commit": "f7a158c",
+      "record": "",
+      "remaining": "A check in the books that matches the id against an answered question in questions.md."
+    }
+  ],
+  "next": [
+    {
+      "item": "The survey: arch.py survey with the schedule and project-activity sensors",
+      "source": "ROADMAP.md R54",
+      "why_now": "The register has no way to gain a row except by hand until the survey exists.",
+      "impact": "The first brief can list what runs for each active project and open risks from it."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml architecture@0.1.0"
+  }
+}

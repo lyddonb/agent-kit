@@ -1,0 +1,26 @@
+## 1. Lower the rubric and open at the lowered scores in one change (must fail)
+risks.csv:3: open scores must equal the rubric.csv row for single-host
+1 problems
+exit 1
+## 2. Same rubric edit, open at the base rubric's scores (must pass)
+ok, 2 rows, 0 problems
+exit 0
+## 3. Recalibrate the rubric after the open row merged (must pass)
+ok, 2 rows, 0 problems
+exit 0
+## 4. Rescore that names no question (must fail)
+risks.csv:4: rescore needs question
+1 problems
+exit 1
+## 5. A closed P0 beside an open P1 (P1 first, by_tier.P0 is 0)
+ok, 8 rows, 0 problems
+exit 0
+[('A2', 'open', 'P1', True), ('A1', 'closed', 'P0', False)] {'P0': 0, 'P1': 1, 'P2': 0, 'P3': 0} live 1
+## 6. A close whose receipt is one invisible character (must fail)
+risks.csv:7: evidence contains a control or invisible character (a spreadsheet or a terminal would act on it, or it hides what the text says)
+1 problems
+exit 1
+## 7. History deleted, then summary --base (must refuse)
+risks.csv:2: a past row was edited or deleted (line 2 differs from HEAD)
+arch.py: refusing to summarize books with 1 problems; run check
+exit 1
