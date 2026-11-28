@@ -5,6 +5,8 @@ docs/CATALOG.md
 docs/CHANGELOG.md
 docs/PRINCIPLES.md
 package.json
+plugins/architecture/.claude-plugin/plugin.json
+plugins/architecture/plugin.json
 plugins/bstack/.claude-plugin/plugin.json
 plugins/bstack/plugin.json
 plugins/bstack/skills/beau-help/references/catalog.md

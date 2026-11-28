@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## architecture 0.1.0 (2026-11-28)
+
+- The new architecture plugin keeps a register of risks to your systems' stability in a private books folder. `arch.py check` rejects a row that makes an illegal move, a risk closed without a `receipt:`, scores that differ from the rubric, a cell that a spreadsheet would run as a formula, and, with `--base`, an edited or deleted past row. `arch.py summary --json` ranks the risks by a score and tier the script computes, never a model, and gives the same bytes every run.
+- Try: `Make a folder with `risks.csv` and `rubric.csv` as the arch-books skill describes, then run `arch.py check BOOKS` and `arch.py summary BOOKS --json`.`
+
 ## bstack 0.63.1 (2026-11-28)
 
 - parallel-next's `inflight.py --sessions` refuses a session list it can't read, instead of reading busy sessions as idle. Each row needs exactly `title`, `cwd`, `running`, `last_active` and `pr_state`, with `running` true or false and `last_active` in ISO 8601. A row with a key missing or unknown, or a value it can't read, stops the run with exit 1 and no report, naming the row, its title and the keys. Claude Code desktop's raw `list_sessions` output goes in as it is: rows with a `sessionId` are read through `isRunning`, `lastActivityAt` and `prState`.

@@ -92,6 +92,12 @@ A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and p
 - `estimate-run`: Estimate what an agent run, a charter or a whole project will cost before it starts, in both cash and API-equivalent terms, with a typical and a high figure based on past runs where the books have them. Fills a run charter's estimate and budget. Use for "what will this cost", "estimate this run", "price this charter", "is this worth running", or when writing a run charter.
 - `spend-snapshot`: Answer "what am I spending" on AI, cloud and developer tools, by provider and by project, with month-to-date spend against the budget, renewals coming up, and anything unknown. Reads the private books plus receipts and billing data from connected tools. Use for "what am I spending", "how much do my AI tools cost", "am I over budget", "spend snapshot", or before deciding on a new tool or plan.
 
+## architecture 0.1.0
+
+A Head of Architecture for your systems. Keeps a private, append-only register of risks to their stability, folds it into states and ranks it by a written rule, and proposes fixes for you to approve. Never changes code, CI, config or infrastructure itself.
+
+- `arch-books`: Check and summarize the Head of Architecture's private risk register, the append-only list of risks to your systems' stability. Checks find illegal state moves, a risk closed without a receipt, scores that differ from the rubric, spreadsheet-formula cells and edited history. Summary folds the rows into each risk's state, score and tier. Use before committing to the books, to rank the risks, to record a risk, or when asked to "check the risk register", "summarize the risks" or "what are the top risks to stability".
+
 ## video 0.1.0
 
 Narrated explainer videos made by your agent, from concept and script through voiceover and animation to a checked MP4. Renders with Remotion, whose agent skills it relies on.

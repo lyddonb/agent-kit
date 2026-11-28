@@ -8,6 +8,13 @@
 # unseen entries in a session (and in Claude Code, once at session start after an update).
 
 - date: 2026-11-28
+  plugin: architecture
+  version: 0.1.0
+  changes:
+    - "The new architecture plugin keeps a register of risks to your systems' stability in a private books folder. `arch.py check` rejects a row that makes an illegal move, a risk closed without a `receipt:`, scores that differ from the rubric, a cell that a spreadsheet would run as a formula, and, with `--base`, an edited or deleted past row. `arch.py summary --json` ranks the risks by a score and tier the script computes, never a model, and gives the same bytes every run."
+  try: "Make a folder with `risks.csv` and `rubric.csv` as the arch-books skill describes, then run `arch.py check BOOKS` and `arch.py summary BOOKS --json`."
+
+- date: 2026-11-28
   plugin: bstack
   version: 0.63.1
   changes:

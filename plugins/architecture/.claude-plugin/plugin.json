@@ -1,0 +1,19 @@
+{
+  "name": "architecture",
+  "version": "0.1.0",
+  "description": "A Head of Architecture for your systems. Keeps a private, append-only register of risks to their stability, folds it into states and ranks it by a written rule, and proposes fixes for you to approve. Never changes code, CI, config or infrastructure itself.",
+  "author": {
+    "name": "Beau Lyddon",
+    "url": "https://github.com/lyddonb"
+  },
+  "homepage": "https://github.com/lyddonb/agent-kit/tree/main/plugins/architecture",
+  "repository": "https://github.com/lyddonb/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "architecture",
+    "risk",
+    "resilience",
+    "register",
+    "stability"
+  ]
+}

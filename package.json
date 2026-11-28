@@ -18,6 +18,7 @@
       "./plugins/principles/skills",
       "./plugins/bstack/skills",
       "./plugins/cfo/skills",
+      "./plugins/architecture/skills",
       "./plugins/video/skills"
     ]
   }
