@@ -1004,8 +1004,9 @@ verdict, every other use stays `unjudged`, and a second run changes nothing.
 # Head of Architecture
 
 A third standing role beside the CFO and the Quality Director, asked for by Beau on 2026-11-27.
-It keeps an inventory of every component of the harness and a register of the risks to its
-stability, ranks them by a written rule, and proposes fixes for Beau to approve. It is built as
+It covers every active project, not only the harness (Beau, 2026-11-27), and part of its job is
+to keep the list of what is active current with him. It keeps an inventory of every component
+of those projects and a register of the risks to their stability, ranks them by a written rule, and proposes fixes for Beau to approve. It is built as
 the other two roles are: private books, one script that does all the counting, a scheduled
 brief that arrives as a pull request, and the rule that the role proposes and never acts.
 
@@ -1049,9 +1050,16 @@ append-only survey observations, briefs and questions. A risk is a state machine
 open, proposed, accepted or declined, mitigating, closed. Closing needs a receipt: a probe that
 failed before the fix and passes after. `summary` folds the rows into each risk's state and
 scores it as consequence times likelihood times detection, each 1 to 4 from a rubric file, and
-the script sets the tier, never the model. Three sensors come first, all rules: what runs on a
-schedule against the inventory, scheduled jobs that have gone quiet, and dependency pins in
-workflows and lockfiles. A weekly brief quotes only `summary --json`.
+the script sets the tier, never the model. Each component sits under a project. The list of
+projects and each one's state (active, dormant, proposed) is read from the CFO's
+`projects.yaml`, never kept a second time. Four sensors come first, all rules: what runs on a
+schedule against the inventory, scheduled jobs that have gone quiet, dependency pins in
+workflows and lockfiles, and each project's activity (commits, deploys, scheduled jobs, agent
+sessions) against its state. A state the activity contradicts is a question for Beau, and his
+answer is proposed to the CFO's books. The first briefs inventory the active projects one at a
+time, most active first. A weekly brief quotes only `summary --json`. The tier thresholds are
+set (Beau, 2026-11-27): P0 is consequence 4 with likelihood 2 or more, or a score of 36 or
+more; P1 from 18; P2 from 8. No sensor makes a network call in this entry.
 **Where:** a new skill beside `qualitydirector`, or a new plugin; the charter picks, and the
 name is not `architect`, which is taken. Tests on fixture books.
 **Depends on:** the role's books existing, and Beau's answers to the design questions (a human
@@ -1059,10 +1067,13 @@ task in the private books).
 **Playbook:** Large work item, then Feature per unit. Run **state-machines** on the risk
 lifecycle first.
 **Done when:** on fixture books, `survey` run twice on an unchanged system adds no row; a
-planted unlisted job opens one risk; a risk cannot reach closed without a receipt; `check`
-fails on a hand-edited register row; and one real weekly brief has merged.
-**Why not done:** designed 2026-11-27; the books do not exist yet.
-**Prioritize when:** the books exist and the design questions are answered.
+planted unlisted job opens one risk; a fixture project marked dormant with recent commits
+produces one question and no risk; a risk cannot reach closed without a receipt; `check` fails
+on a hand-edited register row; and one real weekly brief has merged.
+**Why not done:** designed 2026-11-27; the books do not exist yet. The design questions were
+answered 2026-11-27: a separate private books repo, the scope and thresholds above, and the
+name ("Head of Architecture" in prose, `arch` for branches and the script).
+**Prioritize when:** the books repo exists.
 
 ## P2
 
