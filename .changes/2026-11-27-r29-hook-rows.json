@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "goal": "Before the Dec 4 decision on moving R32's hooks to enforce, say whether the change a hook judges can turn that hook off (agent-kit R29 unit 1, the gate table).",
+  "changed": [
+    "docs/ARCHITECTURE.md's gate table gains rows for commit-gate and stop-checks: code from the installed plugin, config from ~/.agents/policy.yaml and the working tree's .agents/ files, and each answers 'the session's change', with a fix or owner.",
+    "A probe table records what each working-tree change did to the hooks, and a note says the state and user policy files are writable by the agent as the same user (inferred).",
+    "ROADMAP R29's status names the hooks' rows and the open fix: the Stop hook reads stop: from the base branch's copy before it moves to enforce."
+  ],
+  "claims": [
+    {
+      "claim": "An uncommitted rewrite of stop: to true stops the Stop hook's send-back; deleting the repo's .agents/policy.yaml drops both hooks to observe unless the user file sets the mode; an origin off identity.human's login stops the repo's commands running.",
+      "verdict": "VERIFIED",
+      "check": "probe.py calling checks.mode and stop_checks.judge from plugins/bstack/hooks against a scratch repo with scratch BSTACK_POLICY, BSTACK_CHECKS_STATE and BSTACK_FLAGS, five working-tree states",
+      "commit": "3a843c0",
+      "record": ".changes/2026-11-27-r29-hook-rows/probes.txt",
+      "remaining": "Run by calling the hooks' functions, not through a Claude Code session; that the agent can reset its own counts in ~/.agents/state/checks/ is inferred, not probed."
+    }
+  ],
+  "next": [
+    {
+      "item": "The Stop hook reads stop: and timeout_s from the base branch's copy",
+      "source": "R29 (status, 2026-11-27) and the gate table's stop-checks row",
+      "why_now": "H14 step 3 decides on 2026-12-04 whether stop-checks moves to enforce; today the session it judges can rewrite its commands.",
+      "impact": "An enforced Stop hook can't be switched off by the change it is meant to catch."
+    }
+  ],
+  "release": {
+    "none": "Docs and roadmap only; no plugin file changes."
+  }
+}
