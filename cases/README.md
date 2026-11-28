@@ -33,6 +33,8 @@ python3 plugins/bstack/skills/verify-work/scripts/receipt.py --run RUN_ID --acto
 
 `--inconclusive-exit 2` records an UNJUDGEABLE run (the plugin didn't load, the budget ran out, the stream had no calls) as INCONCLUSIVE instead of NOT VERIFIED, so a broken setup doesn't read as a broken skill. The receipt still shows `(exit 2)`. Neither verdict ticks the box.
 
+A criterion's proof is its receipt at the commit it names. To re-check one, or to close a unit that rests on these cases, run every case on current main and its rule-removed copy, and record each main run with `receipt.py` at that commit. The rule-removed run goes in the scratch repo's ledger, as below. A re-check whose runs passed but left no receipt proves nothing about the new commit, so the box keeps pointing at the old one.
+
 ## The rule-removed copy
 
 To see the case fail, build a copy with the rule removed in a scratch folder, never in this repo:
@@ -44,3 +46,12 @@ git init -q && git add -A && git commit -qm 'rule removed'
 ```
 
 Then run the same command there. Its receipt goes into a ledger in that scratch repo, because its commit exists nowhere else.
+
+### When the patch no longer applies
+
+A rule-removed patch is a diff against skill text, so an edit to the lines it removes stops it applying, and `tests/test_cases.py` fails. Rebuild it from today's text:
+
+1. In a scratch copy (`git archive HEAD | tar -x -C <scratch>`), remove the same rule from the current text of each file the old patch touched. Read the old patch to see what the rule was, and remove any new sentence that restates it.
+2. Write the patch from the repo root, one file at a time: `diff -u --label kit/FILE --label kit-norule/FILE FILE <scratch>/FILE >> cases/<case>/rule-removed.patch`, after emptying the old one.
+3. Check that it applies (`git apply --check -p1 cases/<case>/rule-removed.patch`) and that applying it to a fresh archive gives the same files as your scratch copy.
+4. Commit the scratch copy and run the case there once. It must fail. A patch that applies but leaves the case passing has removed the wrong text, so nothing yet shows the case catches its rule.

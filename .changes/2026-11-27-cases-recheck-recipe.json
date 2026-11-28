@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "goal": "Make a harness-lab case's proof stay current: say how to rebuild a rule-removed patch that stopped applying, and that a re-check records receipts at the commit it checks (from the reflect on closing agent-ledger's M3 unit 1).",
+  "changed": [
+    "cases/README.md, Recording a receipt: re-checking a criterion, or closing a unit that rests on the cases, runs every case on current main and its rule-removed copy and records each main run with receipt.py at that commit; a re-check with no receipt proves nothing about the new commit.",
+    "cases/README.md gains 'When the patch no longer applies': rebuild the removal from today's text in a scratch copy, write the patch with diff -u and the kit/ and kit-norule/ labels, check it applies and reproduces the copy, then run the case once there and see it fail."
+  ],
+  "claims": [
+    {
+      "claim": "The rebuild recipe is the one that rebuilt receipt-before-tick's patch in pull request 153: the written patch applied, matched the tested scratch copy, and the case failed on it.",
+      "verdict": "VERIFIED",
+      "check": "the steps as run for pull request 153; its record holds the failing run and the test",
+      "commit": "a07636f",
+      "record": ".changes/2026-11-27-receipt-case-patch/rule-removed-run.txt",
+      "remaining": "Followed once, by the agent that wrote it. No fresh agent has followed the README text."
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "cases/ is not part of a plugin, so no plugin version changes."
+  }
+}
