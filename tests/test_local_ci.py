@@ -593,13 +593,22 @@ class RecordsTest(Harness):
         self.assertFalse((self.tmp / "hook-ran").exists())
 
     def test_nothing_scripts_ci_leaves_running_outlives_the_run(self):
-        flag = self.tmp / "late"
-        sha = self.pr(43, f'(sleep 3; touch "{flag}") &\necho done')
+        pid_file = self.tmp / "background.pid"
+        sha = self.pr(43, f'sleep 30 &\necho $! > "{pid_file}"\necho done')
         self.run_ci("tick")
         self.assertEqual(self.final(sha)[-1]["state"], "success")
-        import time
-        time.sleep(5)
-        self.assertFalse(flag.exists(), "the background process was killed with its group")
+        pid = int(pid_file.read_text())
+        self.addCleanup(subprocess.run, ["kill", "-9", str(pid)], capture_output=True)
+
+        def running() -> bool:
+            stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+            return bool(stat) and not stat.startswith("Z")
+
+        for _ in range(100):
+            if not running():
+                break
+            subprocess.run(["sleep", "0.1"])
+        self.assertFalse(running(), "the background process was killed with its group")
 
 
 if __name__ == "__main__":
