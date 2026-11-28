@@ -1,0 +1,11 @@
+# One-line mutants of inflight.py's row checks, each followed by python3 -m unittest tests.test_inflight (FAILED = caught)
+unknown keys allowed: OK
+raw rows not recognized: FAILED (failures=1)
+prState required in raw rows: FAILED (failures=1)
+running not checked as bool: FAILED (failures=1)
+bad last_active accepted as epoch: FAILED (failures=1)
+refusal falls through to report: FAILED (failures=2)
+missing keys allowed: OK
+--- after tightening the key tests
+unknown keys allowed: FAILED (failures=1)
+missing keys allowed: FAILED (failures=2)
