@@ -1,0 +1,18 @@
+Scratch copy: git archive 3bae9ef.
+
+1. Unchanged tree:
+OK
+
+2. "Check a box only when its receipt says VERIFIED" changed to "only once" in product-phase.md, so receipt-before-tick's patch no longer applies:
+FAIL: test_each_case_has_a_patch_that_applies_to_this_tree (tests.test_cases.RuleRemovedPatchTest) (case='receipt-before-tick')
+AssertionError: 1 != 0 : receipt-before-tick/rule-removed.patch no longer applies, so the case can't show it fails without its rule. Rebuild it from today's text with the steps under "When the patch no longer applies" in cases/README.md.
+error: patch failed: plugins/bstack/skills/beau-mode/playbooks/product-phase.md:13
+error: plugins/bstack/skills/beau-mode/playbooks/product-phase.md: patch does not apply
+FAILED (failures=1)
+
+3. Also the README heading renamed to "Rebuilding a patch":
+FAIL: test_each_case_has_a_patch_that_applies_to_this_tree (tests.test_cases.RuleRemovedPatchTest) (case='receipt-before-tick')
+AssertionError: 1 != 0 : receipt-before-tick/rule-removed.patch no longer applies, so the case can't show it fails without its rule. Rebuild it from today's text with the steps under "When the patch no longer applies" in cases/README.md.
+FAIL: test_readme_has_the_section_the_stale_patch_message_names (tests.test_cases.RuleRemovedPatchTest)
+AssertionError: 'When the patch no longer applies' not found in ['harness-lab cases', 'Running', 'Recording a receipt', 'The rule-removed copy', 'Rebuilding a patch'] : the stale-patch failure points authors at a cases/README.md section that is gone
+FAILED (failures=2)

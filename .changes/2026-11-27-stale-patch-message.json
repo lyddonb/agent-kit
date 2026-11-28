@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "goal": "When a skill edit makes a harness-lab case's rule-removed.patch stop applying, the author learns how to rebuild it from the test failure itself, without asking anyone.",
+  "changed": [
+    "tests/test_cases.py: the stale-patch failure names \"When the patch no longer applies\" in cases/README.md.",
+    "tests/test_cases.py: a new test fails if cases/README.md loses that heading.",
+    "ROADMAP.md: R53 marked done."
+  ],
+  "claims": [
+    {
+      "claim": "A stale rule-removed patch fails tests/test_cases.py with a message naming the README section and file.",
+      "verdict": "VERIFIED",
+      "check": "In a fresh archive of the commit, edited a line receipt-before-tick's patch removes and ran tests.test_cases: the failure names the section and cases/README.md, followed by git apply's error.",
+      "commit": "3bae9ef",
+      "record": ".changes/2026-11-27-stale-patch-message/proof.txt",
+      "remaining": ""
+    },
+    {
+      "claim": "Renaming or removing the README section fails the suite, so the message can't point at a heading that is gone.",
+      "verdict": "VERIFIED",
+      "check": "In the same scratch copy, renamed the heading and ran tests.test_cases: test_readme_has_the_section_the_stale_patch_message_names failed.",
+      "commit": "3bae9ef",
+      "record": ".changes/2026-11-27-stale-patch-message/proof.txt",
+      "remaining": ""
+    }
+  ],
+  "next": [],
+  "release": {
+    "note": "agent-kit tests: when a harness-lab case's rule-removed patch stops applying, the failure points at the rebuild steps in cases/README.md."
+  }
+}
