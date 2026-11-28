@@ -9,6 +9,13 @@
 
 - date: 2026-11-28
   plugin: bstack
+  version: 0.63.2
+  changes:
+    - "parallel-next's session brief tells a started session that its pull request also updates the item's own roadmap status line, so it no longer stops to ask about that file. It calls a file fine to share only when `inflight.py` lists it as hot, and warns that in a repo that bumps a version in every pull request, the second to merge re-bumps."
+    - "When a started session asks to edit a file another claim also touches, parallel-next reads that claim's diff for the file before answering, and says which pull request will need a re-bump."
+
+- date: 2026-11-28
+  plugin: bstack
   version: 0.63.1
   changes:
     - "parallel-next's `inflight.py --sessions` refuses a session list it can't read, instead of reading busy sessions as idle. Each row needs exactly `title`, `cwd`, `running`, `last_active` and `pr_state`, with `running` true or false and `last_active` in ISO 8601. A row with a key missing or unknown, or a value it can't read, stops the run with exit 1 and no report, naming the row, its title and the keys. Claude Code desktop's raw `list_sessions` output goes in as it is: rows with a `sessionId` are read through `isRunning`, `lastActivityAt` and `prState`."
