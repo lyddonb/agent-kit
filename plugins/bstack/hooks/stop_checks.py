@@ -1,6 +1,7 @@
 """Claude Code Stop hook: when the agent finishes, run the cheap checks each trusted repo it
-changed lists in .agents/checks.yaml. Observe logs a failure; enforce sends the failing output
-back to the agent twice, then lets the stop through and logs why."""
+changed lists in .agents/checks.yaml, as its base branch has the file, so the change being judged
+can't rewrite them. Observe logs a failure; enforce sends the failing output back to the agent
+twice, then lets the stop through and logs why."""
 from __future__ import annotations
 
 import hashlib
@@ -31,14 +32,36 @@ def _item(text: str) -> list:
     return _strings(text) if text[:1] in ("'", '"') else [text]
 
 
-def read_config(root: Path) -> tuple[list, int]:
-    """`stop:` (a flow list, or a block list of quoted or bare commands) and `timeout_s`."""
+def base_commit(root: Path) -> tuple[str, str] | None:
+    """Origin's default branch as last fetched, as (name, commit): origin/HEAD, else origin/main or
+    origin/master."""
+    for ref in ("origin/HEAD", "origin/main", "origin/master"):
+        out = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "-q", f"refs/remotes/{ref}"],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            return ref, out.stdout.strip()
+    return None
+
+
+def read_config(root: Path) -> tuple[list, int, tuple[str, str]] | None:
+    """The base branch's `.agents/checks.yaml` and the base it came from, or None when the repo has
+    no base to read it from."""
+    base = base_commit(root)
+    if not base:
+        return None
+    out = subprocess.run(["git", "-C", str(root), "show", f"{base[1]}:.agents/checks.yaml"],
+                         capture_output=True, timeout=10)
     try:
-        lines = (root / ".agents" / "checks.yaml").read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return [], DEFAULT_TIMEOUT
+        commands, timeout = parse_config(out.stdout.decode("utf-8")) if out.returncode == 0 else ([], DEFAULT_TIMEOUT)
+    except UnicodeDecodeError:
+        commands, timeout = [], DEFAULT_TIMEOUT
+    return commands, timeout, base
+
+
+def parse_config(text: str) -> tuple[list, int]:
+    """`stop:` (a flow list, or a block list of quoted or bare commands) and `timeout_s`."""
     commands, timeout, in_stop = [], DEFAULT_TIMEOUT, False
-    for line in lines:
+    for line in text.splitlines():
         bare = line.split(" #", 1)[0].rstrip()
         if not bare.strip() or bare.lstrip().startswith("#"):
             continue
@@ -111,12 +134,19 @@ def run_checks(root: Path, commands: list, timeout: int, deadline: float) -> tup
 
 def judge(root: Path, mode: str, session: str, entries: list, cwd: str, deadline: float) -> str | None:
     """The send-back text for one repo, or None."""
-    commands, timeout = read_config(root)
-    if not commands or not checks.trusted(root):
+    if not checks.trusted(root):
+        return None
+    config = read_config(root)
+    if config is None:
+        if (root / ".agents" / "checks.yaml").exists():
+            checks.warn(CHECK, f"{root}: no base branch (origin/HEAD, origin/main or origin/master), so its checks didn't run")
+        return None
+    commands, timeout, (base_name, base_sha) = config
+    if not commands:
         return None
     key = f"{session}-{hashlib.sha256(str(root).encode()).hexdigest()[:12]}"
     state = checks.load_state(CHECK, key)
-    now = fingerprint(root)
+    now = f"{fingerprint(root)}:{base_sha}"
     blocks = state.get("blocks", 0)
     if blocks == 0 and state.get("tree") == now:
         return None
@@ -125,7 +155,7 @@ def judge(root: Path, mode: str, session: str, entries: list, cwd: str, deadline
         checks.save_state(CHECK, key, {"tree": now, "blocks": 0})
         return None
     command, tail = failed
-    reason = f"`{command}` failed in {root.name}"
+    reason = f"`{command}` (from {base_name} {base_sha[:7]}) failed in {root.name}"
     model = checks.session_model(entries)
     if mode == "observe" or blocks >= checks.MAX_BLOCKS:
         outcome = "observe" if mode == "observe" else "let-through"

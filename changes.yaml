@@ -9,6 +9,13 @@
 
 - date: 2026-11-27
   plugin: bstack
+  version: 0.62.0
+  changes:
+    - "The Stop hook reads the commands under `stop:` and `timeout_s` from `.agents/checks.yaml` as origin's default branch has it (`origin/HEAD`, else `origin/main` or `origin/master`, as last fetched), not from the working tree. A session can no longer switch its own check off by rewriting the file, committed or not; a new or changed list takes effect once it reaches that branch. The commands still run in the working tree. A send-back names the branch and commit its commands came from. A repo with no such branch runs nothing and says why on stderr."
+  try: "In a repo you own with `stop-checks: enforce`, rewrite `.agents/checks.yaml` to `stop: [\"true\"]`, break a check its base copy runs, and finish the session: it is sent back with the base branch's command."
+
+- date: 2026-11-27
+  plugin: bstack
   version: 0.60.0
   changes:
     - "beau-mode treats code that runs commands it reads from a repo or a config (hooks, gates, check runners) as running untrusted input: it checks whose repo it is before running anything, in every mode, and answers a security warning before moving on. When a permission check denies an action, it asks instead of reaching the same effect another way."
