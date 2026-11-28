@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "goal": "Turn what a parallel-next run got wrong into edits, so the next run's started sessions don't stop to ask about the roadmap file and expect the version re-bump: name the status-line edit in the brief's fence, tie 'hot files are fine' to inflight.py's own hot list, and read the other claim's diff before answering a fence question.",
+  "changed": [
+    "parallel-next's brief template: the Fence says the finishing pull request also edits the item's own status line in its roadmap file and that the edit is expected; a shared file is fine only when inflight.py lists it as hot; in a repo that bumps a version in every pull request, expect a re-bump when another release merges first.",
+    "parallel-next step 5: before answering a started session's question about a file another claim touches, read that claim's diff for the file, and say which pull request will need a re-bump.",
+    "ROADMAP.md: R58 (declared always-hot release files), R59 (a clean worktree on a merged commit reads as idle, not unknown), R60 (inflight.py prints how many session rows it read), and a second occurrence and merged-PR evidence for R51. bstack 0.63.2."
+  ],
+  "claims": [
+    {
+      "claim": "The generated files are current, the plugin manifests validate, and the whole suite passes with the edits.",
+      "verdict": "VERIFIED",
+      "check": "make gen validate claude-validate; make check; make test",
+      "commit": "1f3a4ca",
+      "record": ".changes/2026-11-28-reflect-parallel-next-fences/make-test.txt",
+      "remaining": "No eval checks that a started session now edits its status line without asking; the next parallel-next run that starts two items in one repo is the first real check."
+    }
+  ],
+  "next": [
+    {
+      "item": "R59: a clean worktree already merged reads as idle, not unknown",
+      "source": "ROADMAP.md R59, from this reflect pass",
+      "why_now": "Every parallel-next run clears such worktrees by hand while they exist.",
+      "impact": "Candidates in a repo with leftover worktrees come back clear instead of unknown, so the ranking needs no manual git check."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.63.2"
+  }
+}
