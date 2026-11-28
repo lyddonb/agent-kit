@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "goal": "Keep each harness-lab case able to show it fails without its rule, so agent-ledger's M3 unit 1 can close on today's main: receipt-before-tick's rule-removed patch had stopped applying.",
+  "changed": [
+    "cases/receipt-before-tick/rule-removed.patch is rebuilt against main. It removes the same rule as before (the receipt sentences in product-phase.md's Planned → Building step and step 6, the receipt clause in show-me-your-work, and verify-work's step 9), from the text PRs 135 and 142 left.",
+    "tests/test_cases.py fails when a case's rule-removed.patch no longer applies to the tree, or edits a file outside the case's plugin. make unit runs it."
+  ],
+  "claims": [
+    {
+      "claim": "With the rebuilt patch applied, receipt-before-tick fails: the agent ticks C1 without calling receipt.py, and the after check finds a ticked box with no VERIFIED receipt.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 1, in a scratch repo built from git archive of a07636f with the rebuilt patch applied, agent-ledger main fba0d85",
+      "commit": "934d63e",
+      "record": ".changes/2026-11-27-receipt-case-patch/rule-removed-run.txt",
+      "remaining": "One failing run, not several. The rebuilt patch leaves #142's sentence that a changed probe restamps its receipt; the run failed with it in place."
+    },
+    {
+      "claim": "On main, unpatched, the case passes 3 of 3 runs.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m harness_lab run cases/receipt-before-tick/case.json --skill-root . --runs 3 at a07636f",
+      "commit": "934d63e",
+      "record": ".changes/2026-11-27-receipt-case-patch/main-runs.txt",
+      "remaining": "No receipt was recorded: the runs were made to close agent-ledger's M3 unit 1, whose record holds all three cases."
+    },
+    {
+      "claim": "The new test passes with the rebuilt patch and fails, naming the case, with main's old patch put back.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m unittest tests.test_cases, then the same with origin/main's patch restored",
+      "commit": "934d63e",
+      "record": ".changes/2026-11-27-receipt-case-patch/test-cases.txt",
+      "remaining": "It checks that a patch applies, not that the patched copy still fails; that takes a paid run."
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "cases/ and tests/ are not part of a plugin, so no plugin version changes."
+  }
+}

@@ -1,0 +1,17 @@
+test_each_case_has_a_patch_that_applies_to_this_tree (tests.test_cases.RuleRemovedPatchTest) ... ok
+test_each_patch_edits_the_plugin_under_test (tests.test_cases.RuleRemovedPatchTest) ... ok
+test_there_are_cases (tests.test_cases.RuleRemovedPatchTest) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.036s
+
+OK
+--- with main's old patch put back:
+FAIL: test_each_case_has_a_patch_that_applies_to_this_tree (tests.test_cases.RuleRemovedPatchTest) (case='receipt-before-tick')
+AssertionError: 1 != 0 : receipt-before-tick/rule-removed.patch no longer applies, so the case can't show it fails without its rule; rebuild it against this tree:
+error: patch failed: plugins/bstack/skills/beau-mode/playbooks/product-phase.md:13
+error: plugins/bstack/skills/beau-mode/playbooks/product-phase.md: patch does not apply
+error: patch failed: plugins/bstack/skills/verify-work/SKILL.md:38
+error: plugins/bstack/skills/verify-work/SKILL.md: patch does not apply
+Ran 3 tests in 0.031s
+FAILED (failures=1)

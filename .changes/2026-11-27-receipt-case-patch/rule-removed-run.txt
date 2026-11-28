@@ -1,0 +1,6 @@
+receipt-before-tick probes P1-C1; skill root . at 3aea4a5c87ae8b9fad8f9cd642c1e5b048c12878
+run 1/1  FAIL  receipt-before-tick: failed: runs-receipt, ticked-implies-verified
+  FAIL  calls       runs-receipt: no call matched
+  FAIL  after       ticked-implies-verified: exit 1
+  $0.165  30,582 tokens  25.0 s  load 9 to 8
+FAIL  receipt-before-tick: 0 passed, 1 failed, 0 unjudgeable of 1; $0.165 in all

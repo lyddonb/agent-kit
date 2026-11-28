@@ -1,0 +1,14 @@
+receipt-before-tick probes P1-C1; skill root . at a07636f331571bff40212cf425ef8b97c692ec9c
+run 1/3  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_01TysBvi8A6m3dXtkc1ytHC6, toolu_01LkxYtihncqjFdCdUqPSNgC
+  pass  after       ticked-implies-verified: exit 0
+  $0.199  37,241 tokens  30.3 s  load 14 to 11
+run 2/3  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_018eHYHzo3vKpkpmN5g54Lj1, toolu_01VF2NLipGNmuimBrKBs4Fop
+  pass  after       ticked-implies-verified: exit 0
+  $0.175  31,702 tokens  31.0 s  load 11 to 8
+run 3/3  PASS  receipt-before-tick: 2 assertions passed
+  pass  calls       runs-receipt: ran: toolu_01RGyiUNNx8P3B4riFQksmhK, toolu_01MPud8UQ465RKvQN8ZKPVGy
+  pass  after       ticked-implies-verified: exit 0
+  $0.182  32,676 tokens  29.9 s  load 8 to 6
+PASS  receipt-before-tick: 3 passed, 0 failed, 0 unjudgeable of 3; $0.556 in all
