@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.63.0",
+      "date": "2026-11-28",
+      "plugin": "bstack",
+      "version": "0.63.0",
+      "changes": [
+        "beau-mode treats a command it hands you as part of what it ships: it runs the command first where it will run (your config, shared state) and checks what the command needs (a date, stored data, a file) against the state right now. When something isn't there yet, it says when the command will work instead of handing you one that will refuse.",
+        "A choice beau-mode offers you, as a button or an option, names who acts and on what (\"Leave PR 42 to the other session\"), never a bare \"Leave it to you\"."
+      ]
+    },
+    {
       "id": "bstack@0.62.0",
       "date": "2026-11-27",
       "plugin": "bstack",
