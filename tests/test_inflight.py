@@ -30,6 +30,19 @@ print(json.dumps(json.load(open(os.environ["INFLIGHT_FAKE_PULLS"])).get(slug, []
 NOW = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
 
 
+def row(title, cwd, running, last_active, pr_state=None):
+    return {"title": title, "cwd": str(cwd), "running": running, "last_active": last_active, "pr_state": pr_state}
+
+
+def raw_row(n, title, cwd, running, last_active, pr_state=None):
+    out = {"sessionId": f"local_{n:08d}", "title": title, "cwd": str(cwd), "branch": f"claude/x-{n}",
+           "isArchived": False, "isRunning": running, "lastActivityAt": last_active, "group": None,
+           "link": f"claude://example/{n}", "remoteControlActive": False}
+    if pr_state:
+        out.update(prNumber=n, prState=pr_state)
+    return out
+
+
 def git(path, *args):
     return subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True, text=True).stdout
 
@@ -95,7 +108,23 @@ class InflightTest(unittest.TestCase):
         os.environ["INFLIGHT_GH"] = "no-such-gh-binary-for-tests"
 
     def collect(self, candidates=None, sessions=None):
-        return inflight.collect([str(self.tmp)], candidates, sessions, now=NOW)
+        parsed = inflight.read_session_list(sessions) if sessions is not None else None
+        return inflight.collect([str(self.tmp)], candidates, parsed, now=NOW)
+
+    def run_cli(self, sessions, candidates):
+        files = {}
+        for name, data in (("s.json", sessions), ("c.json", candidates)):
+            files[name] = self.tmp / name
+            files[name].write_text(json.dumps(data))
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = inflight.main([str(self.tmp / "alpha"), "--sessions", str(files["s.json"]),
+                                  "--candidates", str(files["c.json"]), "--json"])
+        return code, out.getvalue(), err.getvalue()
+
+    def row_errors(self, err):
+        lines = [line.strip() for line in err.splitlines() if line.startswith("  row ")]
+        return {int(line.split()[1].rstrip(":")): line for line in lines}
 
     def claims(self, report, repo):
         return [c for c in report.claims if c.repo == repo]
@@ -239,12 +268,11 @@ class InflightTest(unittest.TestCase):
         recent = (NOW - timedelta(hours=2)).isoformat()
         old = (NOW - timedelta(hours=100)).isoformat()
         sessions = [
-            {"title": "R1 in alpha", "cwd": str(self.tmp / "alpha"), "running": False, "last_active": recent},
-            {"title": "R2 done", "cwd": str(self.tmp / "alpha"), "running": False, "last_active": recent,
-             "pr_state": "MERGED"},
-            {"title": "R3 long ago", "cwd": str(self.tmp / "alpha"), "running": False, "last_active": old},
-            {"title": "R4 running", "cwd": str(self.tmp / "alpha"), "running": True, "last_active": old},
-            {"title": "R5 elsewhere", "cwd": "/nowhere", "running": True},
+            row("R1 in alpha", self.tmp / "alpha", False, recent),
+            row("R2 done", self.tmp / "alpha", False, recent, "MERGED"),
+            row("R3 long ago", self.tmp / "alpha", False, old),
+            row("R4 running", self.tmp / "alpha", True, old),
+            row("R5 elsewhere", "/nowhere", True, recent),
         ]
         report = self.collect([{"id": f"R{n}", "repo": "alpha", "paths": [f"docs/{n}.md"]} for n in range(1, 6)]
                               + [{"id": "R1", "repo": "beta", "paths": ["docs/x.md"]}], sessions)
@@ -260,7 +288,7 @@ class InflightTest(unittest.TestCase):
         git(self.tmp, "init", "-q", "-b", "main")
         git(self.tmp, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "w")
         self.ws.repo("alpha")
-        sessions = [{"title": "Work on M3", "cwd": str(self.tmp), "running": True}]
+        sessions = [row("Work on M3", self.tmp, True, NOW.isoformat())]
         report = self.collect([{"id": "M3", "repo": "alpha", "paths": ["docs/x.md"]}], sessions)
         self.assertEqual(self.verdicts(report)["M3"].state, "taken")
 
@@ -295,6 +323,58 @@ class InflightTest(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(inflight.main([str(self.tmp), "--candidates", str(cands)]), 2,
                              "a candidates file that is not a list is a usage error")
+
+
+    def test_session_rows_with_keys_it_does_not_read_are_refused(self):
+        self.ws.repo("alpha")
+        rows = [row("R1 fine", self.tmp / "alpha", True, NOW.isoformat()),
+                {"title": "R2 busy", "cwd": str(self.tmp / "alpha"), "isRunning": True, "prState": "OPEN"},
+                row("R3 extra", self.tmp / "alpha", True, NOW.isoformat()) | {"branch": "x"}]
+        code, out, err = self.run_cli(rows, [{"id": "R2", "repo": "alpha", "paths": ["docs/x.md"]}])
+        self.assertEqual(code, 1, "a session list with rows it cannot read must not exit 0")
+        errors = self.row_errors(err)
+        self.assertEqual(sorted(errors), [2, 3], "only the bad rows are reported")
+        self.assertEqual(errors[2], 'row 2 ("R2 busy"): missing running, last_active, pr_state; '
+                                    "unknown isRunning, prState", "the row, its title, and both kinds of key")
+        self.assertEqual(errors[3], 'row 3 ("R3 extra"): unknown branch', "a key it does not read is refused")
+        for key in ("title", "cwd", "running", "last_active", "pr_state"):
+            self.assertIn(f'"{key}"', err.splitlines()[-2], "the error prints the key list")
+        self.assertEqual(out, "", "no report is printed from a list it could not read")
+
+    def test_session_rows_with_unreadable_values_are_refused(self):
+        self.ws.repo("alpha")
+        rows = [row("R1 when", self.tmp / "alpha", False, "yesterday"),
+                row("R2 how", self.tmp / "alpha", "yes", NOW.isoformat()),
+                raw_row(3, "R3 raw", self.tmp / "alpha", True, NOW.isoformat())]
+        del rows[2]["lastActivityAt"]
+        code, out, err = self.run_cli(rows, [{"id": "R1", "repo": "alpha", "paths": ["docs/x.md"]}])
+        self.assertEqual(code, 1)
+        errors = self.row_errors(err)
+        self.assertEqual(errors[1], 'row 1 ("R1 when"): last_active is "yesterday"',
+                         "an unparseable last_active reads as idle, so it is refused")
+        self.assertEqual(errors[2], 'row 2 ("R2 how"): running is "yes"', "running must be true or false")
+        self.assertEqual(errors[3], 'row 3 ("R3 raw"): missing lastActivityAt',
+                         "a raw row is named by its own keys")
+        self.assertEqual(out, "")
+
+    def test_raw_list_sessions_reads_the_same_as_a_hand_mapped_list(self):
+        self.ws.repo("alpha")
+        recent = (NOW - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+        old = (NOW - timedelta(hours=100)).isoformat().replace("+00:00", "Z")
+        alpha = self.tmp / "alpha"
+        cases = [("R1 recent, no pull", False, recent, None), ("R2 merged", False, recent, "MERGED"),
+                 ("R3 long ago", False, old, "OPEN"), ("R4 running", True, old, "MERGED"),
+                 ("R5 open pull", False, recent, "OPEN")]
+        raw = [raw_row(n, t, alpha, r, a, p) for n, (t, r, a, p) in enumerate(cases, 1)]
+        hand = [row(t, alpha, r, a, p) for t, r, a, p in cases]
+        cands = [{"id": f"R{n}", "repo": "alpha", "paths": [f"docs/{n}.md"]} for n in range(1, 6)]
+        raw_code, raw_out, raw_err = self.run_cli(raw, cands)
+        hand_code, hand_out, _ = self.run_cli(hand, cands)
+        self.assertEqual((raw_code, raw_err), (0, ""), "a raw list_sessions dump is read without complaint")
+        self.assertEqual(json.loads(raw_out)["claims"], json.loads(hand_out)["claims"])
+        self.assertEqual(json.loads(raw_out)["verdicts"], json.loads(hand_out)["verdicts"])
+        states = {v["id"]: v["state"] for v in json.loads(raw_out)["verdicts"]}
+        self.assertEqual(states, {"R1": "taken", "R2": "clear", "R3": "clear", "R4": "taken", "R5": "taken"})
 
 
 if __name__ == "__main__":
