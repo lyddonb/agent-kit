@@ -9,6 +9,13 @@
 
 - date: 2026-11-27
   plugin: bstack
+  version: 0.62.1
+  changes:
+    - "parallel-next's `inflight.py --sessions` refuses a session list it can't read, instead of reading busy sessions as idle. Each row needs exactly `title`, `cwd`, `running`, `last_active` and `pr_state`, with `running` true or false and `last_active` in ISO 8601. A row with a key missing or unknown, or a value it can't read, stops the run with exit 1 and no report, naming the row, its title and the keys. Claude Code desktop's raw `list_sessions` output goes in as it is: rows with a `sessionId` are read through `isRunning`, `lastActivityAt` and `prState`."
+  try: "Save Claude Code desktop's `list_sessions` output to a file and run `inflight.py PATHS --sessions FILE`: its running sessions now claim their ids."
+
+- date: 2026-11-27
+  plugin: bstack
   version: 0.62.0
   changes:
     - "The Stop hook reads the commands under `stop:` and `timeout_s` from `.agents/checks.yaml` as origin's default branch has it (`origin/HEAD`, else `origin/main` or `origin/master`, as last fetched), not from the working tree. A session can no longer switch its own check off by rewriting the file, committed or not; a new or changed list takes effect once it reaches that branch. The commands still run in the working tree. A send-back names the branch and commit its commands came from. A repo with no such branch runs nothing and says why on stderr."

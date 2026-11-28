@@ -21,7 +21,11 @@ not a conflict. A worktree folder under .worktrees/ or .claude/worktrees/ whose 
 broken is listed as stale.
 
 --sessions FILE is a JSON list of {"title", "cwd", "running", "last_active", "pr_state"} from your
-tool's session list (last_active is ISO 8601). A session counts while it is running, or while its
+tool's session list: running is true or false, last_active is ISO 8601, and pr_state is the pull
+request's state or null. Claude Code desktop's raw list_sessions output works as it is: a row with a
+sessionId is read through its isRunning, lastActivityAt and prState. Any other row must have exactly
+those five keys. A row with a key missing or unknown, or a value it cannot read, stops the run with
+exit 1 before anything is reported, since a row read wrong makes busy work look free. A session counts while it is running, or while its
 pull request is not merged or closed and it was active in the last 72 hours. A session whose cwd is
 inside one repo claims ids in that repo; one in a folder that holds other repos claims them in all.
 A worktree of a repo that holds other repos (a workspace) is where a session lives while it edits
@@ -68,6 +72,11 @@ SESSION_WINDOW_HOURS = 72
 ENDED_PULLS = {"MERGED", "CLOSED"}
 STATES = ("taken", "conflict", "unknown", "rebase", "clear")
 ID_IN_TITLE = re.compile(r"\b([A-Z]{1,2}\d+(?:\.\d+)*)\b")
+SESSION_KEYS = ("title", "cwd", "running", "last_active", "pr_state")
+RAW_SESSION_MARKER = "sessionId"
+RAW_SESSION_KEYS = {"title": "title", "cwd": "cwd", "running": "isRunning", "last_active": "lastActivityAt",
+                    "pr_state": "prState"}
+RAW_SESSION_OPTIONAL = {"pr_state"}
 ID_IN_BRANCH = re.compile(r"(?<![a-z0-9.])([a-z]{1,2}\d+(?:\.\d+)*)(?![a-z0-9])", re.IGNORECASE)
 WORKTREE_HOMES = (".worktrees", ".claude/worktrees")
 
@@ -82,6 +91,19 @@ class Claim:
     paths: list[str] | None = None
     links: list[str] = field(default_factory=list)
     idle_hours: int | None = None
+
+
+@dataclass(frozen=True)
+class Session:
+    title: str
+    cwd: str
+    running: bool
+    last_active: datetime
+    pr_state: str | None
+
+
+class SessionListError(ValueError):
+    pass
 
 
 @dataclass
@@ -271,18 +293,66 @@ def read_pulls(repo: RepoState, slug: str | None, report: Report) -> None:
                                    ids, sorted(set(files)) or None, [link]))
 
 
-def session_live(s: dict, now: datetime) -> bool:
-    if s.get("running"):
-        return True
-    if str(s.get("pr_state") or "").upper() in ENDED_PULLS:
-        return False
+def parse_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
     try:
-        last = datetime.fromisoformat(str(s.get("last_active", "")).replace("Z", "+00:00"))
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def read_session_row(row: dict) -> Session | list[str]:
+    raw = RAW_SESSION_MARKER in row
+    names = RAW_SESSION_KEYS if raw else {k: k for k in SESSION_KEYS}
+    missing = [src for key, src in names.items() if src not in row and not (raw and key in RAW_SESSION_OPTIONAL)]
+    unknown = [] if raw else sorted(set(row) - set(SESSION_KEYS))
+    errors = []
+    if missing:
+        errors.append("missing " + ", ".join(missing))
+    if unknown:
+        errors.append("unknown " + ", ".join(unknown))
+    if errors:
+        return errors
+    value = {key: row.get(src) for key, src in names.items()}
+    last_active = parse_time(value["last_active"])
+    for key, ok in (("title", isinstance(value["title"], str)), ("cwd", isinstance(value["cwd"], str)),
+                    ("running", isinstance(value["running"], bool)), ("last_active", last_active is not None),
+                    ("pr_state", value["pr_state"] is None or isinstance(value["pr_state"], str))):
+        if not ok:
+            errors.append(f"{names[key]} is {json.dumps(value[key])}")
+    if errors:
+        return errors
+    return Session(value["title"], value["cwd"], value["running"], last_active, value["pr_state"])
+
+
+def read_session_list(rows: list[dict]) -> list[Session]:
+    sessions, errors = [], []
+    for n, row in enumerate(rows, 1):
+        read = read_session_row(row)
+        if isinstance(read, Session):
+            sessions.append(read)
+            continue
+        title = row.get("title")
+        name = f"row {n}" + (f" ({json.dumps(title)})" if isinstance(title, str) else "")
+        errors.append(f"  {name}: {'; '.join(read)}")
+    if errors:
+        keys = ", ".join(f'"{k}"' for k in SESSION_KEYS)
+        raise SessionListError("\n".join(errors + [
+            f"Each row needs exactly {{{keys}}}: running is true or false, last_active is ISO 8601, "
+            "pr_state is the pull request's state or null.",
+            "Claude Code desktop's raw list_sessions output works as it is: rows with a sessionId are read "
+            "through isRunning, lastActivityAt and prState."]))
+    return sessions
+
+
+def session_live(s: Session, now: datetime) -> bool:
+    if s.running:
+        return True
+    if (s.pr_state or "").upper() in ENDED_PULLS:
         return False
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
-    return (now - last).total_seconds() <= SESSION_WINDOW_HOURS * 3600
+    return (now - s.last_active).total_seconds() <= SESSION_WINDOW_HOURS * 3600
 
 
 def session_repo(cwd: str, repos: list[RepoState]) -> str | None:
@@ -302,17 +372,15 @@ def session_repo(cwd: str, repos: list[RepoState]) -> str | None:
     return "*" if holds_others else home.name
 
 
-def read_sessions(sessions: list[dict], report: Report, now: datetime) -> None:
+def read_sessions(sessions: list[Session], report: Report, now: datetime) -> None:
     for s in sessions:
         if not session_live(s, now):
             continue
-        title = str(s.get("title", ""))
-        repo = session_repo(str(s.get("cwd", "")), report.repos)
+        repo = session_repo(s.cwd, report.repos)
         if repo is None:
             continue
-        state = "running" if s.get("running") else f"last active {s.get('last_active', '?')}"
-        report.claims.append(Claim(repo, "session", title, f"{s.get('cwd', '')} ({state})",
-                                   ids_in_title(title), []))
+        state = "running" if s.running else f"last active {s.last_active.isoformat()}"
+        report.claims.append(Claim(repo, "session", s.title, f"{s.cwd} ({state})", ids_in_title(s.title), []))
 
 
 def matches(pattern: str, path: str) -> bool:
@@ -385,7 +453,7 @@ def check(candidates: list[dict], report: Report) -> None:
             kept.append(({"id": cid, "repo": name}, mine))
 
 
-def collect(paths: list[str], candidates: list[dict] | None, sessions: list[dict] | None = None,
+def collect(paths: list[str], candidates: list[dict] | None, sessions: list[Session] | None = None,
             now: datetime | None = None) -> Report:
     report = Report()
     roots = [Path(p).expanduser().resolve() for p in paths]
@@ -473,7 +541,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="List the work in flight and check candidates against it.")
     parser.add_argument("paths", nargs="+", metavar="PATH", help="a git repo, or a folder of git repos")
     parser.add_argument("--sessions", metavar="FILE",
-                        help='JSON list of {"title", "cwd", "running", "last_active", "pr_state"} from your tool')
+                        help='JSON list of {"title", "cwd", "running", "last_active", "pr_state"}, '
+                             "or Claude Code desktop's raw list_sessions output")
     parser.add_argument("--candidates", metavar="FILE",
                         help='JSON list, best first, of {"id", "repo", "paths"} to check against the claims')
     parser.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -486,7 +555,15 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"inflight.py: cannot read --{flag} {source}: {exc}", file=sys.stderr)
             return 2
-    report = collect(args.paths, loaded["candidates"], loaded["sessions"])
+    sessions = None
+    if loaded["sessions"] is not None:
+        try:
+            sessions = read_session_list(loaded["sessions"])
+        except SessionListError as exc:
+            print(f"inflight.py: cannot read --sessions {args.sessions}, so nothing was checked:\n{exc}",
+                  file=sys.stderr)
+            return 1
+    report = collect(args.paths, loaded["candidates"], sessions)
     print(as_json(report) if args.json else render(report))
     return 1 if report.problems else 0
 

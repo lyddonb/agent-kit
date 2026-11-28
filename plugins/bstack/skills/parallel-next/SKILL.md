@@ -17,18 +17,18 @@ Load beau-mode first if it isn't loaded. This skill ends in a short list of item
 
 1. Run `git fetch` in each repo, so roadmaps and branches are read as the remote has them.
 2. Run waiting-on-me's `scripts/waiting.py` (in the `waiting-on-me` folder beside this skill's) over `PATHS`, with any flags the project's instructions give it. Report blockers, open gates and pull requests waiting on the user first, as waiting-on-me says.
-3. If your tool can list its agent sessions (Claude Code desktop's `list_sessions`, for example), write them to a scratch file as a JSON list of `{"title", "cwd", "running", "last_active", "pr_state"}`. With no session list, leave out `--sessions` and say in the reply that sessions without a worktree or pull request were not seen.
+3. If your tool can list its agent sessions, write them to a scratch file. Claude Code desktop's `list_sessions` output goes in as it is: don't rename its keys, and ask for enough rows (it returns 20 unless you pass a higher `limit`), since a session cut from the list reads as free. From any other tool, write a JSON list of `{"title", "cwd", "running", "last_active", "pr_state"}` with exactly those keys in every row: `running` is true or false, `last_active` is ISO 8601, and `pr_state` is the pull request's state, or null when there is none. With no session list, leave out `--sessions` and say in the reply that sessions without a worktree or pull request were not seen.
 4. Run the in-flight check from this skill's folder:
 
    ```bash
    python3 scripts/inflight.py PATHS --sessions SESSIONS.json
    ```
 
-   It lists every claim (worktree, dirty checkout, open pull request, live session), the hot files per repo, and stale worktree folders. It only reads. Exit 1 means part of it went unread: say which part, and never treat an unread repo as free.
+   It lists every claim (worktree, dirty checkout, open pull request, live session), the hot files per repo, and stale worktree folders. It only reads. Exit 1 means part of it went unread: say which part, and never treat an unread repo as free. When it refuses the session list, it prints no report, only the rows it could not read and the keys it needs: fix the file and run it again, never drop `--sessions` to get past it.
 
 ## 2. Pick candidates
 
-1. Set the limit. Read `budgets.tier2.max_parallel_agents` from the project's `.agents/policy.yaml` and from `~/.agents/policy.yaml`, and take the lower (4 if neither sets it). Subtract the sessions whose `running` is true. If the project's instructions cap how many items to propose, the limit is the lower of the two.
+1. Set the limit. Read `budgets.tier2.max_parallel_agents` from the project's `.agents/policy.yaml` and from `~/.agents/policy.yaml`, and take the lower (4 if neither sets it). Subtract the sessions whose `running` (`isRunning` in `list_sessions` output) is true. If the project's instructions cap how many items to propose, the limit is the lower of the two.
 2. Rank the planned work by the project's own rules for choosing what comes next (its `AGENTS.md` or `CLAUDE.md`). With none, take roadmap items whose trigger is met, by priority, then in roadmap order. Blockers, open gates and work already started never take a proposal slot: they were reported in step 1. Skip an item whose trigger isn't met, whose dependency isn't done, or that a human task holds. Read only as far as it takes to settle that, and say which one held it.
 3. Take about twice the limit. For each, read the item and the code it names, and list the files or globs you would edit by hand. Leave out files a generator writes; the repo's hot files cover most of them. These are guesses: label them inferred everywhere you show them.
 4. Write the candidates to a scratch file, best first, as a JSON list of `{"id", "repo", "paths"}`. `repo` is the repo's folder name. Use the item's id as the roadmap writes it; for an item with none, use its heading as written (`phase 1b`). An item whose work lands in more than one repo gets one entry per repo, all with the same id, and its state is the worst of its entries. Then run:
