@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goal": "Make the Stop hook's commands come from somewhere the session it judges can't write, before the Dec 4 decision on enforcing it (agent-kit R29, the gate table's stop-checks row).",
+  "changed": [
+    "The Stop hook reads stop: and timeout_s from .agents/checks.yaml as origin's default branch has it (origin/HEAD, else origin/main or origin/master, as last fetched), and runs them in the working tree. A rewrite of the file, committed or not, no longer changes what runs.",
+    "The base commit is part of the tree fingerprint, so a newly merged list runs at the next stop. A send-back names the branch and commit its commands came from. A repo with no base branch runs nothing and warns on stderr.",
+    "The gate table's stop-checks row and R29's status say what this closes (the command lines) and what it doesn't (the files those commands call, and the local refs and policy files the agent can write as the same user). bstack 0.62.0."
+  ],
+  "claims": [
+    {
+      "claim": "In a real headless Claude Code session, an agent that broke the check and rewrote stop: to [\"true\"] was sent back twice with the base branch's command and then let through with the reason logged; the same session against main's hook was sent back zero times.",
+      "verdict": "VERIFIED",
+      "check": "claude -p --model haiku --plugin-dir <this branch's plugins/bstack>, and again with agent-kit main's, in a scratch repo with origin under the policy's login, stop-checks enforce, scratch policy, state and flags",
+      "commit": "87082c5",
+      "record": ".changes/2026-11-27-stop-checks-base-copy/headless-probe.txt",
+      "remaining": "Run with --plugin-dir, not the installed plugin; Haiku only, one session each."
+    },
+    {
+      "claim": "Run as Claude Code runs it, the hook ignores uncommitted and committed edits of checks.yaml, waits for checks added on a branch to merge, prefers origin/HEAD, falls back to origin/main then origin/master, reruns when the base moves, names its base in the send-back, and runs nothing with a warning when there is no base; the existing 17 behaviors still hold.",
+      "verdict": "VERIFIED",
+      "check": "python3 -m unittest tests.test_stop_checks -v (24 tests, system Python 3.9)",
+      "commit": "87082c5",
+      "record": ".changes/2026-11-27-stop-checks-base-copy/tests.txt",
+      "remaining": "A fetch that moves origin/main mid-session changes the commands; the send-back now says which commit they came from."
+    },
+    {
+      "claim": "The tests hold the rule: seven one-line mutants (HEAD's copy, HEAD as base, no warning, working-tree fallback, base left out of the fingerprint, origin/HEAD ignored, no origin/master fallback) each turn them red.",
+      "verdict": "VERIFIED",
+      "check": "each mutant of stop_checks.py followed by python3 -m unittest tests.test_stop_checks",
+      "commit": "87082c5",
+      "record": ".changes/2026-11-27-stop-checks-base-copy/mutants.txt",
+      "remaining": "Seven rules mutated, not every line."
+    }
+  ],
+  "next": [
+    {
+      "item": "Decide whether stop-checks and commit-gate move to enforce, and set the mode in the user policy",
+      "source": "agent-kit HUMAN_TASKS H14 step 3 (scheduled review 2026-12-04)",
+      "why_now": "The Stop hook's command lines are now out of the judged session's reach; the observe week ends Dec 4.",
+      "impact": "An enforced Stop hook sends a red tree back before anything is pushed, and a session can't edit its way past it."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.62.0"
+  }
+}

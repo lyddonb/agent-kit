@@ -1,0 +1,9 @@
+One-line mutants of plugins/bstack/hooks/stop_checks.py, each followed by python3 -m unittest tests.test_stop_checks:
+A  read HEAD's copy instead of the base's                   FAILED
+B  use HEAD as the base                                     FAILED
+C  drop the "no base branch" warning                        FAILED
+D  fall back to the working tree when there is no base      FAILED
+E  leave the base commit out of the tree fingerprint        FAILED
+F  ignore origin/HEAD (origin/main, origin/master only)     FAILED
+G  drop the origin/master fallback                          FAILED
+Survived earlier, then removed by a design change: using origin/main's tip instead of the merge base passed every test, so the hook now uses the tip (the rule change-record already follows) and the merge-base code is gone.
