@@ -423,7 +423,10 @@ exits 0. A new `**Confirmed.**` line in the item clears it. Before it, a fixture
 rewrote C1's probe to `true`, took a receipt and ticked the box passed with no line at all. Unit 3 is built: verify-work's
 `scripts/test_guard.py --base REF` prints and exits 0, `verify-work` and agent-kit's checklist
 (`tests-weakened`) run it, and on 990c84f it reports the three tests that commit renamed or
-replaced. Left open: running it in CI from the base branch's copy, which edits workflow files (H13).
+replaced. Left open: running it in CI from the base branch's copy, which edits workflow files (H13). On 2026-11-27 the table gained R32's two hooks. Both answer "the session's change": the Stop hook runs
+the working tree's `.agents/checks.yaml`, uncommitted edits included, and deleting a repo's
+`.agents/policy.yaml` drops either hook to the user file's mode. Left open from that: the Stop hook
+reads `stop:` from the base branch's copy, which belongs before it moves to enforce.
 **Prioritize when:** before any gate moves to enforce.
 
 ### R30. A reliability checklist that triggers on the diff
