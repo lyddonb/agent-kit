@@ -1000,3 +1000,116 @@ names a command or path that doesn't exist (checked with `tools/validate.py`'s
 verdict, every other use stays `unjudged`, and a second run changes nothing.
 **Why not done:** there are no flags yet.
 **Prioritize when:** R45 has two weeks of flags.
+
+# Head of Architecture
+
+A third standing role beside the CFO and the Quality Director, asked for by Beau on 2026-11-27.
+It keeps an inventory of every component of the harness and a register of the risks to its
+stability, ranks them by a written rule, and proposes fixes for Beau to approve. It is built as
+the other two roles are: private books, one script that does all the counting, a scheduled
+brief that arrives as a pull request, and the rule that the role proposes and never acts.
+
+Two sources shaped it, both read 2026-11-27. Ghimire and Damian's "Does the Agent's Map Match
+the Territory?" checked the architecture claims in agent context files against the code: by
+the authors' estimate about 98% of path claims point to real code, but the dependency rules are
+often goals the code does not yet meet, and the authors advise enforcing the rules that matter
+with a checker. Sam Newman's *Building Resilient Distributed Systems*, as excerpted by The
+Pragmatic Engineer ("Building resilient AI-powered software, and planning for when things go
+wrong"), orders recovery patterns from cheap to costly and says recovery must be tested,
+because disasters are too rare to measure.
+
+| Item | Entry | Other repos |
+|---|---|---|
+| Inventory, risk register, daily survey and weekly brief | R54 | The role's private books |
+| Three-option proposals inside the other roles' limits | R55 | Reads the CFO's and the Quality Director's summaries |
+| Structure sensors | R56 | None |
+| Sources loaded by id, and a monthly reading pass | R57 | The rule R42 set |
+
+**How to work these.** The role never changes code, CI, config or infrastructure. A fix is a
+question for Beau. When he accepts one, the role opens a docs-only pull request that adds an
+entry to the owning repo's roadmap, with that repo's next free id, a trigger and a link back
+to the risk. Its P0 to P3 tiers are the roadmap's, so an accepted risk is ranked like any other
+planned work. The daily run uses no model: a script surveys and rescores. The model writes
+options weekly, or the day a P0 or P1 opens. Each role owns one kind of proposal: money is the
+CFO's, tests and CI are the Quality Director's, skill and knowledge edits belong to the weekly
+pass that reads flags, and system structure is this role's. A fix in another role's lane is
+handed over, and a conflict between roles is one question for Beau. The books are private, so
+anything bound for a public repo goes through `quality.py leak-check` first.
+
+Order: R54 first. R55 after two of its briefs have merged. R56 after R55. R57 any time after
+R54.
+
+## P1
+
+### R54. An inventory, a risk register and a daily survey
+**What:** A script, `arch.py`, with `survey`, `summary` and `check`, and a skill that runs the
+role. The books hold an inventory of components (what each is, where it runs, what it depends
+on, what a failure costs), an append-only register with one row per event in a risk's life,
+append-only survey observations, briefs and questions. A risk is a state machine: observed,
+open, proposed, accepted or declined, mitigating, closed. Closing needs a receipt: a probe that
+failed before the fix and passes after. `summary` folds the rows into each risk's state and
+scores it as consequence times likelihood times detection, each 1 to 4 from a rubric file, and
+the script sets the tier, never the model. Three sensors come first, all rules: what runs on a
+schedule against the inventory, scheduled jobs that have gone quiet, and dependency pins in
+workflows and lockfiles. A weekly brief quotes only `summary --json`.
+**Where:** a new skill beside `qualitydirector`, or a new plugin; the charter picks, and the
+name is not `architect`, which is taken. Tests on fixture books.
+**Depends on:** the role's books existing, and Beau's answers to the design questions (a human
+task in the private books).
+**Playbook:** Large work item, then Feature per unit. Run **state-machines** on the risk
+lifecycle first.
+**Done when:** on fixture books, `survey` run twice on an unchanged system adds no row; a
+planted unlisted job opens one risk; a risk cannot reach closed without a receipt; `check`
+fails on a hand-edited register row; and one real weekly brief has merged.
+**Why not done:** designed 2026-11-27; the books do not exist yet.
+**Prioritize when:** the books exist and the design questions are answered.
+
+## P2
+
+### R55. Proposals with three options, inside the other roles' limits
+**What:** For each ranked risk the brief gives a conservative, a recommended and a bold option,
+each with its cost (from `estimate-run`), its effect on quality (named keys from the Quality
+Director's `summary`), whether it can be undone, its blast radius and its sources, then a
+recommendation with its reason and a line saying whether it fits the CFO's headroom. At most
+three new proposals a week. Every claim is labeled measured, inferred or guess. A bold option
+that cannot be undone says so, and can be recommended only with a decision record. Approved
+choices are kept as decision records in the books. The accepted-risk pull request described
+above ships here.
+**Where:** the R54 skill and script; the brief template in the books.
+**Depends on:** R54.
+**Playbook:** Feature.
+**Done when:** on fixture books and fixture summaries from the other two roles, a brief's
+every number traces to a `summary --json` key, an option over the headroom is marked as not
+fitting, and an accepted risk produces a roadmap entry in a fixture repo with an id, a
+priority and a trigger line (R51's reader lists it as open, once R51 is built).
+**Why not done:** there is no register to propose from.
+**Prioritize when:** two R54 briefs have merged.
+
+### R56. Structure sensors
+**What:** Three more rule-based sensors: churn and size per file over time, files that most
+commits touch (what `inflight.py` calls hot files), and the architecture rules each repo's
+`AGENTS.md` states, checked against the code. A rule is recorded as a goal or a fact, and only
+a broken fact opens a risk.
+**Where:** the R54 script, tests.
+**Depends on:** R55.
+**Playbook:** Feature.
+**Done when:** on a fixture repo with one rule the code breaks and one marked as a goal, the
+survey opens exactly one risk, and a second run adds nothing.
+**Why not done:** these sensors are the noisiest, and the register has to prove useful first.
+**Prioritize when:** four weeks of R55 briefs have merged and Beau has accepted at least one
+risk.
+
+### R57. Sources loaded by id, and a monthly reading pass
+**What:** A reference file maps each failure mode to the knowledge-base notes that bear on it,
+and the run loads those notes by path: R42 found that agents do not search a knowledge base on
+their own. A proposal with no matching source says so and adds the topic to a wish list. A
+monthly pass reads the sources Beau queues for it and writes one dated note per source, saying
+only what it read.
+**Where:** the R54 skill's references; the role's books.
+**Depends on:** R54; R42's rule that a lookup needs a passing eval.
+**Playbook:** Eval, then Authoring a skill.
+**Done when:** an R42-style eval shows briefs written with the loaded sources score above
+briefs without them, outside the band between two identical runs. If it does not, the mapping
+is removed and proposals cite only the monthly notes.
+**Why not done:** no brief exists to evaluate.
+**Prioritize when:** R54 is done.
