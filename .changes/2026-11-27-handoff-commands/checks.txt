@@ -1,0 +1,1 @@
+validate: 44 skills in 7 plugins, 94 script commands, 0 errors, 0 warnings

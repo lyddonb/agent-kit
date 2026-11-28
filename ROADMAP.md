@@ -946,7 +946,7 @@ workspace's default branches was sealed that day.
 
 
 ### R50. `inflight.py` refuses a session list it can't read
-**Done 2026-11-27** in bstack 0.62.1. `inflight.py --sessions` checks every row before it reads
+**Done 2026-11-27** in bstack 0.63.1. `inflight.py --sessions` checks every row before it reads
 anything. A row needs exactly `title`, `cwd`, `running`, `last_active` and `pr_state`, with
 `running` true or false and `last_active` in ISO 8601, or it is a raw Claude Code desktop
 `list_sessions` row (it has a `sessionId`) and is read through `isRunning`, `lastActivityAt` and
