@@ -1,6 +1,8 @@
 """Tests for the Head of Architecture's risk register (plugins/architecture/skills/arch-books)."""
 import ast
 import contextlib
+import csv
+import datetime
 import importlib.util
 import io
 import json
@@ -55,9 +57,11 @@ def legal_row(event, risk_id="A1", date=DAY, failure_mode="single-host", compone
     if event in arch.SCORED_EVENTS:
         c, l, d = RUBRIC_SCORES[failure_mode]
         return row(risk_id, date, event, consequence=str(c), likelihood=str(l), detection=str(d),
-                   evidence="" if event == "open" else "the user's answer")
+                   evidence="" if event == "open" else "the user's answer", question="" if event == "open" else "Q3")
     if event == "propose":
         return row(risk_id, date, event, question="Q3")
+    if event in ("accept", "decline"):
+        return row(risk_id, date, event, evidence="evidence for " + event, question="Q3")
     if event == "close":
         return row(risk_id, date, event, evidence="receipt: probe failed before, passes now")
     return row(risk_id, date, event, evidence="evidence for " + event)
@@ -133,7 +137,7 @@ class LifecycleTests(Case):
 
     def test_close_needs_a_receipt(self):
         prefix = life(events=["observe", "open", "propose", "accept", "mitigate"])
-        for evidence in ("merged in PR 12", "Receipt: yes", "receipt:", "receipt:   "):
+        for evidence in ("merged in PR 12", "Receipt: yes", "receipt:"):
             books = self.books(prefix + [row("A1", DAY, "close", evidence=evidence)])
             self.assertProblem(books, "close evidence must start with receipt:", f"close with evidence {evidence!r}")
         books = self.books(prefix + [row("A1", DAY, "close")])
@@ -252,6 +256,7 @@ class SummaryTests(Case):
         self.assertEqual(summary["counts"]["by_state"]["open"], 4, "counts by state")
         self.assertEqual(summary["counts"]["by_state"]["closed"], 0, "states with no risk count zero")
         self.assertEqual(summary["counts"]["by_tier"], {"P0": 2, "P1": 0, "P2": 1, "P3": 1}, "observed risks have no tier")
+        self.assertEqual(summary["counts"]["live"], 4, "four risks are live")
         first = summary["risks"][-1]
         self.assertEqual((first["score"], first["tier"], first["consequence"]), (None, None, None), "observed is unscored")
         for record in summary["risks"]:
@@ -293,12 +298,12 @@ class SummaryTests(Case):
         books = self.books(life(events=["observe", "open"]))
         before = books.summary()[1]["risks"][0]
         books.write_rows(life(events=["observe", "open"])
-                         + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="the user says it moved")])
+                         + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="the user says it moved", question="Q4")])
         self.assertEqual(books.run("check")[0], 0, "a rescore with evidence passes")
         after = books.summary()[1]["risks"][0]
         self.assertEqual((before["score"], before["tier"]), (16, "P0"), "the rubric scores before the rescore")
         self.assertEqual((after["score"], after["tier"], after["state"]), (1, "P3", "open"), "later rows use the rescored values")
-        books.write_rows(life(events=["observe", "open"]) + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1")])
+        books.write_rows(life(events=["observe", "open"]) + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", question="Q4")])
         self.assertProblem(books, "rescore needs evidence", "rescore without evidence")
 
     def test_propose_records_the_question_and_reopen_keeps_scores(self):
@@ -332,15 +337,15 @@ class RowRuleTests(Case):
     def test_scores_only_where_the_event_carries_them(self):
         books = self.books(life(events=["observe", "open"]) + [row("A1", DAY, "propose", question="Q1", consequence="1", likelihood="1", detection="1")])
         self.assertProblem(books, "propose does not carry scores", "scores on propose")
-        books = self.books(life(events=["observe", "open"]) + [row("A1", DAY, "propose", question="Q1"), row("A1", DAY, "accept", evidence="x", question="Q2")])
-        self.assertProblem(books, "accept does not carry a question", "question on accept")
+        books = self.books(life(events=["observe", "open"]) + [row("A1", DAY, "propose", question="Q1"), row("A1", DAY, "accept", evidence="x", question="Q3"), row("A1", DAY, "mitigate", evidence="x", question="Q3")])
+        self.assertProblem(books, "mitigate does not carry a question", "question on mitigate")
 
     def test_component_and_failure_mode_are_fixed_by_observe(self):
         later = life(events=["observe", "open"])
         for column, value in (("component", "other-app"), ("failure_mode", "tiny")):
-            books = self.books(later + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="e", **{column: value})])
+            books = self.books(later + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="e", question="Q4", **{column: value})])
             self.assertProblem(books, f"{column} is fixed by the observe row", f"{column} changed on a later row")
-        books = self.books(later + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="e",
+        books = self.books(later + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="e", question="Q4",
                                         component="web-app", failure_mode="single-host")])
         self.assertEqual(books.run("check")[0], 0, "repeating them is fine")
 
@@ -403,16 +408,17 @@ def arch_main_with(argv):
 
 class TextHygieneTests(Case):
     def test_cells_a_spreadsheet_would_run_fail(self):
-        for start in ("=", "+", "-", "@", " =", " =", "＝", "＋"):
+        for start in ("=", "+", "-", "@", "\uff1d", "\uff0b"):
             books = self.books([legal_row("observe"), row("A1", DAY, "open", consequence="4", likelihood="2", detection="2", note=start + "SUM(A1)")])
             self.assertProblem(books, "starts with = + - or @", f"a note starting with {start!r}")
         books = self.books([legal_row("observe").replace("seen in review", "=cmd|' /C calc'!A0")])
         self.assertProblem(books, "evidence starts with", "a formula in evidence")
 
     def test_control_characters_fail(self):
-        for bad in ("\x07", "\x1b[31m", "\x00", "\x7f", "\x85", "‮", "​", "﻿", "a\nb", "a\tb", "a\rb"):
+        for bad in ("\x07", "\x1b[31m", "\x00", "\x7f", "\x85", "\u202e", "\u200b", "\ufeff", "a\nb", "a\tb", "a\rb",
+                    "\u00ad", "\u061c", "\u200e", "\u200f", "\u2060", "\ue000", "\u2028", "\u2029"):
             books = self.books([row("A1", DAY, "observe", component="x", failure_mode="tiny", evidence="seen" + bad + "here")])
-            self.assertProblem(books, "control character", f"evidence containing {bad!r}")
+            self.assertProblem(books, "control or invisible character", f"evidence containing {bad!r}")
 
     def test_cell_length_limit(self):
         ok = self.books([row("A1", DAY, "observe", component="x", failure_mode="tiny", evidence="e" * 1000)])
@@ -521,6 +527,205 @@ class ScriptTests(Case):
             elif isinstance(node, ast.ImportFrom) and node.module:
                 modules.add(node.module.split(".")[0])
         self.assertTrue(modules <= set(sys.stdlib_module_names), f"non-stdlib imports: {modules - set(sys.stdlib_module_names)}")
+
+
+def git_in(books, *args):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return subprocess.run(["git", "-C", str(books.dir), "-c", "user.name=t", "-c", "user.email=t@example.com",
+                           "-c", "commit.gpgsign=false", *args], check=True, capture_output=True, env=env)
+
+
+def rubric_text(*rows):
+    return "failure_mode,consequence,likelihood,detection,why\n" + "".join(f"{m},{c},{l},{d},why\n" for m, c, l, d in rows)
+
+
+def open_row(risk_id, scores, date=DAY):
+    c, l, d = scores
+    return row(risk_id, date, "open", consequence=str(c), likelihood=str(l), detection=str(d))
+
+
+LRM = chr(0x200E)
+INVISIBLE = [chr(code) for code in (0xAD, 0x61C, 0x200E, 0x200F, 0x2060, 0xE000)]
+NO_BREAK_SPACE = chr(0xA0)
+
+
+class RubricHistoryTests(Case):
+    def committed(self, rubric, rows):
+        books = self.books(rows, rubric_text(*rubric))
+        git_in(books, "init", "-q")
+        git_in(books, "add", ".")
+        git_in(books, "commit", "-q", "-m", "books")
+        return books
+
+    def observe(self, mode="single-host", risk_id="A1"):
+        return legal_row("observe", risk_id, failure_mode=mode)
+
+    def test_a_changed_rubric_row_does_not_fail_old_rows(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe(), open_row("A1", (4, 2, 2))])
+        books.write_rubric(rubric_text(("single-host", 3, 2, 2)))
+        self.assertEqual(books.run("check", "--base", "HEAD")[0], 0, "old rows are not re-judged by a changed rubric")
+        self.assertProblem(books, "open scores must equal the rubric.csv row", "without --base every row is judged by today's rubric")
+
+    def test_a_removed_or_renamed_mode_does_not_fail_old_rows(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe(), open_row("A1", (4, 2, 2))])
+        books.write_rubric(rubric_text(("other-mode", 1, 1, 1)))
+        self.assertEqual(books.run("check", "--base", "HEAD")[0], 0, "a removed or renamed mode leaves history alone")
+        self.assertProblem(books, "failure_mode single-host is not in rubric.csv", "without --base the old row fails")
+
+    def test_a_new_row_is_judged_by_the_rubric_at_the_base(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe()])
+        books.write_rubric(rubric_text(("single-host", 1, 1, 1)))
+        with open(books.dir / "risks.csv", "a") as handle:
+            handle.write(open_row("A1", (1, 1, 1)) + "\n")
+        out = self.assertProblem(books, "open scores must equal the rubric.csv row", "a rubric edited in the same change as the open", "--base", "HEAD")
+        self.assertIn("risks.csv:3:", out, "the new row is the one reported")
+        books.write_rows([self.observe(), open_row("A1", (4, 2, 2))])
+        self.assertEqual(books.run("check", "--base", "HEAD")[0], 0, "the rubric at the base scores pass")
+
+    def test_a_mode_added_and_used_in_the_same_change_is_judged_by_the_working_rubric(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe()])
+        books.write_rubric(rubric_text(("single-host", 4, 2, 2), ("new-mode", 2, 3, 1)))
+        books.write_rows([self.observe(), self.observe("new-mode", "A2"), open_row("A2", (2, 3, 1))])
+        self.assertEqual(books.run("check", "--base", "HEAD")[0], 0, "a new mode and its first rows pass together")
+        books.write_rows([self.observe(), self.observe("new-mode", "A2"), open_row("A2", (2, 3, 2))])
+        self.assertProblem(books, "open scores must equal the rubric.csv row for new-mode", "a new mode with the wrong scores", "--base", "HEAD")
+
+    def test_a_rubric_missing_at_the_base_falls_back_to_the_working_tree(self):
+        books = self.books([self.observe(), open_row("A1", (4, 2, 2))], rubric_text(("single-host", 4, 2, 2)))
+        (books.dir / ".gitignore").write_text("rubric.csv\n")
+        git_in(books, "init", "-q")
+        git_in(books, "add", ".")
+        git_in(books, "commit", "-q", "-m", "books without the rubric")
+        self.assertEqual(books.run("check", "--base", "HEAD")[0], 0, "the working rubric judges when the base has none")
+        books.write_rows([self.observe(), open_row("A1", (4, 2, 2)), self.observe("single-host", "A2"), open_row("A2", (3, 3, 3))])
+        self.assertProblem(books, "open scores must equal the rubric.csv row", "and it still judges new rows", "--base", "HEAD")
+
+    def test_rows_that_were_already_in_the_base_are_not_judged_by_any_rubric(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe("gone-mode"), self.observe("single-host", "A2"), open_row("A2", (3, 3, 3))])
+        self.assertEqual(books.run("check", "--base", "HEAD")[0], 0, "history that disagrees with the base rubric is left alone")
+        self.assertEqual(books.run("check")[0], 1, "without --base the same books fail")
+
+    def test_other_rules_still_apply_to_old_rows(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe(), legal_row("close")])
+        self.assertProblem(books, "illegal move: close from observed", "the state machine judges old rows too", "--base", "HEAD")
+
+    def test_summary_with_a_base_refuses_edited_or_deleted_history(self):
+        books = self.committed([("single-host", 4, 2, 2)], [self.observe(), open_row("A1", (4, 2, 2))])
+        (books.dir / "risks.csv").write_text(HEADER + "\n")
+        code, out, err = books.run("summary", "--json")
+        self.assertEqual((code, json.loads(out)["risks"]), (0, []), "without --base a truncated register summarizes to nothing")
+        code, out, err = books.run("summary", "--json", "--base", "HEAD")
+        self.assertEqual((code, out), (1, ""), "with --base a truncated register is refused")
+        self.assertIn("a past row was edited or deleted", err, "and says why")
+        git_in(books, "checkout", "-q", "--", "risks.csv")
+        self.assertEqual(books.run("summary", "--json", "--base", "HEAD")[0], 0, "an untouched history summarizes")
+        books.write_rubric(rubric_text(("single-host", 1, 1, 1)))
+        self.assertEqual(books.run("summary", "--json", "--base", "HEAD")[0], 0, "a changed rubric does not stop the summary")
+
+
+class ProvenanceTests(Case):
+    def test_answers_carry_the_question(self):
+        base = life(events=["observe", "open", "propose"])
+        for event, extra in (("rescore", dict(consequence="1", likelihood="1", detection="1")), ("accept", {}), ("decline", {})):
+            books = self.books(base + [row("A1", DAY, event, evidence="the answer", **extra)])
+            self.assertProblem(books, f"{event} needs question", f"{event} without a question")
+
+    def test_accept_and_decline_must_answer_the_proposed_question(self):
+        base = life(events=["observe", "open", "propose"])
+        for event in ("accept", "decline"):
+            wrong = self.books(base + [row("A1", DAY, event, evidence="the answer", question="Q9")])
+            self.assertProblem(wrong, f"{event} question must equal the propose question (Q3)", f"{event} answering another question")
+            right = self.books(base + [row("A1", DAY, event, evidence="the answer", question="Q3")])
+            self.assertEqual(right.run("check")[0], 0, f"{event} answering the proposed question passes")
+
+    def test_a_rescore_may_answer_any_question_and_other_events_carry_none(self):
+        books = self.books(life(events=["observe", "open"]) + [row("A1", DAY, "rescore", consequence="1", likelihood="1", detection="1", evidence="e", question="Q8")])
+        self.assertEqual(books.run("check")[0], 0, "a rescore carries the question it answers")
+        before = {"observe": "unseen", "open": "observed", "mitigate": "accepted", "close": "mitigating", "reopen": "closed"}
+        for event, state in before.items():
+            cells = next(csv.reader([legal_row(event)]))
+            cells[arch.RISK_COLUMNS.index("question")] = "Q1"
+            books = self.books(life(events=PATHS[state]) + [",".join(_cell(c) for c in cells)])
+            self.assertProblem(books, f"{event} does not carry a question", f"a question on {event}")
+
+    def test_a_reproposed_risk_is_answered_by_the_latest_question(self):
+        rows = life(events=["observe", "open", "propose", "decline", "reopen"]) + [row("A1", DAY, "propose", question="Q7"), row("A1", DAY, "accept", evidence="e", question="Q7")]
+        self.assertEqual(self.books(rows).run("check")[0], 0, "the answer matches the latest propose")
+
+
+class IdentityAndTextTests(Case):
+    def test_names_are_plain_lowercase_ascii(self):
+        for bad in ("Web-App", "web_app", "web app", "cafe" + chr(0x301), "w" * 65, "a.b"):
+            books = self.books([row("A1", DAY, "observe", component=bad, failure_mode="single-host", evidence="e")])
+            self.assertIn("component must be lowercase letters, digits and hyphens", books.run("check")[1], f"component {bad!r} is refused")
+            books = self.books(rubric=rubric_text((bad, 1, 1, 1)))
+            self.assertIn("failure_mode must be lowercase letters, digits and hyphens", books.run("check")[1], f"rubric failure_mode {bad!r} is refused")
+        for good in ("web-app", "9lives", "w" * 64):
+            books = self.books([row("A1", DAY, "observe", component=good, failure_mode="single-host", evidence="e")])
+            self.assertEqual(books.run("check")[0], 0, f"component {good!r} is fine")
+        books = self.books([row("A1", DAY, "observe", component="web-app", failure_mode="Single-Host", evidence="e")])
+        self.assertIn("failure_mode must be lowercase letters, digits and hyphens", books.run("check")[1], "a risk's failure_mode follows the same rule")
+
+    def test_invisible_characters_and_padding_fail(self):
+        for bad in INVISIBLE:
+            books = self.books([row("A1", DAY, "observe", component="x", failure_mode="tiny", evidence="a" + bad + "b")])
+            self.assertProblem(books, "invisible character", f"evidence with {bad!r}")
+        for padded in (" e", "e ", NO_BREAK_SPACE + "e", " "):
+            books = self.books([row("A1", DAY, "observe", component="x", failure_mode="tiny", evidence=padded)])
+            self.assertProblem(books, "leading or trailing whitespace", f"evidence {padded!r}")
+
+    def test_a_receipt_needs_visible_content(self):
+        prefix = life(events=["observe", "open", "propose", "accept", "mitigate"])
+        for evidence in ("receipt:" + LRM, "receipt: " + LRM, "receipt: "):
+            self.assertProblem(self.books(prefix + [row("A1", DAY, "close", evidence=evidence)]), "evidence", f"close evidence {evidence!r}")
+        self.assertEqual(self.books(prefix + [row("A1", DAY, "close", evidence="receipt: probe passes")]).run("check")[0], 0, "a real receipt passes")
+
+
+class DateAndSizeTests(Case):
+    def setUp(self):
+        self.original = arch.utc_today
+        arch.utc_today = lambda: datetime.date(2026, 11, 27)
+        self.addCleanup(setattr, arch, "utc_today", self.original)
+
+    def test_a_date_more_than_a_day_ahead_fails(self):
+        ok = self.books([row("A1", "2026-11-28", "observe", component="x", failure_mode="tiny", evidence="e")])
+        self.assertEqual(ok.run("check")[0], 0, "tomorrow is allowed for a clock a day off")
+        late = self.books([row("A1", "2026-11-29", "observe", component="x", failure_mode="tiny", evidence="e")])
+        self.assertProblem(late, "date 2026-11-29 is in the future", "two days ahead")
+
+    def test_a_file_over_five_million_bytes_is_refused_before_it_is_read(self):
+        for name in ("risks.csv", "rubric.csv"):
+            books = self.books()
+            (books.dir / name).write_bytes(b"x" * 5_000_001)
+            for command in ("check", "summary"):
+                code, out, err = books.run(command)
+                self.assertEqual((code, out), (2, ""), f"{command} exits 2 on an oversized {name}")
+                self.assertIn("over the 5000000 byte limit", err, "and says the limit")
+
+
+class SummaryOrderTests(Case):
+    def test_equal_tier_and_score_sort_by_numeric_id(self):
+        rows = life("A10", "single-host", PATHS["open"]) + life("A2", "single-host", PATHS["open"]) + life("A9", "single-host", PATHS["open"])
+        ids = [r["risk_id"] for r in self.books(rows).summary()[1]["risks"]]
+        self.assertEqual(ids, ["A2", "A9", "A10"], "ids tie-break numerically, not as strings")
+
+    def test_dates_are_compared_to_the_latest_row_not_the_first(self):
+        rows = [legal_row("observe", date="2026-11-01"), legal_row("open", date="2026-11-05"),
+                row("A1", "2026-11-03", "rescore", consequence="1", likelihood="1", detection="1", evidence="e", question="Q1")]
+        out = self.assertProblem(self.books(rows), "earlier than this risk's previous row (2026-11-05)", "a third row older than the second")
+        self.assertIn("risks.csv:4:", out, "it is the third row that fails")
+
+    def test_live_risks_rank_first_and_closed_ones_leave_the_tier_counts(self):
+        rows = (life("A1", "single-host") + life("A2", "slow-restore", PATHS["open"])
+                + life("A3", "tiny", PATHS["observed"]) + life("A4", "tiny", ["observe", "open", "propose", "decline"]))
+        _, summary, _ = self.books(rows).summary()
+        self.assertEqual([r["risk_id"] for r in summary["risks"]], ["A2", "A3", "A1", "A4"],
+                         "the live P1 first, then observed, then closed and declined by tier and score")
+        self.assertEqual([r["live"] for r in summary["risks"]], [True, False, False, False], "only the open one is live")
+        self.assertEqual(summary["counts"]["by_tier"], {"P0": 0, "P1": 1, "P2": 0, "P3": 0}, "a closed P0 is not counted")
+        self.assertEqual(summary["counts"]["live"], 1, "one live risk")
+        closed = summary["risks"][2]
+        self.assertEqual((closed["state"], closed["tier"], closed["score"]), ("closed", "P0", 16), "a closed risk keeps its last score and tier")
 
 
 if __name__ == "__main__":

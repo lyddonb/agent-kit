@@ -17,8 +17,9 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, NamedTuple
 
@@ -29,6 +30,8 @@ RISK_COLUMNS = ("risk_id", "date", "event", "component", "failure_mode", "conseq
 RUBRIC_COLUMNS = ("failure_mode", "consequence", "likelihood", "detection", "why")
 SCORE_COLUMNS = ("consequence", "likelihood", "detection")
 MAX_CELL = 1000
+MAX_FILE_BYTES = 5_000_000
+MAX_NAME = 64
 RECEIPT = "receipt:"
 
 UNSEEN = "unseen"
@@ -54,16 +57,18 @@ TRANSITIONS = {
 
 SCORED_EVENTS = ("open", "rescore")
 EVIDENCE_EVENTS = ("observe", "rescore", "accept", "decline", "mitigate", "close", "reopen")
-QUESTION_EVENTS = ("propose",)
+QUESTION_EVENTS = ("propose", "rescore", "accept", "decline")
+ANSWER_EVENTS = ("accept", "decline")
+LIVE_STATES = ("open", "proposed", "accepted", "mitigating")
+BAD_CATEGORIES = ("Cc", "Cf", "Co", "Cs", "Zl", "Zp")
 TIERS = ("P0", "P1", "P2", "P3")
 
 _ID = re.compile(r"A[1-9][0-9]*")
 _DATE = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")
 _QUESTION = re.compile(r"Q[1-9][0-9]*")
 _SCORE = re.compile(r"[1-4]")
-_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f  ‪-‮⁦-⁩​-‍﻿]")
+_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 _FORMULA_FIRST = "=+-@＝＋－＠"
-_FORMULA_SKIP = "  "
 
 
 class Unusable(Exception):
@@ -82,6 +87,12 @@ class Problem(NamedTuple):
 class Row(NamedTuple):
     line: int
     cells: dict
+
+
+@dataclass
+class BaseView:
+    old_lines: int = 0
+    rubric: dict | None = None
 
 
 @dataclass
@@ -112,17 +123,27 @@ def tier(consequence: int, likelihood: int, total: int) -> str:
 
 
 def text_problem(value: str) -> str | None:
-    if _CONTROL.search(value):
-        return "contains a control character (a spreadsheet or a terminal would act on it)"
-    if value.lstrip(_FORMULA_SKIP)[:1] in tuple(_FORMULA_FIRST):
+    if any(unicodedata.category(char) in BAD_CATEGORIES for char in value):
+        return "contains a control or invisible character (a spreadsheet or a terminal would act on it, or it hides what the text says)"
+    if value != value.strip():
+        return "has leading or trailing whitespace"
+    if value and value[0] in _FORMULA_FIRST:
         return "starts with = + - or @ (a spreadsheet would run it as a formula)"
     if len(value) > MAX_CELL:
         return f"is longer than {MAX_CELL} characters"
     return None
 
 
+def name_problem(value: str) -> bool:
+    return not (_NAME.fullmatch(value) and len(value) <= MAX_NAME)
+
+
 def receipt(evidence: str) -> bool:
     return evidence.startswith(RECEIPT) and bool(evidence[len(RECEIPT):].strip())
+
+
+def utc_today() -> date:
+    return datetime.now(timezone.utc).date()
 
 
 def valid_date(text: str) -> bool:
@@ -190,6 +211,9 @@ def read_rubric(data: bytes) -> tuple[dict, list[Problem]]:
         if not mode:
             problems.append(Problem(RUBRIC, row.line, "failure_mode is empty"))
             continue
+        if name_problem(mode):
+            problems.append(Problem(RUBRIC, row.line, f"failure_mode must be lowercase letters, digits and hyphens, starting with a letter or digit, at most {MAX_NAME} characters"))
+            continue
         if mode in rubric:
             problems.append(Problem(RUBRIC, row.line, f"failure_mode {mode} is listed twice"))
             continue
@@ -219,7 +243,8 @@ def parse_scores(cells: dict) -> tuple[tuple | None, list[str]]:
     return tuple(int(value) for value in given), []
 
 
-def fold(rows: list[Row], rubric: dict) -> tuple[dict, list[Problem]]:
+def fold(rows: list[Row], rubric: dict, view: BaseView | None = None) -> tuple[dict, list[Problem]]:
+    view = view or BaseView()
     problems: list[Problem] = []
     risks: dict = {}
     states: dict = {}
@@ -240,6 +265,11 @@ def fold(rows: list[Row], rubric: dict) -> tuple[dict, list[Problem]]:
         dated = valid_date(when)
         if not dated:
             report("date must be a real date like 2026-11-27")
+        elif when > (utc_today() + timedelta(days=1)).isoformat():
+            report(f"date {when} is in the future")
+        for column in ("component", "failure_mode"):
+            if cells[column] and name_problem(cells[column]):
+                report(f"{column} must be lowercase letters, digits and hyphens, starting with a letter or digit, at most {MAX_NAME} characters")
         scores, score_issues = parse_scores(cells)
         for issue in score_issues:
             report(issue)
@@ -263,12 +293,13 @@ def fold(rows: list[Row], rubric: dict) -> tuple[dict, list[Problem]]:
             for column in ("component", "failure_mode"):
                 if not cells[column]:
                     report(f"observe needs {column}")
-            if failure_mode and failure_mode not in rubric:
+            if failure_mode and row.line > view.old_lines and failure_mode not in (view.rubric or {}) and failure_mode not in rubric:
                 report(f"failure_mode {failure_mode} is not in {RUBRIC}")
         if event in SCORED_EVENTS:
             if scores is None and not score_issues:
                 report(f"{event} needs consequence, likelihood and detection")
-            if event == "open" and scores is not None and failure_mode in rubric and scores != rubric[failure_mode]:
+            expected = (view.rubric or {}).get(failure_mode, rubric.get(failure_mode))
+            if event == "open" and row.line > view.old_lines and scores is not None and expected is not None and scores != expected:
                 report(f"open scores must equal the {RUBRIC} row for {failure_mode}")
         elif scores is not None or any(cells[column] for column in SCORE_COLUMNS):
             report(f"{event} does not carry scores")
@@ -280,6 +311,8 @@ def fold(rows: list[Row], rubric: dict) -> tuple[dict, list[Problem]]:
             report(f"{event} needs question")
         if event not in QUESTION_EVENTS and cells["question"]:
             report(f"{event} does not carry a question")
+        if event in ANSWER_EVENTS and cells["question"] and known is not None and known.question and cells["question"] != known.question:
+            report(f"{event} question must equal the propose question ({known.question})")
         if known is not None and dated and valid_date(known.last_date) and when < known.last_date:
             report(f"date {when} is earlier than this risk's previous row ({known.last_date})")
         if known is None and event == "observe" and moved is not None:
@@ -296,7 +329,7 @@ def fold(rows: list[Row], rubric: dict) -> tuple[dict, list[Problem]]:
             known.state = states[risk_id] = moved
             if scores is not None and event in SCORED_EVENTS:
                 known.scores = scores
-            if cells["question"] and event in QUESTION_EVENTS:
+            if cells["question"] and event == "propose":
                 known.question = cells["question"]
     return risks, problems
 
@@ -307,10 +340,14 @@ def read_books(books_dir: str) -> tuple[bytes, bytes]:
         raise Unusable(f"not a directory: {books_dir}")
     out = []
     for name in (RISKS, RUBRIC):
+        path = root / name
         try:
-            out.append((root / name).read_bytes())
+            size = path.stat().st_size
+            if size > MAX_FILE_BYTES:
+                raise Unusable(f"{path} is {size} bytes, over the {MAX_FILE_BYTES} byte limit")
+            out.append(path.read_bytes())
         except OSError as error:
-            raise Unusable(f"cannot read {root / name}: {error.strerror or error}") from error
+            raise Unusable(f"cannot read {path}: {error.strerror or error}") from error
     return out[0], out[1]
 
 
@@ -327,49 +364,60 @@ def _lines(data: bytes) -> list[bytes]:
     return parts
 
 
-def append_only_problems(books_dir: str, ref: str, current: bytes) -> Iterator[Problem]:
-    def cannot(why: str) -> Problem:
-        return Problem(RISKS, 1, f"cannot check against {ref}: {why}")
+def read_base(books_dir: str, ref: str) -> tuple[list[Problem], dict]:
+    def cannot(why: str) -> list[Problem]:
+        return [Problem(RISKS, 1, f"cannot check against {ref}: {why}")]
 
     if ref.startswith("-"):
-        yield cannot("a ref cannot start with a dash")
-        return
+        return cannot("a ref cannot start with a dash"), {}
+    shown: dict = {}
     try:
         if _git(books_dir, "rev-parse", "--verify", "--quiet", ref + "^{commit}").returncode != 0:
-            yield cannot("not a commit here (is this a git repo, and is the ref fetched?)")
-            return
+            return cannot("not a commit here (is this a git repo, and is the ref fetched?)"), {}
         top = _git(books_dir, "rev-parse", "--show-toplevel")
         top_dir = os.fsdecode(top.stdout).rstrip("\n")
         if top.returncode != 0 or os.path.realpath(top_dir) != os.path.realpath(books_dir):
-            yield cannot("the books folder must be the top level of its git work tree")
-            return
-        listed = _git(books_dir, "ls-tree", "--name-only", ref, "--", RISKS)
-        if listed.returncode != 0:
-            yield cannot("git ls-tree failed")
-            return
-        if not listed.stdout.strip():
-            return
-        shown = _git(books_dir, "show", f"{ref}:./{RISKS}")
-        if shown.returncode != 0:
-            yield cannot("git show failed")
-            return
+            return cannot("the books folder must be the top level of its git work tree"), {}
+        for name in (RISKS, RUBRIC):
+            listed = _git(books_dir, "ls-tree", "--name-only", ref, "--", name)
+            if listed.returncode != 0:
+                return cannot("git ls-tree failed"), {}
+            if not listed.stdout.strip():
+                continue
+            content = _git(books_dir, "show", f"{ref}:./{name}")
+            if content.returncode != 0:
+                return cannot("git show failed"), {}
+            shown[name] = content.stdout
     except OSError as error:
-        yield cannot(f"git could not run ({error.strerror or error})")
-        return
-    old, new = _lines(shown.stdout), _lines(current)
+        return cannot(f"git could not run ({error.strerror or error})"), {}
+    return [], shown
+
+
+def append_only_problems(ref: str, base_risks: bytes | None, current: bytes) -> Iterator[Problem]:
+    old, new = _lines(base_risks or b""), _lines(current)
     for index, line in enumerate(old):
         if index >= len(new) or new[index] != line:
             yield Problem(RISKS, index + 1, f"a past row was edited or deleted (line {index + 1} differs from {ref})")
             return
 
 
-def load(books_dir: str) -> tuple[dict, int, list[Problem], bytes]:
+def load(books_dir: str, base: str | None = None) -> tuple[dict, int, list[Problem]]:
     risks_data, rubric_data = read_books(books_dir)
     rubric, problems = read_rubric(rubric_data)
+    view = BaseView()
+    base_problems: list[Problem] = []
+    if base is not None:
+        base_problems, shown = read_base(books_dir, base)
+        if RISKS in shown:
+            view.old_lines = len(_lines(shown[RISKS]))
+        if RUBRIC in shown:
+            view.rubric = read_rubric(shown[RUBRIC])[0]
+        if not base_problems:
+            base_problems = list(append_only_problems(base, shown.get(RISKS), risks_data))
     rows, table_problems = read_table(RISKS, risks_data, RISK_COLUMNS)
-    risks, row_problems = fold(rows, rubric)
-    all_problems = problems + sorted(table_problems + row_problems, key=lambda p: p.line)
-    return risks, len(rows), all_problems, risks_data
+    risks, row_problems = fold(rows, rubric, view)
+    all_problems = problems + sorted(table_problems + row_problems, key=lambda p: p.line) + base_problems
+    return risks, len(rows), all_problems
 
 
 def risk_record(risk: Risk) -> dict:
@@ -379,6 +427,7 @@ def risk_record(risk: Risk) -> dict:
     return {
         "risk_id": risk.risk_id,
         "state": risk.state,
+        "live": risk.state in LIVE_STATES,
         "component": risk.component,
         "failure_mode": risk.failure_mode,
         "consequence": consequence,
@@ -394,19 +443,22 @@ def risk_record(risk: Risk) -> dict:
 
 
 def rank_key(record: dict) -> tuple:
+    group = 0 if record["live"] else 1 if record["state"] == "observed" else 2
     rank = TIERS.index(record["tier"]) if record["tier"] else len(TIERS)
-    return rank, -(record["score"] or 0), int(record["risk_id"][1:])
+    return group, rank, -(record["score"] or 0), int(record["risk_id"][1:])
 
 
 def summarize(risks: dict) -> dict:
     records = sorted((risk_record(risk) for risk in risks.values()), key=rank_key)
     by_state = {state: 0 for state in STATES if state != UNSEEN}
     by_tier = {name: 0 for name in TIERS}
+    live = 0
     for record in records:
         by_state[record["state"]] += 1
-        if record["tier"]:
+        if record["live"]:
+            live += 1
             by_tier[record["tier"]] += 1
-    return {"version": 1, "risks": records, "counts": {"by_state": by_state, "by_tier": by_tier}}
+    return {"version": 1, "risks": records, "counts": {"by_state": by_state, "by_tier": by_tier, "live": live}}
 
 
 def render_json(summary: dict) -> str:
@@ -421,15 +473,13 @@ def render_text(summary: dict) -> str:
             record["state"], record["component"], record["failure_mode"]]))
     counts = summary["counts"]
     lines.append("states: " + ", ".join(f"{k} {v}" for k, v in counts["by_state"].items()))
-    lines.append("tiers: " + ", ".join(f"{k} {v}" for k, v in counts["by_tier"].items()))
+    lines.append(f"live {counts['live']}; live tiers: " + ", ".join(f"{k} {v}" for k, v in counts["by_tier"].items()))
     return "\n".join(lines) + "\n"
 
 
 def cmd_check(args: argparse.Namespace) -> int:
     try:
-        _, count, problems, risks_data = load(args.books)
-        if args.base is not None:
-            problems += list(append_only_problems(args.books, args.base, risks_data))
+        _, count, problems = load(args.books, args.base)
     except Unusable as error:
         print(f"arch.py: {error}", file=sys.stderr)
         return 2
@@ -444,7 +494,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 def cmd_summary(args: argparse.Namespace) -> int:
     try:
-        risks, _, problems, _ = load(args.books)
+        risks, _, problems = load(args.books, args.base)
     except Unusable as error:
         print(f"arch.py: {error}", file=sys.stderr)
         return 2
@@ -463,11 +513,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     check = sub.add_parser("check", help="validate the register")
     check.add_argument("books", metavar="BOOKS")
-    check.add_argument("--base", metavar="REF", help="fail if a row of risks.csv at REF was edited or deleted")
+    check.add_argument("--base", metavar="REF", help="fail if a row of risks.csv at REF was edited or deleted; rows from REF are not re-judged by the rubric")
     check.set_defaults(func=cmd_check)
     summary = sub.add_parser("summary", help="fold the register into states, scores and tiers")
     summary.add_argument("books", metavar="BOOKS")
     summary.add_argument("--json", action="store_true")
+    summary.add_argument("--base", metavar="REF", help="refuse books whose rows at REF were edited or deleted; judge rows by the rubric at REF")
     summary.set_defaults(func=cmd_summary)
     args = parser.parse_args(argv)
     return args.func(args)

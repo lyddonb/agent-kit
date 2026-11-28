@@ -87,15 +87,23 @@ A risk's state is a fold over its rows in `risks.csv`, in file order, starting f
 |---|---|---|---|
 | observe | none | required | none |
 | open | all three, equal to the rubric row | optional | none |
-| rescore | all three | required | none |
+| rescore | all three | required | required (the question the answer is to) |
 | propose | none | optional | required |
-| accept | none | required | none |
-| decline | none | required | none |
+| accept | none | required | required, equal to the latest `propose` row's |
+| decline | none | required | required, equal to the latest `propose` row's |
 | mitigate | none | required | none |
 | close | none | required, starts with `receipt:` | none |
 | reopen | none | required | none |
 
-`observe` also carries component and failure_mode. Every later row for the risk leaves both empty or repeats them.
+`observe` also carries component and failure_mode. Every later row for the risk leaves both empty or repeats them. Both match `[a-z0-9][a-z0-9-]*` and are at most 64 characters, as does each failure_mode in the rubric.
+
+A question id is `Q` and digits. A human's answer (`rescore`, `accept`, `decline`) always names the question it answers, so each decision traces to a question in the books.
+
+Every cell is plain text: no control, format, private-use, surrogate or line-separator character (Unicode categories Cc, Cf, Co, Cs, Zl, Zp), no leading or trailing whitespace, no first character `=`, `+`, `-` or `@`, and at most 1000 characters. A date more than one day after today's UTC date is in the future and fails.
+
+A risk is live in `open`, `proposed`, `accepted` and `mitigating`. `summary` ranks live risks first, then `observed`, then `declined` and `closed`, and counts tiers over live risks only.
+
+With `--base REF`, rows already in `risks.csv` at REF are not judged against the rubric again. Rows added since are judged against the rubric at REF when it has their failure_mode, and against the working-tree rubric for a failure_mode that is new.
 
 ## Invariants
 - A risk is in exactly one state, the fold of its own rows; rows of other risks never change it.
@@ -103,6 +111,7 @@ A risk's state is a fold over its rows in `risks.csv`, in file order, starting f
 - Every state except `unseen` and `observed` has all three scores; the current ones are those of the latest `open` or `rescore` row.
 - A risk's component and failure_mode never change after `observe`.
 - A risk's rows never go back in date.
+- Every `rescore`, `accept` and `decline` names a question, and an `accept` or `decline` names the one its risk was proposed with.
 - A row that breaks any rule above is reported by `arch.py check`, and `arch.py summary` refuses to summarize books that have one.
 
 ## Interruptions
