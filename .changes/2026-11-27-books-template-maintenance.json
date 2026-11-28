@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "goal": "Fix the flaky JobBooksAppendOnlyTest that failed validate on pull request 157: git's background maintenance raced the per-test copy of its template repo.",
+  "changed": [
+    "JobBooksAppendOnlyTest runs git with maintenance.auto=false and gc.auto=0, so committing its template repo starts no background maintenance that could rewrite .git while setUp copies it.",
+    "A new test traces a commit with GIT_TRACE2_EVENT and fails if git starts maintenance."
+  ],
+  "claims": [
+    {
+      "claim": "A commit starts git maintenance run --auto; with the class's git settings it no longer does, and the class passes 10 of 10 runs; without them the new test fails.",
+      "verdict": "VERIFIED",
+      "check": "GIT_TRACE2_EVENT on a plain commit; uv run --python 3.12 python -m unittest tests.test_quality.JobBooksAppendOnlyTest, ten times with the fix and once without",
+      "commit": "98661fc",
+      "record": ".changes/2026-11-27-books-template-maintenance/proof.txt",
+      "remaining": "The CI race itself wasn't reproduced here: this Mac's git 2.39 runs maintenance in the foreground. The fix removes the process that held the lock, so the race can't happen whichever way git runs it."
+    }
+  ],
+  "next": [],
+  "release": {
+    "none": "A test change; no plugin file changes."
+  }
+}
