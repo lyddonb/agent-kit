@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.63.1 (2026-11-28)
+
+- parallel-next's `inflight.py --sessions` refuses a session list it can't read, instead of reading busy sessions as idle. Each row needs exactly `title`, `cwd`, `running`, `last_active` and `pr_state`, with `running` true or false and `last_active` in ISO 8601. A row with a key missing or unknown, or a value it can't read, stops the run with exit 1 and no report, naming the row, its title and the keys. Claude Code desktop's raw `list_sessions` output goes in as it is: rows with a `sessionId` are read through `isRunning`, `lastActivityAt` and `prState`.
+- Try: `Save Claude Code desktop's `list_sessions` output to a file and run `inflight.py PATHS --sessions FILE`: its running sessions now claim their ids.`
+
 ## bstack 0.63.0 (2026-11-28)
 
 - beau-mode treats a command it hands you as part of what it ships: it runs the command first where it will run (your config, shared state) and checks what the command needs (a date, stored data, a file) against the state right now. When something isn't there yet, it says when the command will work instead of handing you one that will refuse.

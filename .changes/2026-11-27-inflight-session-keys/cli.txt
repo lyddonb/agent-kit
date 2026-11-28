@@ -1,0 +1,22 @@
+# Candidate: R99 in agent-kit, held only by a running session. hand.json:
+[{"title":"R99 busy work","cwd":"<workspace>/agent-kit","isRunning":true,"prState":"OPEN"}]
+# raw.json, the key shape of Claude Code desktop's list_sessions, synthetic values:
+[{"sessionId":"local_00000001","title":"R99 busy work","cwd":"<workspace>/agent-kit","branch":"claude/r99-x","isArchived":false,"isRunning":true,"lastActivityAt":"2026-11-28T01:57:24.541Z","group":null,"link":"claude://example/1","remoteControlActive":true}]
+
+## before: main checkout at b852f11 (origin/main), hand.json
+$ inflight.py agent-kit --sessions hand.json --candidates cands.json
+- agent-kit worktree claude/r50-inflight-session-keys-3a27f7 [R50]: 16 files: .changes/2026-11-27-inflight-session-keys.json, .changes/2026-11-27-inflight-session-keys/cli.txt, .changes/2026-11-27-inflight-session-keys/mutants.txt, .changes/2026-11-27-inflight-session-keys/tests.txt and 12 more. <workspace>/agent-kit/.claude/worktrees/harness-lab-cases-fd1bed
+- agent-kit R99: clear
+exit 0
+
+## after: this branch at e563fab, the same hand.json
+inflight.py: cannot read --sessions hand.json, so nothing was checked:
+  row 1 ("R99 busy work"): missing running, last_active, pr_state; unknown isRunning, prState
+Each row needs exactly {"title", "cwd", "running", "last_active", "pr_state"}: running is true or false, last_active is ISO 8601, pr_state is the pull request's state or null.
+Claude Code desktop's raw list_sessions output works as it is: rows with a sessionId are read through isRunning, lastActivityAt and prState.
+exit 1
+
+## after: e563fab, raw.json
+- agent-kit session R99 busy work [R99]: ids only. <workspace>/agent-kit (running)
+- agent-kit R99: taken: taken by session R99 busy work
+exit 0

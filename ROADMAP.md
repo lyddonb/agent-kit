@@ -946,19 +946,13 @@ workspace's default branches was sealed that day.
 
 
 ### R50. `inflight.py` refuses a session list it can't read
-**What:** `parallel-next/scripts/inflight.py --sessions` checks every row for the keys it reads
-(`title`, `cwd`, `running`, `last_active`, `pr_state`), exits 1 naming the row and the
-missing or unknown keys, and prints the key list. It also accepts Claude Code desktop's raw
-`list_sessions` output and maps its fields (`isRunning`, `lastActivityAt`, `prState`) itself.
-**Where:** `inflight.py`, its tests, parallel-next step 1.3.
-**Depends on:** nothing.
-**Playbook:** Bug fix.
-**Done when:** a list written with `isRunning` and `prState` exits 1 naming both keys; a raw
-`list_sessions` dump reads the same as a hand-mapped one.
-**Why not done:** found 2026-11-27. A hand-written list with `isRunning` and `prState` and no
-`last_active` read every row as not live, with no error. The workspace's what's-next steps
-point at parallel-next's step 1 for the format, and that path never loads the skill.
-**Prioritize when:** now. A silent wrong answer here makes busy work look free.
+**Done 2026-11-27** in bstack 0.63.1. `inflight.py --sessions` checks every row before it reads
+anything. A row needs exactly `title`, `cwd`, `running`, `last_active` and `pr_state`, with
+`running` true or false and `last_active` in ISO 8601, or it is a raw Claude Code desktop
+`list_sessions` row (it has a `sessionId`) and is read through `isRunning`, `lastActivityAt` and
+`prState`. A bad row stops the run with exit 1 and no report, naming the row, its title, the
+missing or unknown keys, and the key list. parallel-next step 1.3 says to pass `list_sessions`
+output as it is.
 
 ### R51. One command reads every roadmap's open items
 **What:** `parallel-next/scripts/roadmap.py PATHS` prints each open item in each repo's

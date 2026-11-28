@@ -1,0 +1,25 @@
+test_broken_worktree_link_is_stale (tests.test_inflight.InflightTest) ... ok
+test_candidates_conflict_with_better_kept_candidates_only (tests.test_inflight.InflightTest) ... ok
+test_cli_exit_codes (tests.test_inflight.InflightTest) ... ok
+test_dotted_ids_are_kept_whole (tests.test_inflight.InflightTest) ... ok
+test_idle_counts_from_when_head_moved_not_from_the_commit (tests.test_inflight.InflightTest) ... ok
+test_ids_are_scoped_to_their_repo (tests.test_inflight.InflightTest) ... ok
+test_main_checkout_claims_only_when_dirty (tests.test_inflight.InflightTest) ... ok
+test_overlap_on_a_working_file_is_a_conflict (tests.test_inflight.InflightTest) ... ok
+test_overlap_only_on_hot_files_is_a_rebase (tests.test_inflight.InflightTest) ... ok
+test_pull_requests_join_their_worktree_and_include_drafts (tests.test_inflight.InflightTest) ... ok
+test_raw_list_sessions_reads_the_same_as_a_hand_mapped_list (tests.test_inflight.InflightTest) ... ok
+test_session_in_a_folder_of_repos_claims_ids_everywhere (tests.test_inflight.InflightTest) ... ok
+test_session_rows_with_keys_it_does_not_read_are_refused (tests.test_inflight.InflightTest) ... ok
+test_session_rows_with_unreadable_values_are_refused (tests.test_inflight.InflightTest) ... ok
+test_sessions_claim_ids_while_live (tests.test_inflight.InflightTest) ... ok
+test_short_history_has_no_hot_files (tests.test_inflight.InflightTest) ... ok
+test_taken_by_id_even_without_overlap (tests.test_inflight.InflightTest) ... ok
+test_workspace_worktree_claims_its_ids_in_every_repo (tests.test_inflight.InflightTest) ... ok
+test_worktree_claims_committed_and_uncommitted_files (tests.test_inflight.InflightTest) ... ok
+test_worktree_with_no_changes_has_unknown_footprint (tests.test_inflight.InflightTest) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 50.521s
+
+OK
