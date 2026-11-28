@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "goal": "Cursor loads bstack's agents and, once per update, the session-start notice of what changed.",
+  "changed": [
+    "kitgen writes .cursor-plugin/plugin.json for a plugin that has rules, agents, commands, or hooks, and points its hooks field at hooks/cursor.json when that file exists.",
+    "bstack's hooks/cursor.json runs whats_new.py on sessionStart. Claude's hooks/hooks.json is unchanged, so the Stop hook and the commit gate stay on Claude Code.",
+    "whats_new.py --hook prints Cursor's additional_context when CURSOR_VERSION or CURSOR_PLUGIN_ROOT is set, and Claude's session-start JSON otherwise.",
+    "bstack 0.61.0. Main had already released 0.60.0."
+  ],
+  "claims": [
+    {
+      "claim": "The Cursor manifest is generated, points at hooks/cursor.json, and the hook script prints additional_context for Cursor and the Claude payload otherwise.",
+      "verdict": "VERIFIED",
+      "check": "python3 tools/kitgen.py --check; python3 -m unittest tests.test_whats_new (15 tests); make versions BASE=origin/main",
+      "commit": "de536020836d6fe792aed858535533a4fca8541b",
+      "record": ".changes/2026-11-27-cursor-plugin/checks.txt",
+      "remaining": "No Cursor window has reloaded onto this plugin yet, so the session-start notice and the subagent list are not observed in the app."
+    }
+  ],
+  "next": [
+    {
+      "item": "Reload the Cursor window after this merges into the local agent-kit checkout, then start a chat.",
+      "source": "inferred",
+      "why_now": "The plugin files are already copied into ~/.cursor/plugins/local/bstack from the worktree. A sync from main before this manifest lands would drop that copy.",
+      "impact": "beau-agent and comment-sicko show up as subagents, and the next agent-kit release shows once at session start."
+    }
+  ],
+  "release": {
+    "see": "changes.yaml bstack@0.61.0"
+  }
+}

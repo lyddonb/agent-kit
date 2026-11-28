@@ -6,6 +6,7 @@ docs/CHANGELOG.md
 docs/PRINCIPLES.md
 package.json
 plugins/bstack/.claude-plugin/plugin.json
+plugins/bstack/.cursor-plugin/plugin.json
 plugins/bstack/plugin.json
 plugins/bstack/skills/beau-help/references/catalog.md
 plugins/bstack/skills/beau-help/references/changes.json

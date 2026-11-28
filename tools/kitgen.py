@@ -13,7 +13,7 @@ Outputs (all committed, so plain `git clone` / marketplace installs work):
     plugins/<name>/mcp.json                   Agent Plugins 1.0 MCP config (only if the plugin has MCP)
     plugins/<name>/.claude-plugin/plugin.json Claude Code manifest
     plugins/<name>/.mcp.json                  Claude Code MCP config (only if the plugin has MCP)
-    plugins/<name>/.cursor-plugin/plugin.json Cursor-native manifest (only if the plugin has rules/)
+    plugins/<name>/.cursor-plugin/plugin.json Cursor-native manifest (rules, agents, commands, or hooks)
     .claude-plugin/marketplace.json           Claude Code marketplace
     .agents/plugins/marketplace.json          Codex marketplace
     .cursor-plugin/marketplace.json           Cursor marketplace
@@ -169,6 +169,14 @@ def neutral_mcp_to_claude(servers: dict) -> dict:
 
 # --------------------------------------------------------------------------- generation
 
+def _wants_cursor_manifest(pdir: Path, plugin: dict) -> bool:
+    """Cursor's root plugin.json loads skills and MCP only. Agents, commands, hooks and rules
+    need .cursor-plugin/plugin.json."""
+    if plugin.get("cursor") or (pdir / "rules").is_dir():
+        return True
+    return any((pdir / name).is_dir() for name in ("agents", "commands", "hooks"))
+
+
 def check_acyclic(deps: dict[str, list[str]]):
     """Reject depends_on cycles (a -> b -> a); clients only discover them at install time."""
     state: dict[str, str] = {}   # name -> "visiting" | "done"
@@ -268,7 +276,11 @@ def generate(kit: dict, principles: list[dict], changes: list[dict] | None = Non
             files[f"{rel}/mcp.json"] = dump_json(neutral_mcp_to_agent_plugins(p["mcp"]))
             files[f"{rel}/.mcp.json"] = dump_json(neutral_mcp_to_claude(p["mcp"]))
 
-        if (pdir / "rules").is_dir() or p.get("cursor"):
+        if _wants_cursor_manifest(pdir, p):
+            cursor_extra = dict(p.get("cursor") or {})
+            if (pdir / "hooks" / "cursor.json").is_file() and "hooks" not in cursor_extra:
+                # Point at the Cursor file so Cursor does not load Claude's hooks/hooks.json.
+                cursor_extra["hooks"] = "hooks/cursor.json"
             cursor = drop_none({
                 "name": name,
                 "version": p.get("version"),
@@ -278,7 +290,7 @@ def generate(kit: dict, principles: list[dict], changes: list[dict] | None = Non
                 "repository": repo_url,
                 "license": p.get("license"),
                 "keywords": p.get("keywords"),
-                **(p.get("cursor") or {}),
+                **cursor_extra,
             })
             files[f"{rel}/.cursor-plugin/plugin.json"] = dump_json(cursor)
 
@@ -349,7 +361,13 @@ def generate(kit: dict, principles: list[dict], changes: list[dict] | None = Non
         if p.get("mcp"):
             extras.append("MCP servers: " + ", ".join(f"`{s}`" for s in p["mcp"]))
         for comp in ("hooks", "agents", "commands", "rules"):
-            if (pdir / comp).is_dir():
+            if not (pdir / comp).is_dir():
+                continue
+            if comp == "hooks" and (pdir / "hooks" / "cursor.json").is_file():
+                extras.append("`hooks/`: Claude `hooks.json`; Cursor `hooks/cursor.json`")
+            elif comp == "agents" and _wants_cursor_manifest(pdir, p):
+                extras.append("`agents/`: Claude Code, and Cursor via `.cursor-plugin/plugin.json`")
+            else:
                 extras.append(f"client-specific `{comp}/` (not portable)")
         if extras:
             lines += ["- " + e for e in extras] + [""]

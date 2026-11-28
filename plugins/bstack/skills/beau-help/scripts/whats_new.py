@@ -5,7 +5,8 @@
     whats_new.py --peek     unseen entries, without marking them seen
     whats_new.py --days N   entries from the last N days
     whats_new.py --all      every entry
-    whats_new.py --hook     Claude Code SessionStart hook: JSON, silent when nothing is new
+    whats_new.py --hook     session-start hook: Claude JSON, or Cursor's additional_context
+                            when CURSOR_PLUGIN_ROOT or CURSOR_VERSION is set. Silent when nothing is new.
 
 What you have seen lives in $AGENT_KIT_STATE (default ~/.agents/state/agent-kit-seen.json),
 so every tool shares it. Standard library only, Python 3.9+.
@@ -67,18 +68,26 @@ def render(entries: list) -> str:
     return "\n".join(out)
 
 
+def _for_cursor() -> bool:
+    return bool(os.environ.get("CURSOR_PLUGIN_ROOT") or os.environ.get("CURSOR_VERSION"))
+
+
 def hook_output(entries: list) -> dict:
     newest = {}
     for e in entries:  # newest first, so the first entry per plugin is its latest version
         newest.setdefault(e["plugin"], e["version"])
     names = ", ".join(f"{p} {v}" for p, v in newest.items())
+    summary = f"agent-kit updated: {names}. Ask \"what's new\" for details."
+    detail = ("agent-kit changes the user has not seen yet. If the user asks what's new, "
+              "or a change bears on their first request, summarize the relevant lines "
+              "in plain words.\n\n" + render(entries))
+    if _for_cursor():
+        return {"additional_context": summary + "\n\n" + detail}
     return {
-        "systemMessage": f"agent-kit updated: {names}. Ask \"what's new\" for details.",
+        "systemMessage": summary,
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
-            "additionalContext": "agent-kit changes the user has not seen yet. If the user asks what's new, "
-                                 "or a change bears on their first request, summarize the relevant lines "
-                                 "in plain words.\n\n" + render(entries),
+            "additionalContext": detail,
         },
     }
 
@@ -96,6 +105,8 @@ def main(argv=None, today=None) -> int:
     if args.hook:
         # A broken hook must never break session start.
         try:
+            if not sys.stdin.isatty():
+                sys.stdin.read()
             entries = load_entries()
             new = unseen(entries, load_seen(), today)
             mark_seen(entries)

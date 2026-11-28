@@ -36,7 +36,7 @@ reads the repo as-is.
 `plugin.json` + `mcp.json` cover Codex, Cursor, Copilot and others. Claude Code still
 needs `.claude-plugin/plugin.json` and a differently shaped `.mcp.json`. We do not
 emit `.codex-plugin/plugin.json` (Codex treats it as a fallback) or
-`.cursor-plugin/plugin.json` unless the plugin has Cursor-only parts (`rules/`).
+`.cursor-plugin/plugin.json` unless the plugin has Cursor parts (`rules/`, `agents/`, `commands/`, or `hooks/`).
 
 ### D4. Portability lint over trust
 `tools/validate.py` enforces the parts of the spec that differ between clients in
@@ -236,7 +236,7 @@ copy, which passes it.
 |---|---|
 | `kit.yaml` | `plugins/*/plugin.json`, `plugins/*/mcp.json` |
 | `plugins/*/skills/**` | `plugins/*/.claude-plugin/plugin.json`, `plugins/*/.mcp.json` |
-| `plugins/*/hooks`, `agents`, `rules` | `plugins/*/.cursor-plugin/plugin.json` (if rules) |
+| `plugins/*/hooks`, `agents`, `rules` | `plugins/*/.cursor-plugin/plugin.json` (rules, agents, commands, or hooks) |
 | docs, tools, scripts | `.claude-plugin/`, `.agents/plugins/`, `.cursor-plugin/` marketplaces |
 | `plugins/*/snippets/*.md` (shared text) | `package.json`, `docs/CATALOG.md`, `docs/PRINCIPLES.md`, `.generated` |
 | `principles/references/*.md`, `beau-mode/playbooks/*.md` | `GENERATED` blocks inside skills and `docs/UPSTREAM.md` |

@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "python3 \"$CURSOR_PLUGIN_ROOT/skills/beau-help/scripts/whats_new.py\" --hook"
+      }
+    ]
+  }
+}

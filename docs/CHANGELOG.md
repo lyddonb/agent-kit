@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.61.0 (2026-11-27)
+
+- Cursor loads bstack's agents (beau-agent and comment-sicko) and, once per update, the session-start notice of what changed. The Stop hook and the commit gate stay on Claude Code.
+- Try: `Run agentfiles sync, reload the Cursor window, and start a chat. beau-agent is available as a subagent.`
+
 ## bstack 0.60.0 (2026-11-27)
 
 - beau-mode treats code that runs commands it reads from a repo or a config (hooks, gates, check runners) as running untrusted input: it checks whose repo it is before running anything, in every mode, and answers a security warning before moving on. When a permission check denies an action, it asks instead of reaching the same effect another way.
