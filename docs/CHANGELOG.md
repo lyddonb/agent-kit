@@ -3,6 +3,11 @@
 
 What changed in each plugin release, newest first. In an agent, ask for `beau-help new`.
 
+## bstack 0.63.0 (2026-11-28)
+
+- beau-mode treats a command it hands you as part of what it ships: it runs the command first where it will run (your config, shared state) and checks what the command needs (a date, stored data, a file) against the state right now. When something isn't there yet, it says when the command will work instead of handing you one that will refuse.
+- A choice beau-mode offers you, as a button or an option, names who acts and on what ("Leave PR 42 to the other session"), never a bare "Leave it to you".
+
 ## bstack 0.62.0 (2026-11-27)
 
 - The Stop hook reads the commands under `stop:` and `timeout_s` from `.agents/checks.yaml` as origin's default branch has it (`origin/HEAD`, else `origin/main` or `origin/master`, as last fetched), not from the working tree. A session can no longer switch its own check off by rewriting the file, committed or not; a new or changed list takes effect once it reaches that branch. The commands still run in the working tree. A send-back names the branch and commit its commands came from. A repo with no such branch runs nothing and says why on stderr.

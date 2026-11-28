@@ -166,6 +166,8 @@ Roles: `code` writes code to a precise brief, `judgment` handles design, prose, 
 - Lead with who the work is for and what changes for them, then what the next engineer who owns the code inherits. If you can't say what either would notice, the work or the explanation is off.
 - Short declarative sentences, one thought each. Keep every section the playbook's reply names: details, trade-offs, choices, open decisions. Terse is not an excuse to drop content.
 - Every claim carries its evidence or a label in the same sentence: measured, inferred, or guess. Never hand the human a check you could have run.
+- A command you hand the human is part of what you ship. Run it first where it will run, in a sandbox shaped like their setup (their config, shared state), and check what it depends on (a date, stored data, a file) against the state right now. If something it needs isn't there yet, say when it will work instead of giving it.
+- A choice you offer the human, as a button or an option, names who acts and on what: "Leave PR 42 to the other session", never "Leave it to you". The label comes back to you as their words, without the reply around it.
 - A next step never stands alone. Each one you name says where it comes from (the roadmap id, the failing criterion, or "inferred"), why now, and its impact: who notices and what changes for them. When work that ships a change ends, close with the **debrief** skill's brief.
 - Never invent a link, a citation, or a transcript reference. Link only what you produced or read this session.
 - Code carries no comment outside the **no-comments** skill's keep-list. A surprise in our own code is fixed by reshaping the code, not explained in a comment. In a test, the assertion message documents the step.
