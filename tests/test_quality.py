@@ -1709,9 +1709,10 @@ class JobBooksAppendOnlyTest(JobBooksCase):
     _template_tmp: tempfile.TemporaryDirectory
 
     @classmethod
-    def git_in(cls, folder: Path, *args):
-        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", str(folder), *args],
-                              check=True, capture_output=True, text=True).stdout
+    def git_in(cls, folder: Path, *args, env=None):
+        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "maintenance.auto=false",
+                               "-c", "gc.auto=0", "-C", str(folder), *args],
+                              check=True, capture_output=True, text=True, env=env).stdout
 
     @classmethod
     def setUpClass(cls):
@@ -1733,6 +1734,14 @@ class JobBooksAppendOnlyTest(JobBooksCase):
         self.addCleanup(self._tmp.cleanup)
         self.dir = Path(self._tmp.name) / "books-repo"
         shutil.copytree(self.template, self.dir)
+
+    def test_a_commit_starts_no_background_maintenance_in_the_template(self):
+        trace = Path(self._tmp.name) / "trace.json"
+        (self.dir / "extra.txt").write_text("x\n")
+        self.git("add", "extra.txt")
+        self.git_in(self.dir, "commit", "-q", "-m", "extra", env={**os.environ, "GIT_TRACE2_EVENT": str(trace)})
+        self.assertNotIn('"maintenance"', trace.read_text(),
+                         "git's auto maintenance can run detached and rewrite .git while setUp copies the template")
 
     def test_appended_rows_pass(self):
         self.add(quality.JOBS, job_id="8000")

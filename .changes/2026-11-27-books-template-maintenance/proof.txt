@@ -1,0 +1,10 @@
+# CI failure, validate on PR 157 (run 46093390075), a diff that didn't touch this test:
+ERROR: test_appended_rows_pass (test_quality.JobBooksAppendOnlyTest)
+shutil.Error: [('/tmp/.../books-repo/.git/objects/maintenance.lock', ..., "[Errno 2] No such file or directory: '/tmp/.../books-repo/.git/objects/maintenance.lock'")]
+
+# A plain commit starts auto maintenance (git 2.39.5, GIT_TRACE2_EVENT):
+"argv":["git","maintenance","run","--auto","--quiet"]
+
+# uv run --python 3.12 python -m unittest tests.test_quality.JobBooksAppendOnlyTest
+with the fix: OK (6 tests), 10 of 10 runs
+without the fix: FAILED (failures=1), the new trace test
