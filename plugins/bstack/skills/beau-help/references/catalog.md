@@ -31,7 +31,7 @@ Twenty-four named engineering principles (prove it works, fix root causes, subtr
 
 - `principles`: Named engineering principles (prove it works, fix root causes, subtract before you add, build the lever, and 20 more) that steer how an agent designs, builds and verifies. Use when a task or the user names a principle, when beau-mode tells you to apply one, or when deciding how much to build, where state and validation live, or what counts as proof.
 
-## bstack 0.63.2
+## bstack 0.63.3
 
 Beau's rigorous agent workflow. beau-mode routes each task to a playbook and the principles; beau-help lists what the kit can do and what's new; waiting-on-me lists what waits on you across your repos; parallel-next finds the next planned work that won't collide with other sessions and starts the items you pick, each in its own beau-mode session; skills for understanding (how, why, teach, recall), debugging (root-cause finds a bug's cause from facts, not from reading the code), proof (verify-work, create- and maintain-verification-skill, create- and maintain-formal-verification-skill, swarm), design and planning (architect, arena, state-machines, technical-writing), product repos (scaffold-product and the Product phase playbook), review and trails (interrogate, show-me-your-work), closing out (debrief keeps a checked change record per PR and prints the brief and the release notes), improvement (reflect, correct, unslop, no-comments), and test economics (qualitydirector records per-test time and outcome, books the runs into the quality books, checks them and summarizes a week; local-ci runs a repo's CI on this machine and posts it to the PR as a commit status) do the steps. Adapted from Lauren Tan's pstack to work in any agent.
 
@@ -91,6 +91,12 @@ A CFO for AI and cloud spending. Keeps a private cost ledger from receipts and p
 - `cfo-brief`: The CFO's weekly routine. Collects new receipts, invoices, vendor notices and billing data into the private books, checks spend against the budget, finds waste and renewals, writes a brief, and sends it with decisions and questions for the user to approve. Proposes; never acts. Use for "CFO brief", "weekly finance review", "check my spending this week", or from a weekly scheduled task.
 - `estimate-run`: Estimate what an agent run, a charter or a whole project will cost before it starts, in both cash and API-equivalent terms, with a typical and a high figure based on past runs where the books have them. Fills a run charter's estimate and budget. Use for "what will this cost", "estimate this run", "price this charter", "is this worth running", or when writing a run charter.
 - `spend-snapshot`: Answer "what am I spending" on AI, cloud and developer tools, by provider and by project, with month-to-date spend against the budget, renewals coming up, and anything unknown. Reads the private books plus receipts and billing data from connected tools. Use for "what am I spending", "how much do my AI tools cost", "am I over budget", "spend snapshot", or before deciding on a new tool or plan.
+
+## architecture 0.1.0
+
+A Head of Architecture for your systems. Keeps a private, append-only register of risks to their stability, folds it into states and ranks it by a written rule, and proposes fixes for you to approve. Never changes code, CI, config or infrastructure itself.
+
+- `arch-books`: Check and summarize the Head of Architecture's private risk register, the append-only list of risks to your systems' stability. Checks find illegal state moves, a risk closed without a receipt, scores that differ from the rubric, spreadsheet-formula cells and edited history. Summary folds the rows into each risk's state, score and tier. Use before committing to the books, to rank the risks, to record a risk, or when asked to "check the risk register", "summarize the risks" or "what are the top risks to stability".
 
 ## video 0.1.0
 
