@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "goal": "Stop handing the human commands that refuse on their setup or on that day, and choice buttons whose meaning depends on the reply around them. All three reviewers of a reflect pass named both.",
+  "changed": [
+    "beau-mode's Writing the reply gains two bullets: run a handed-over command where it will run and check what it needs against the state right now; a choice names who acts and on what.",
+    "bstack 0.63.0 in kit.yaml and changes.yaml, and the generated files."
+  ],
+  "claims": [
+    {
+      "claim": "The skill and the generated files are consistent and valid.",
+      "verdict": "VERIFIED",
+      "check": "make gen validate claude-validate: 44 skills in 7 plugins, 0 errors, 0 warnings.",
+      "commit": "0b83472",
+      "record": ".changes/2026-11-27-handoff-commands/checks.txt",
+      "remaining": ""
+    },
+    {
+      "claim": "Agents following beau-mode run a handed-over command in a setup like the human's before handing it over, and label choices with who acts.",
+      "verdict": "UNCHECKED",
+      "check": "No eval ran; the change is two prose bullets.",
+      "commit": "738be4f",
+      "record": "",
+      "remaining": "Watch the next sessions' post-merge command lists and wrap-up buttons; run the Eval playbook if the same mistake comes back."
+    }
+  ],
+  "next": [
+    {
+      "item": "If the same mistake comes back, encode it: a project's verify skill can run each handed-over command in its shared-state sandbox.",
+      "source": "inferred from the reflect pass",
+      "why_now": "A prose rule is the lowest level that works; a repeat means it needs a check.",
+      "impact": "The human stops running commands that refuse."
+    }
+  ],
+  "release": {
+    "note": "beau-mode now checks a command it hands you where you will run it, and names who acts on every choice it offers."
+  }
+}
