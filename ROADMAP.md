@@ -966,10 +966,63 @@ grepping five files.
 **Done when:** on the five workspace roadmaps it lists every item a hand read finds open and
 none it finds done, across agent-kit's `**Done DATE.**`, agentfiles' `— Done` headings,
 agent-ledger's milestone table and finances' unit tables.
+The reader also lists the merged pull requests whose title or branch names each open item's id,
+so the ranking reads that evidence without a separate `gh` search.
 **Why not done:** found 2026-11-27. A one-pass awk filter for open items missed because each
-repo marks done differently, and the ranking re-read about 23 ids one by one.
+repo marks done differently, and the ranking re-read about 23 ids one by one. Seen again
+2026-11-27 in a parallel-next run: about a dozen grep and sed passes over the five roadmaps with
+guessed line ranges, and `gh pr list --search R50` returned only the pull request that added the
+item, which says nothing about whether it is done.
 **Prioritize when:** the next what's-next ranking that misreads a roadmap's status, or before
 parallel-next runs on more than five repos.
+
+### R58. A repo declares the files every release rewrites as hot
+**What:** `inflight.py`'s hot files are the union of a repo's declared always-hot files and the
+files that changed in 40% of the last 30 first-parent commits. The declared list holds what
+the repo's release step always writes (in agent-kit: `kit.yaml`, `changes.yaml`, the plugin
+manifests, `docs/CHANGELOG.md`, `.claude-plugin/marketplace.json`) and `ROADMAP.md`. Then
+parallel-next step 2.3 adds the item's roadmap file to each candidate's paths, since the
+finishing pull request edits its status line, without turning every pair of candidates in one
+repo into a `conflict`.
+**Where:** `inflight.py` (`hot_files`), its tests, parallel-next step 2.3. Where a repo
+declares the list (a key in `.agents/` or a file beside the roadmap) is settled by prototype.
+**Depends on:** nothing.
+**Playbook:** Feature.
+**Done when:** a fixture repo with a declared release file reports it hot when no commit in the
+window touched it, and two candidates that share only that file come back `rebase`.
+**Why not done:** found 2026-11-27. A parallel-next run's report listed no hot files for
+agent-kit, because docs-only merges kept `kit.yaml` and `ROADMAP.md` near the 40% line, so the
+check flaps. The brief still called version files fine, and one started pull request then
+conflicted on them after another release merged first.
+**Prioritize when:** the next parallel-next run that starts two items in one repo that bumps a
+version in every pull request.
+
+### R59. A clean worktree already merged reads as idle, not unknown
+**What:** in `inflight.py`'s `read_worktrees`, a linked worktree with no changes whose HEAD is
+an ancestor of the default branch is listed as idle, with its idle hours, and claims nothing.
+Today it gets an unknown footprint, so every candidate in that repo comes back `unknown`.
+**Where:** `inflight.py`, its tests, the `unknown` row of parallel-next step 2.5 if its wording
+changes.
+**Depends on:** nothing.
+**Playbook:** Bug fix.
+**Done when:** a fixture with one clean worktree on a merged commit and one on an unmerged
+commit marks only the second `unknown`.
+**Why not done:** found 2026-11-27. Two leftover worktrees on merged commits marked all four
+candidates `unknown`, and the ranking cleared them by hand with `git merge-base --is-ancestor`.
+**Prioritize when:** now. It costs a manual check on every run while such worktrees exist.
+
+### R60. `inflight.py` says how many session rows it read
+**What:** the report's header prints "N session rows read, M live", so a session list cut
+short (a `list_sessions` call without a high enough `limit`, or a hand copy) is visible.
+**Where:** `inflight.py`, its tests.
+**Depends on:** R50 (merged in pull request 161).
+**Playbook:** Bug fix.
+**Done when:** a report over a three-row list with one running session prints "3 session rows
+read, 1 live".
+**Why not done:** found 2026-11-27, while R50 was in flight. A hand copy dropped more than half the rows; the
+dropped ones were idle, so nothing was missed, but nothing showed it either.
+**Prioritize when:** with R59, or the next time a session list is shorter than the tool's
+listing.
 
 ## P2
 

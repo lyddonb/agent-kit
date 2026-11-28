@@ -72,3 +72,5 @@ Every brief starts with `/beau-mode`, so each session runs the full workflow.
 ## 5. Check the launch
 
 Run the step 1 check again. Every session you started must show up as a claim carrying its item's id. Name any that don't. In the reply, list each started session with its item, its worktree, and its link.
+
+When a started session asks whether it may edit a file another claim also touches, read that claim's diff for the file (`git -C OTHER_WORKTREE diff DEFAULT_BRANCH -- FILE`) before you answer. If both pull requests bump the same version, say that the second to merge will need a re-bump.

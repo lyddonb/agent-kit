@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "bstack@0.63.2",
+      "date": "2026-11-28",
+      "plugin": "bstack",
+      "version": "0.63.2",
+      "changes": [
+        "parallel-next's session brief tells a started session that its pull request also updates the item's own roadmap status line, so it no longer stops to ask about that file. It calls a file fine to share only when `inflight.py` lists it as hot, and warns that in a repo that bumps a version in every pull request, the second to merge re-bumps.",
+        "When a started session asks to edit a file another claim also touches, parallel-next reads that claim's diff for the file before answering, and says which pull request will need a re-bump."
+      ]
+    },
+    {
       "id": "bstack@0.63.1",
       "date": "2026-11-28",
       "plugin": "bstack",
