@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "goal": "Trim agent-kit's slowest tests so the validate check finishes sooner. With four workers the test step takes about the total test time divided by four, so only test-seconds removed help.",
+  "changed": [
+    "tests/test_local_ci.py: the background-process test waits for the process to die instead of sleeping a fixed 5 s."
+  ],
+  "claims": [
+    {
+      "claim": "The test still fails when local_ci does not kill scripts/ci's process group, and passes without a fixed wait when it does.",
+      "verdict": "VERIFIED",
+      "check": "10 of 10 passes alone; fails with the final killpg removed; two full suites with 4 workers pass.",
+      "commit": "f211cc53faf0",
+      "record": ".changes/2026-11-27-local-ci-test-no-fixed-sleep/checks.txt",
+      "remaining": ""
+    },
+    {
+      "claim": "The test costs about 5 s less on the hosted runner, about a second and a quarter off the step.",
+      "verdict": "UNCHECKED",
+      "check": "Needs this PR's validate record; it took 5.4 to 5.5 s in every recent record.",
+      "commit": "f211cc53faf0",
+      "record": "",
+      "remaining": "Read the test's ms in this PR's validate record."
+    }
+  ],
+  "next": [
+    {
+      "item": "Cache quality.py's bytecode by moving its body into a module behind a short entry script.",
+      "source": "inferred from counting quality.py starts in the suite",
+      "why_now": "Not now: 247 starts at an inferred 30 to 50 ms saved each comes to about 2 to 3 s off the step, below what restructuring a public script is worth.",
+      "impact": "Each recorder or checker run starts a little faster; revisit if the suite's quality.py starts grow severalfold."
+    }
+  ],
+  "release": {
+    "note": "agent-kit tests: the local-ci background-process test no longer sleeps a fixed 5 s."
+  }
+}
