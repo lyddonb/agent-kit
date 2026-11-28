@@ -529,6 +529,22 @@ proves the done-when: booked rows match a prototype's per pull request numbers, 
 without `books/pulls.csv` give the same bytes. Unit 2 merged in the books repo: the pulls book
 is adopted and the brief template has the cycle time table.
 
+
+### R52. No "ready to merge" while a check is pending
+**What:** a script the Opening a PR playbook's step 10 runs before any ready claim:
+`gh pr view N --json mergeStateStatus,isDraft,statusCheckRollup`, exit 0 only when the pull
+request is not a draft, every check has finished green, and `mergeStateStatus` is `CLEAN`, and
+otherwise print what is pending or red. The reply quotes its output.
+**Where:** a script in beau-mode's `scripts/`, the playbook's step 10, tests on recorded `gh` output.
+**Depends on:** nothing.
+**Playbook:** Feature.
+**Done when:** on recorded output for a pull request with a pending check it exits 1 naming the
+check; on a clean one it exits 0.
+**Why not done:** step 10's prose rule was added 2026-11-27 after Beau twice found conflicts on
+pull requests called ready; the same day an agent called two pull requests with pending checks
+ready to merge.
+**Prioritize when:** now. The prose rule was broken within hours of being written.
+
 ## P2
 
 ### R34. Grade the checks on bugs that mattered
@@ -571,6 +587,18 @@ table to this brief.
 has run for a month.
 
 ---
+
+
+### R53. `test_cases.py` says how to rebuild a stale patch
+**What:** when a case's `rule-removed.patch` no longer applies, the failure message names
+`cases/README.md`'s "When the patch no longer applies" section, so the author of an unrelated
+skill edit knows what to do.
+**Where:** `tests/test_cases.py`.
+**Depends on:** pull request 154 (the README section), merged 2026-11-27.
+**Playbook:** Bug fix.
+**Done when:** the test's failure on a stale patch prints the section name.
+**Why not done:** the recipe section and the test landed in separate pull requests.
+**Prioritize when:** now. Pull request 154 has merged.
 
 # Skill ops
 
@@ -908,6 +936,39 @@ request a plain `gh pr list` showed, each with a link. Its change record has the
 reads the books' open questions, which is where every brief proposal is decided, so it lists
 proposals as questions. Open ledger gates are proven on fixtures only: every run on the
 workspace's default branches was sealed that day.
+
+
+### R50. `inflight.py` refuses a session list it can't read
+**What:** `parallel-next/scripts/inflight.py --sessions` checks every row for the keys it reads
+(`title`, `cwd`, `running`, `last_active`, `pr_state`), exits 1 naming the row and the
+missing or unknown keys, and prints the key list. It also accepts Claude Code desktop's raw
+`list_sessions` output and maps its fields (`isRunning`, `lastActivityAt`, `prState`) itself.
+**Where:** `inflight.py`, its tests, parallel-next step 1.3.
+**Depends on:** nothing.
+**Playbook:** Bug fix.
+**Done when:** a list written with `isRunning` and `prState` exits 1 naming both keys; a raw
+`list_sessions` dump reads the same as a hand-mapped one.
+**Why not done:** found 2026-11-27. A hand-written list with `isRunning` and `prState` and no
+`last_active` read every row as not live, with no error. The workspace's what's-next steps
+point at parallel-next's step 1 for the format, and that path never loads the skill.
+**Prioritize when:** now. A silent wrong answer here makes busy work look free.
+
+### R51. One command reads every roadmap's open items
+**What:** `parallel-next/scripts/roadmap.py PATHS` prints each open item in each repo's
+`ROADMAP.md`: its id, priority, status line, trigger line ("Prioritize when", "Opens when",
+"Starts when") and its "Depends on" text, plus each phase or milestone table's open rows. The
+ranking steps in the workspace `AGENTS.md` and parallel-next step 2.2 read its output instead of
+grepping five files.
+**Where:** a script beside `inflight.py`, tests on fixture roadmaps in each repo's format.
+**Depends on:** nothing.
+**Playbook:** Feature.
+**Done when:** on the five workspace roadmaps it lists every item a hand read finds open and
+none it finds done, across agent-kit's `**Done DATE.**`, agentfiles' `— Done` headings,
+agent-ledger's milestone table and finances' unit tables.
+**Why not done:** found 2026-11-27. A one-pass awk filter for open items missed because each
+repo marks done differently, and the ranking re-read about 23 ids one by one.
+**Prioritize when:** the next what's-next ranking that misreads a roadmap's status, or before
+parallel-next runs on more than five repos.
 
 ## P2
 
