@@ -604,6 +604,8 @@ skill edit knows what to do.
 **Done when:** the test's failure on a stale patch prints the section name.
 **Why not done:** the recipe section and the test landed in separate pull requests.
 **Prioritize when:** now. Pull request 154 has merged.
+**Done 2026-11-27.** A stale patch's failure names the section and `cases/README.md`, and a
+second test fails if that heading is renamed or removed.
 
 # Skill ops
 

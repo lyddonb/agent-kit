@@ -5,6 +5,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CASES = sorted(p for p in (ROOT / "cases").iterdir() if (p / "case.json").is_file())
+REBUILD_SECTION = "When the patch no longer applies"
 
 
 class RuleRemovedPatchTest(unittest.TestCase):
@@ -23,8 +24,20 @@ class RuleRemovedPatchTest(unittest.TestCase):
                 self.assertEqual(
                     result.returncode, 0,
                     f"{case.name}/rule-removed.patch no longer applies, so the case can't show it "
-                    f"fails without its rule; rebuild it against this tree:\n{result.stderr}",
+                    f"fails without its rule. Rebuild it from today's text with the steps under "
+                    f"\"{REBUILD_SECTION}\" in cases/README.md.\n{result.stderr}",
                 )
+
+    def test_readme_has_the_section_the_stale_patch_message_names(self):
+        headings = [
+            line.lstrip("#").strip()
+            for line in (ROOT / "cases" / "README.md").read_text().splitlines()
+            if line.startswith("#")
+        ]
+        self.assertIn(
+            REBUILD_SECTION, headings,
+            "the stale-patch failure points authors at a cases/README.md section that is gone",
+        )
 
     def test_each_patch_edits_the_plugin_under_test(self):
         for case in CASES:
